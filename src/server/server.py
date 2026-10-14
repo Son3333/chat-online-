@@ -378,29 +378,69 @@ class ChatServer:
             })
             return None
 
-        # 12. Quản lý Danh bạ Bạn bè (Telegram Contacts)
+        # 12. Quản lý Danh bạ Bạn bè & Lời mời kết bạn (Friend Request & Approval)
         elif action == "get_friends":
             user_id = packet.get("user_id")
             friends = self.db.get_friends(user_id)
-            return {"action": "get_friends_response", "success": True, "friends": friends}
+            pending_reqs = self.db.get_pending_requests(user_id)
+            return {
+                "action": "get_friends_response", 
+                "success": True, 
+                "friends": friends, 
+                "pending_requests": pending_reqs
+            }
 
         elif action == "add_friend":
             user_id = packet.get("user_id")
             friend_id = packet.get("friend_id")
-            res = self.db.add_friend(user_id, friend_id)
+            res = self.db.send_friend_request(user_id, friend_id)
+            # Thông báo tức thời cho bên nhận nếu đang online
+            if res.get("success"):
+                if res.get("accepted"):
+                    # Cả 2 đã trở thành bạn bè chính thức
+                    self.broadcast_to_users([user_id, friend_id], {"type": "refresh_friends"})
+                else:
+                    # Gửi thông báo lời mời kết bạn mới tới friend_id
+                    self.broadcast_to_users([friend_id], {
+                        "type": "new_friend_request",
+                        "sender_id": user_id
+                    })
             return {"action": "add_friend_response", **res}
+
+        elif action == "accept_friend":
+            user_id = packet.get("user_id")
+            requester_id = packet.get("requester_id")
+            res = self.db.accept_friend_request(user_id, requester_id)
+            if res.get("success"):
+                # Cập nhật danh bạ ngay lập tức cho cả 2 bên
+                self.broadcast_to_users([user_id, requester_id], {"type": "refresh_friends"})
+            return {"action": "accept_friend_response", **res}
+
+        elif action == "reject_friend":
+            user_id = packet.get("user_id")
+            requester_id = packet.get("requester_id")
+            res = self.db.reject_friend_request(user_id, requester_id)
+            if res.get("success"):
+                self.broadcast_to_users([user_id], {"type": "refresh_friends"})
+            return {"action": "reject_friend_response", **res}
 
         elif action == "remove_friend":
             user_id = packet.get("user_id")
             friend_id = packet.get("friend_id")
             res = self.db.remove_friend(user_id, friend_id)
+            if res.get("success"):
+                self.broadcast_to_users([user_id, friend_id], {"type": "refresh_friends"})
             return {"action": "remove_friend_response", **res}
 
         elif action == "check_friend":
             user_id = packet.get("user_id")
             friend_id = packet.get("friend_id")
-            is_fr = self.db.is_friend(user_id, friend_id)
-            return {"action": "check_friend_response", "is_friend": is_fr}
+            status = self.db.get_friendship_status(user_id, friend_id)
+            return {
+                "action": "check_friend_response", 
+                "is_friend": (status == "friends"),
+                "friendship_status": status
+            }
 
         return None
 

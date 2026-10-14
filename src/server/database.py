@@ -249,8 +249,8 @@ class Database:
             """, (clean_keyword, f"{clean_keyword}%", f"%{clean_keyword}%", current_user_id))
             return [dict(r) for r in cursor.fetchall()]
 
-    # --- Danh bạ bạn bè (Telegram Contacts APIs) ---
-    def add_friend(self, user_id, friend_id):
+    # --- Danh bạ bạn bè & Lời mời kết bạn (Friend Request & Approval APIs) ---
+    def send_friend_request(self, user_id, friend_id):
         if user_id == friend_id:
             return {"success": False, "message": "Không thể kết bạn với chính mình!"}
         with self.get_connection() as conn:
@@ -259,36 +259,130 @@ class Database:
             target = cursor.fetchone()
             if not target:
                 return {"success": False, "message": "Người dùng không tồn tại!"}
-                
+
+            # Kiểm tra xem đã là bạn bè chưa
+            cursor.execute("SELECT status FROM friends WHERE user_id = ? AND friend_id = ?", (user_id, friend_id))
+            row1 = cursor.fetchone()
+            if row1 and row1["status"] == "accepted":
+                return {"success": False, "message": f"Bạn và @{target['username']} đã là bạn bè của nhau rồi!"}
+
+            # Kiểm tra xem đối phương có đang gửi lời mời chờ mình duyệt không
+            cursor.execute("SELECT status FROM friends WHERE user_id = ? AND friend_id = ?", (friend_id, user_id))
+            row2 = cursor.fetchone()
+            if row2 and row2["status"] == "pending":
+                # Đối phương đã mời trước -> Tự động chấp nhận luôn cả 2 chiều!
+                cursor.execute("UPDATE friends SET status = 'accepted' WHERE user_id = ? AND friend_id = ?", (friend_id, user_id))
+                cursor.execute("""
+                    INSERT INTO friends (user_id, friend_id, status)
+                    VALUES (?, ?, 'accepted')
+                    ON CONFLICT(user_id, friend_id) DO UPDATE SET status = 'accepted'
+                """, (user_id, friend_id))
+                conn.commit()
+                return {
+                    "success": True, 
+                    "accepted": True, 
+                    "message": f"Đã chấp nhận lời mời từ @{target['username']}! Hai bạn đã trở thành bạn bè.", 
+                    "friend": dict(target)
+                }
+
+            # Nếu chưa có -> Tạo lời mời kết bạn mới với trạng thái 'pending'
             cursor.execute("""
-                INSERT OR IGNORE INTO friends (user_id, friend_id, status)
-                VALUES (?, ?, 'accepted')
+                INSERT INTO friends (user_id, friend_id, status)
+                VALUES (?, ?, 'pending')
+                ON CONFLICT(user_id, friend_id) DO UPDATE SET status = 'pending'
             """, (user_id, friend_id))
             conn.commit()
-            return {"success": True, "message": f"Đã thêm @{target['username']} vào Danh bạ bạn bè!", "friend": dict(target)}
+            return {
+                "success": True, 
+                "accepted": False, 
+                "message": f"Đã gửi lời mời kết bạn tới @{target['username']}! Đang chờ đối phương đồng ý.",
+                "target": dict(target)
+            }
 
-    def remove_friend(self, user_id, friend_id):
+    def accept_friend_request(self, user_id, requester_id):
+        """Chấp nhận lời mời kết bạn từ requester_id."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM friends WHERE user_id = ? AND friend_id = ?", (user_id, friend_id))
+            cursor.execute("SELECT id, username, full_name, avatar_color, is_online FROM users WHERE id = ?", (requester_id,))
+            requester = cursor.fetchone()
+            if not requester:
+                return {"success": False, "message": "Người dùng không tồn tại!"}
+
+            # Cập nhật chiều gửi: requester -> user thành accepted
+            cursor.execute("UPDATE friends SET status = 'accepted' WHERE user_id = ? AND friend_id = ?", (requester_id, user_id))
+            
+            # Đảm bảo chiều ngược lại: user -> requester cũng là accepted
+            cursor.execute("""
+                INSERT INTO friends (user_id, friend_id, status)
+                VALUES (?, ?, 'accepted')
+                ON CONFLICT(user_id, friend_id) DO UPDATE SET status = 'accepted'
+            """, (user_id, requester_id))
+            conn.commit()
+            return {"success": True, "message": f"Đã đồng ý kết bạn với @{requester['username']}!", "friend": dict(requester)}
+
+    def reject_friend_request(self, user_id, requester_id):
+        """Từ chối lời mời kết bạn từ requester_id."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM friends WHERE user_id = ? AND friend_id = ? AND status = 'pending'", (requester_id, user_id))
+            conn.commit()
+            return {"success": True, "message": "Đã từ chối lời mời kết bạn."}
+
+    def remove_friend(self, user_id, friend_id):
+        """Hủy kết bạn (xóa cả 2 chiều)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)", 
+                           (user_id, friend_id, friend_id, user_id))
             conn.commit()
             return {"success": True, "message": "Đã xóa người này khỏi Danh bạ bạn bè."}
 
-    def is_friend(self, user_id, friend_id):
+    def get_friendship_status(self, user_id, other_id):
+        """Kiểm tra trạng thái quan hệ bạn bè giữa 2 user: 'friends', 'sent_pending', 'received_pending', 'none'"""
+        if user_id == other_id:
+            return "self"
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id FROM friends WHERE user_id = ? AND friend_id = ?", (user_id, friend_id))
-            return cursor.fetchone() is not None
+            cursor.execute("SELECT status FROM friends WHERE user_id = ? AND friend_id = ?", (user_id, other_id))
+            my_rel = cursor.fetchone()
+            if my_rel and my_rel["status"] == "accepted":
+                return "friends"
+            if my_rel and my_rel["status"] == "pending":
+                return "sent_pending"
+
+            cursor.execute("SELECT status FROM friends WHERE user_id = ? AND friend_id = ?", (other_id, user_id))
+            other_rel = cursor.fetchone()
+            if other_rel and other_rel["status"] == "pending":
+                return "received_pending"
+
+            return "none"
+
+    def is_friend(self, user_id, friend_id):
+        return self.get_friendship_status(user_id, friend_id) == "friends"
 
     def get_friends(self, user_id):
+        """Lấy danh sách bạn bè chính thức (status = 'accepted')."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT u.id, u.username, u.full_name, u.avatar_color, u.is_online, u.last_seen
                 FROM friends f
                 JOIN users u ON f.friend_id = u.id
-                WHERE f.user_id = ?
+                WHERE f.user_id = ? AND f.status = 'accepted'
                 ORDER BY u.full_name ASC
+            """, (user_id,))
+            return [dict(r) for r in cursor.fetchall()]
+
+    def get_pending_requests(self, user_id):
+        """Lấy danh sách các lời mời kết bạn mà người khác gửi đến cho user này chờ duyệt."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT u.id, u.username, u.full_name, u.avatar_color, u.is_online, f.created_at
+                FROM friends f
+                JOIN users u ON f.user_id = u.id
+                WHERE f.friend_id = ? AND f.status = 'pending'
+                ORDER BY f.created_at DESC
             """, (user_id,))
             return [dict(r) for r in cursor.fetchall()]
 

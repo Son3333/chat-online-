@@ -21,6 +21,7 @@ class MainWindow(ctk.CTkFrame):
         
         self.conversations = []
         self.friends = []
+        self.pending_requests = []
         self.active_conv_id: Optional[int] = None
         self.active_conv_data: Optional[dict] = None
         self.conv_widgets = {}
@@ -40,6 +41,8 @@ class MainWindow(ctk.CTkFrame):
         self.net.register_callback("user_typing", self._on_user_typing)
         self.net.register_callback("refresh_conversations", lambda pkt: self.master.after(0, self.refresh_all_data))
         self.net.register_callback("forced_logout", self._on_forced_logout)
+        self.net.register_callback("new_friend_request", self._on_new_friend_request)
+        self.net.register_callback("refresh_friends", lambda pkt: self.master.after(0, self.load_friends))
 
         self._build_top_bar()
         self._build_sidebar()
@@ -48,6 +51,9 @@ class MainWindow(ctk.CTkFrame):
         # Load danh sách cuộc hội thoại & danh bạ ban đầu
         self.load_conversations()
         self.load_friends()
+
+        # Bắt đầu tự động đồng bộ tin nhắn mới nhất cả hai bên
+        self._start_periodic_sync()
 
     # --- TOP BAR ---
     def _build_top_bar(self):
@@ -771,21 +777,39 @@ class MainWindow(ctk.CTkFrame):
     def _update_header_friend_status(self, partner_id: int):
         def _check():
             res = self.net.check_friend(self.current_user["id"], partner_id)
-            is_fr = res.get("is_friend", False) if res else False
+            st = res.get("friendship_status", "none") if res else "none"
             def _apply():
-                if is_fr:
+                if st == "friends":
                     self.btn_contact_action.configure(
                         text="⭐ Bạn Bè (Xóa khỏi danh bạ)",
                         fg_color=("#E2E8F0", "#334155"),
                         text_color=("#0F172A", "#F8FAFC"),
-                        hover_color=("#CBD5E1", "#475569")
+                        hover_color=("#CBD5E1", "#475569"),
+                        state="normal"
+                    )
+                elif st == "sent_pending":
+                    self.btn_contact_action.configure(
+                        text="⏳ Đã gửi lời mời (Chờ duyệt)",
+                        fg_color="#F59E0B",
+                        text_color="black",
+                        hover_color="#D97706",
+                        state="disabled"
+                    )
+                elif st == "received_pending":
+                    self.btn_contact_action.configure(
+                        text="✅ Đồng ý kết bạn",
+                        fg_color="#10B981",
+                        text_color="white",
+                        hover_color="#059669",
+                        state="normal"
                     )
                 else:
                     self.btn_contact_action.configure(
-                        text="➕ Thêm Vào Danh Bạ",
+                        text="➕ Kết Bạn (Gửi lời mời)",
                         fg_color="#10B981",
                         text_color="white",
-                        hover_color="#059669"
+                        hover_color="#059669",
+                        state="normal"
                     )
             self.master.after(0, _apply)
         threading.Thread(target=_check, daemon=True).start()
@@ -799,14 +823,19 @@ class MainWindow(ctk.CTkFrame):
 
         def _do():
             check = self.net.check_friend(self.current_user["id"], partner_id)
-            if check and check.get("is_friend"):
-                # Đang là bạn -> xóa
-                res = self.net.remove_friend(self.current_user["id"], partner_id)
-                msg = res.get("message", "Đã xóa khỏi danh bạ!")
+            st = check.get("friendship_status", "none") if check else "none"
+            if st == "friends":
+                if messagebox.askyesno("Hủy kết bạn", "Bạn có chắc chắn muốn xóa người này khỏi Danh bạ bạn bè?"):
+                    res = self.net.remove_friend(self.current_user["id"], partner_id)
+                    msg = res.get("message", "Đã xóa khỏi danh bạ!")
+                else:
+                    return
+            elif st == "received_pending":
+                res = self.net.accept_friend(self.current_user["id"], partner_id)
+                msg = res.get("message", "Đã đồng ý kết bạn thành công!")
             else:
-                # Chưa là bạn -> thêm
                 res = self.net.add_friend(self.current_user["id"], partner_id)
-                msg = res.get("message", "Đã thêm vào danh bạ bạn bè!")
+                msg = res.get("message", "Đã gửi lời mời kết bạn! Đang chờ đối phương chấp nhận.")
             
             def _done():
                 self._update_header_friend_status(partner_id)
@@ -838,6 +867,16 @@ class MainWindow(ctk.CTkFrame):
         self.master.after(50, self._scroll_to_bottom)
 
     def _scroll_to_bottom(self):
+        try:
+            self.update_idletasks()
+            self.messages_scroll._parent_canvas.yview_moveto(1.0)
+            self.master.after(20, self._safe_scroll)
+            self.master.after(80, self._safe_scroll)
+            self.master.after(160, self._safe_scroll)
+        except Exception:
+            pass
+
+    def _safe_scroll(self):
         try:
             self.messages_scroll._parent_canvas.yview_moveto(1.0)
         except Exception:
@@ -1028,12 +1067,13 @@ class MainWindow(ctk.CTkFrame):
                 self.master.after(0, _open)
         threading.Thread(target=_call, daemon=True).start()
 
-    # --- DANH BẠ BẠN BÈ (TELEGRAM STYLE CONTACTS) ---
+    # --- DANH BẠ BẠN BÈ & DUYỆT KẾT BẠN (FRIEND REQUEST & APPROVAL) ---
     def load_friends(self):
         def _fetch():
             res = self.net.get_friends(self.current_user["id"])
-            if res and "friends" in res:
-                self.friends = res["friends"]
+            if res:
+                self.friends = res.get("friends", [])
+                self.pending_requests = res.get("pending_requests", [])
                 self.master.after(0, self._render_friends_list)
         threading.Thread(target=_fetch, daemon=True).start()
 
@@ -1042,22 +1082,99 @@ class MainWindow(ctk.CTkFrame):
             widget.destroy()
         self.friend_widgets.clear()
 
-        if not self.friends:
-            empty_box = ctk.CTkFrame(self.friends_scroll, fg_color="transparent")
-            empty_box.pack(pady=30, padx=10)
-            ctk.CTkLabel(empty_box, text="👥", font=ctk.CTkFont(size=36)).pack(pady=(0, 6))
+        # 1. Hiển thị Lời mời kết bạn đang chờ bạn duyệt (nếu có)
+        if self.pending_requests:
+            req_banner = ctk.CTkFrame(self.friends_scroll, fg_color=("#FEF3C7", "#78350F"), corner_radius=8)
+            req_banner.pack(fill="x", padx=6, pady=(4, 6))
             ctk.CTkLabel(
-                empty_box, 
-                text="Danh bạ trống!\nTìm @username hoặc #ID ở trên\nđể thêm bạn bè.", 
-                font=ctk.CTkFont(size=12), 
-                text_color="gray60",
-                justify="center"
-            ).pack()
+                req_banner,
+                text=f"🔔 LỜI MỜI KẾT BẠN CHỜ DUYỆT ({len(self.pending_requests)})",
+                font=ctk.CTkFont(size=11, weight="bold"),
+                text_color=("#92400E", "#FDE68A")
+            ).pack(padx=8, pady=4, anchor="w")
+
+            for req in self.pending_requests:
+                r_id = req["id"]
+                card = ctk.CTkFrame(self.friends_scroll, corner_radius=10, fg_color=("white", "#1E293B"))
+                card.pack(fill="x", pady=3, padx=2)
+
+                row_f = ctk.CTkFrame(card, fg_color="transparent")
+                row_f.pack(fill="x", padx=10, pady=8)
+
+                av_btn = ctk.CTkButton(
+                    row_f,
+                    text=req["full_name"][:1].upper(),
+                    width=36,
+                    height=36,
+                    corner_radius=18,
+                    fg_color=req.get("avatar_color", "#F59E0B"),
+                    font=ctk.CTkFont(size=13, weight="bold"),
+                    state="disabled"
+                )
+                av_btn.pack(side="left", padx=(0, 8))
+
+                info_col = ctk.CTkFrame(row_f, fg_color="transparent")
+                info_col.pack(side="left", fill="x", expand=True)
+
+                ctk.CTkLabel(
+                    info_col,
+                    text=req["full_name"],
+                    font=ctk.CTkFont(size=12, weight="bold"),
+                    anchor="w"
+                ).pack(anchor="w")
+
+                ctk.CTkLabel(
+                    info_col,
+                    text=f"@{req['username']}",
+                    font=ctk.CTkFont(size=11),
+                    text_color="gray50",
+                    anchor="w"
+                ).pack(anchor="w")
+
+                btn_box = ctk.CTkFrame(row_f, fg_color="transparent")
+                btn_box.pack(side="right")
+
+                ctk.CTkButton(
+                    btn_box,
+                    text="✅ Đồng ý",
+                    width=65,
+                    height=28,
+                    font=ctk.CTkFont(size=11, weight="bold"),
+                    fg_color="#10B981",
+                    hover_color="#059669",
+                    command=lambda u=r_id: self._accept_friend_request(u)
+                ).pack(side="left", padx=2)
+
+                ctk.CTkButton(
+                    btn_box,
+                    text="✕",
+                    width=28,
+                    height=28,
+                    font=ctk.CTkFont(size=11),
+                    fg_color=("#FEE2E2", "#450A0A"),
+                    text_color=("#DC2626", "#F87171"),
+                    hover_color=("#FECACA", "#7F1D1D"),
+                    command=lambda u=r_id: self._reject_friend_request(u)
+                ).pack(side="left", padx=2)
+
+        # 2. Danh sách bạn bè chính thức
+        if not self.friends:
+            if not self.pending_requests:
+                empty_box = ctk.CTkFrame(self.friends_scroll, fg_color="transparent")
+                empty_box.pack(pady=30, padx=10)
+                ctk.CTkLabel(empty_box, text="👥", font=ctk.CTkFont(size=36)).pack(pady=(0, 6))
+                ctk.CTkLabel(
+                    empty_box, 
+                    text="Danh bạ trống!\nTìm @username hoặc #ID ở trên\nđể gửi lời mời kết bạn.", 
+                    font=ctk.CTkFont(size=12), 
+                    text_color="gray60",
+                    justify="center"
+                ).pack()
             return
 
         ctk.CTkLabel(
             self.friends_scroll, 
-            text=f"BẠN BÈ TRONG DANH BẠ ({len(self.friends)})", 
+            text=f"DANH SÁCH BẠN BÈ ({len(self.friends)})", 
             font=ctk.CTkFont(size=11, weight="bold"), 
             text_color="gray50"
         ).pack(anchor="w", padx=10, pady=(6, 4))
@@ -1065,13 +1182,12 @@ class MainWindow(ctk.CTkFrame):
         for fr in self.friends:
             f_id = fr["id"]
             card = ctk.CTkFrame(self.friends_scroll, corner_radius=10, fg_color=("white", "#1E293B"), cursor="hand2")
-            card.pack(fill="x", pady=3)
+            card.pack(fill="x", pady=3, padx=2)
             self.friend_widgets[f_id] = card
 
             row_f = ctk.CTkFrame(card, fg_color="transparent")
             row_f.pack(fill="x", padx=10, pady=8)
 
-            # Avatar
             av_col = fr.get("avatar_color", "#10B981")
             av_btn = ctk.CTkButton(
                 row_f, 
@@ -1085,7 +1201,6 @@ class MainWindow(ctk.CTkFrame):
             )
             av_btn.pack(side="left", padx=(0, 10))
 
-            # Info
             text_box = ctk.CTkFrame(row_f, fg_color="transparent")
             text_box.pack(side="left", fill="x", expand=True)
 
@@ -1113,7 +1228,6 @@ class MainWindow(ctk.CTkFrame):
             )
             lbl_sub.pack(fill="x", pady=(1, 0))
 
-            # Action buttons: Nhắn tin & Xóa
             btn_action = ctk.CTkFrame(row_f, fg_color="transparent")
             btn_action.pack(side="right")
 
@@ -1142,15 +1256,72 @@ class MainWindow(ctk.CTkFrame):
                 command=lambda uid=f_id: self._confirm_remove_friend(uid)
             ).pack(side="left", padx=2)
 
+    def _accept_friend_request(self, requester_id: int):
+        def _do():
+            res = self.net.accept_friend(self.current_user["id"], requester_id)
+            self.master.after(0, self.load_friends)
+            if self.active_conv_data and self.active_conv_data.get("partner_id") == requester_id:
+                self.master.after(0, lambda: self._update_header_friend_status(requester_id))
+            msg = res.get("message", "Đã đồng ý kết bạn!") if res else "Đã chấp nhận!"
+            self.master.after(0, lambda: messagebox.showinfo("Kết bạn thành công", msg))
+        threading.Thread(target=_do, daemon=True).start()
+
+    def _reject_friend_request(self, requester_id: int):
+        def _do():
+            self.net.reject_friend(self.current_user["id"], requester_id)
+            self.master.after(0, self.load_friends)
+        threading.Thread(target=_do, daemon=True).start()
+
+    def _on_new_friend_request(self, packet: dict):
+        self.master.after(0, self.load_friends)
+
     def _confirm_remove_friend(self, friend_id: int):
         if messagebox.askyesno("Xóa khỏi danh bạ", "Bạn có chắc muốn xóa người này khỏi Danh bạ bạn bè?"):
             def _remove():
                 res = self.net.remove_friend(self.current_user["id"], friend_id)
                 self.master.after(0, self.load_friends)
-                # Cập nhật nút chat header nếu đang mở chat với họ
                 if self.active_conv_data and self.active_conv_data.get("partner_id") == friend_id:
                     self.master.after(0, lambda: self._update_header_friend_status(friend_id))
             threading.Thread(target=_remove, daemon=True).start()
+
+    def _start_periodic_sync(self):
+        """Tự động đồng bộ tin nhắn mới nhất cả hai bên định kỳ (mỗi 2.5 giây)."""
+        def _sync_loop():
+            try:
+                # 1. Nếu đang mở cuộc trò chuyện, kiểm tra xem có tin nhắn mới không
+                if self.active_conv_id:
+                    conv_id = self.active_conv_id
+                    res = self.net.get_messages(conv_id)
+                    if res and res.get("conversation_id") == conv_id:
+                        new_msgs = res.get("messages", [])
+                        current_rendered = len(self.messages_scroll.winfo_children())
+                        if len(new_msgs) > current_rendered:
+                            missing_msgs = new_msgs[current_rendered:]
+                            def _append_missing(msgs=missing_msgs):
+                                for m in msgs:
+                                    bubble = ChatBubble(self.messages_scroll, m, self.current_user["id"], self.net)
+                                    bubble.pack(fill="x")
+                                self._scroll_to_bottom()
+                            self.master.after(0, _append_missing)
+                # 2. Cập nhật danh sách hội thoại ngầm
+                res_conv = self.net.get_conversations(self.current_user["id"])
+                if res_conv and "conversations" in res_conv:
+                    new_convs = res_conv["conversations"]
+                    if len(new_convs) != len(self.conversations) or any(
+                        new_convs[i].get("last_message") != self.conversations[i].get("last_message") 
+                        for i in range(min(len(new_convs), len(self.conversations)))
+                    ):
+                        self.conversations = new_convs
+                        self.master.after(0, self._render_conversation_list)
+            except Exception:
+                pass
+            finally:
+                try:
+                    self.master.after(2500, lambda: threading.Thread(target=_sync_loop, daemon=True).start())
+                except Exception:
+                    pass
+
+        self.master.after(2500, lambda: threading.Thread(target=_sync_loop, daemon=True).start())
 
     def open_create_group_dialog(self):
         CreateGroupDialog(self.master, self.current_user, self.net, on_group_created=self._on_group_created)

@@ -21,6 +21,8 @@ class NetworkClient:
             "user_typing": None,
             "refresh_conversations": None,
             "forced_logout": None,
+            "new_friend_request": None,
+            "refresh_friends": None,
         }
         
         # Pending synchronous responses (action_name -> event & response)
@@ -257,6 +259,20 @@ class NetworkClient:
             "user_id": user_id,
             "friend_id": friend_id
         }, expected_action="add_friend_response")
+
+    def accept_friend(self, user_id, requester_id):
+        return self.send_request({
+            "action": "accept_friend",
+            "user_id": user_id,
+            "requester_id": requester_id
+        }, expected_action="accept_friend_response")
+
+    def reject_friend(self, user_id, requester_id):
+        return self.send_request({
+            "action": "reject_friend",
+            "user_id": user_id,
+            "requester_id": requester_id
+        }, expected_action="reject_friend_response")
 
     def remove_friend(self, user_id, friend_id):
         return self.send_request({
