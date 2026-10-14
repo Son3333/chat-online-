@@ -15,10 +15,13 @@ class MainWindow(ctk.CTkFrame):
         self.on_logout = on_logout
         
         self.conversations = []
+        self.friends = []
         self.active_conv_id: Optional[int] = None
         self.active_conv_data: Optional[dict] = None
         self.conv_widgets = {}
+        self.friend_widgets = {}
         self.last_typing_time = 0
+        self.current_sidebar_tab = "chats"
         
         # Grid layout
         self.grid_columnconfigure(0, weight=0, minsize=320) # Sidebar
@@ -30,14 +33,15 @@ class MainWindow(ctk.CTkFrame):
         self.net.register_callback("new_message", self._on_new_message_received)
         self.net.register_callback("user_status_changed", self._on_user_status_changed)
         self.net.register_callback("user_typing", self._on_user_typing)
-        self.net.register_callback("refresh_conversations", lambda pkt: self.master.after(0, self.load_conversations))
+        self.net.register_callback("refresh_conversations", lambda pkt: self.master.after(0, self.refresh_all_data))
 
         self._build_top_bar()
         self._build_sidebar()
         self._build_chat_area()
         
-        # Load danh sách cuộc hội thoại ban đầu
+        # Load danh sách cuộc hội thoại & danh bạ ban đầu
         self.load_conversations()
+        self.load_friends()
 
     # --- TOP BAR ---
     def _build_top_bar(self):
@@ -113,7 +117,7 @@ class MainWindow(ctk.CTkFrame):
             font=ctk.CTkFont(size=12),
             fg_color=("gray80", "#334155"),
             text_color=("black", "white"),
-            command=self.load_conversations
+            command=self.refresh_all_data
         ).pack(side="left", padx=6)
 
         # Nút Đăng xuất
@@ -127,6 +131,10 @@ class MainWindow(ctk.CTkFrame):
             hover_color="#DC2626",
             command=self.on_logout
         ).pack(side="left", padx=6)
+
+    def refresh_all_data(self):
+        self.load_conversations()
+        self.load_friends()
 
     def copy_server_info(self):
         info = f"{self.net.host}:{self.net.port}"
@@ -146,37 +154,53 @@ class MainWindow(ctk.CTkFrame):
             ctk.set_appearance_mode("Light")
             self.theme_switch.configure(text="Giao diện Sáng")
 
-    # --- SIDEBAR ---
+    # --- SIDEBAR (TELEGRAM STYLE: CHATS & CONTACTS TABS) ---
     def _build_sidebar(self):
         self.sidebar = ctk.CTkFrame(self, width=320, corner_radius=0, fg_color=("gray95", "#0F172A"))
         self.sidebar.grid(row=1, column=0, sticky="nsew")
         self.sidebar.grid_propagate(False)
         self.sidebar.grid_columnconfigure(0, weight=1)
-        self.sidebar.grid_rowconfigure(2, weight=1)
+        self.sidebar.grid_rowconfigure(3, weight=1)
 
-        # Search bar
+        # 1. Search bar
         search_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         search_frame.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 6))
         
         self.search_entry = ctk.CTkEntry(
             search_frame, 
-            placeholder_text="🔍 Nhập Username hoặc ID (vd: #1)...", 
+            placeholder_text="🔍 Tìm @username hoặc ID (vd: #1)...", 
             height=36, 
             corner_radius=8
         )
         self.search_entry.pack(fill="x")
         self.search_entry.bind("<KeyRelease>", self._on_search_key)
 
-        # Search results popup list container (ẩn khi không search)
+        # Search results popup list container
         self.search_results_frame = ctk.CTkScrollableFrame(self.sidebar, height=140, fg_color=("white", "#1E293B"))
-        # (Sẽ pack khi có kết quả tìm kiếm)
+        # (Được grid khi có kết quả tìm kiếm)
 
-        # Action bar: Tạo nhóm mới
-        btn_action_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
-        btn_action_frame.grid(row=1, column=0, sticky="ew", padx=12, pady=(4, 8))
-        
-        self.btn_create_group = ctk.CTkButton(
-            btn_action_frame, 
+        # 2. Telegram Tab Switcher: [💬 Tin Nhắn]  [👥 Danh Bạ]
+        tab_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        tab_frame.grid(row=1, column=0, sticky="ew", padx=12, pady=(4, 6))
+
+        self.tab_selector = ctk.CTkSegmentedButton(
+            tab_frame,
+            values=["💬 Tin Nhắn", "👥 Danh Bạ"],
+            height=32,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            selected_color="#2563EB",
+            selected_hover_color="#1D4ED8",
+            command=self._on_sidebar_tab_changed
+        )
+        self.tab_selector.set("💬 Tin Nhắn")
+        self.tab_selector.pack(fill="x")
+
+        # 3. Action row (thay đổi theo tab: "➕ Tạo Nhóm Chat" hoặc "➕ Thêm Bạn Bè")
+        self.action_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
+        self.action_frame.grid(row=2, column=0, sticky="ew", padx=12, pady=(2, 6))
+
+        self.btn_sidebar_action = ctk.CTkButton(
+            self.action_frame, 
             text="➕ Tạo Nhóm Chat Mới", 
             height=34, 
             corner_radius=8,
@@ -185,12 +209,44 @@ class MainWindow(ctk.CTkFrame):
             hover_color="#0369A1",
             command=self.open_create_group_dialog
         )
-        self.btn_create_group.pack(fill="x")
+        self.btn_sidebar_action.pack(fill="x")
 
-        # Danh sách cuộc trò chuyện
+        # 4. Container chứa nội dung tab (row=3)
+        # Tab A: Danh sách cuộc trò chuyện
         self.conv_scroll = ctk.CTkScrollableFrame(self.sidebar, corner_radius=0, fg_color="transparent")
-        self.conv_scroll.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
+        self.conv_scroll.grid(row=3, column=0, sticky="nsew", padx=6, pady=(0, 6))
         self.conv_scroll.grid_columnconfigure(0, weight=1)
+
+        # Tab B: Danh sách danh bạ bạn bè (ẩn ban đầu)
+        self.friends_scroll = ctk.CTkScrollableFrame(self.sidebar, corner_radius=0, fg_color="transparent")
+        self.friends_scroll.grid_columnconfigure(0, weight=1)
+
+    def _on_sidebar_tab_changed(self, selected_value: str):
+        if "Tin Nhắn" in selected_value:
+            self.current_sidebar_tab = "chats"
+            self.friends_scroll.grid_forget()
+            self.conv_scroll.grid(row=3, column=0, sticky="nsew", padx=6, pady=(0, 6))
+            self.btn_sidebar_action.configure(
+                text="➕ Tạo Nhóm Chat Mới",
+                fg_color="#0284C7",
+                hover_color="#0369A1",
+                command=self.open_create_group_dialog
+            )
+            self.load_conversations()
+        else:
+            self.current_sidebar_tab = "contacts"
+            self.conv_scroll.grid_forget()
+            self.friends_scroll.grid(row=3, column=0, sticky="nsew", padx=6, pady=(0, 6))
+            self.btn_sidebar_action.configure(
+                text="➕ Thêm Bạn Bè Mới (ID/User)",
+                fg_color="#10B981",
+                hover_color="#059669",
+                command=self._focus_search_for_add
+            )
+            self.load_friends()
+
+    def _focus_search_for_add(self):
+        self.search_entry.focus_set()
 
     # --- CHAT AREA ---
     def _build_chat_area(self):
@@ -234,14 +290,30 @@ class MainWindow(ctk.CTkFrame):
         self.lbl_chat_subtitle = ctk.CTkLabel(header_info, text="Trạng thái...", font=ctk.CTkFont(size=11), text_color="gray60")
         self.lbl_chat_subtitle.pack(anchor="w")
 
+        # Right header actions frame (Add friend button + Typing label)
+        right_header = ctk.CTkFrame(self.chat_header, fg_color="transparent")
+        right_header.pack(side="right", padx=16, pady=8)
+
         # Typing notification label
         self.lbl_typing = ctk.CTkLabel(
-            self.chat_header, 
+            right_header, 
             text="", 
             font=ctk.CTkFont(size=12, slant="italic"),
             text_color="#38BDF8"
         )
-        self.lbl_typing.pack(side="right", padx=20)
+        self.lbl_typing.pack(side="left", padx=(0, 12))
+
+        # Nút hành động bạn bè kiểu Telegram (Thêm vào danh bạ / Bạn bè)
+        self.btn_contact_action = ctk.CTkButton(
+            right_header,
+            text="➕ Thêm Bạn Bè",
+            height=30,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#10B981",
+            hover_color="#059669",
+            corner_radius=6,
+            command=self.toggle_contact_friend
+        )
 
         # 2. Scrollable Messages View
         self.messages_scroll = ctk.CTkScrollableFrame(self.chat_active_frame, fg_color="transparent")
@@ -435,10 +507,19 @@ class MainWindow(ctk.CTkFrame):
         if conv["type"] == "group":
             count = conv.get("member_count", 2)
             self.lbl_chat_subtitle.configure(text=f"👥 Nhóm trò chuyện  •  {count} thành viên")
+            self.btn_contact_action.pack_forget()
         else:
             is_on = conv.get("is_online", 0)
             status_text = "🟢 Trực tuyến" if is_on else "⚪ Ngoại tuyến"
             self.lbl_chat_subtitle.configure(text=status_text)
+            
+            # Kiểm tra trạng thái bạn bè để hiện nút Telegram Style
+            partner_id = conv.get("partner_id")
+            if partner_id:
+                self.btn_contact_action.pack(side="right")
+                self._update_header_friend_status(partner_id)
+            else:
+                self.btn_contact_action.pack_forget()
 
         # Highlight lại list
         self._render_conversation_list()
@@ -446,6 +527,53 @@ class MainWindow(ctk.CTkFrame):
         # Tải tin nhắn
         self.load_messages_for_active_conv()
         self.msg_entry.focus_set()
+
+    def _update_header_friend_status(self, partner_id: int):
+        def _check():
+            res = self.net.check_friend(self.current_user["id"], partner_id)
+            is_fr = res.get("is_friend", False) if res else False
+            def _apply():
+                if is_fr:
+                    self.btn_contact_action.configure(
+                        text="⭐ Bạn Bè (Xóa khỏi danh bạ)",
+                        fg_color=("#E2E8F0", "#334155"),
+                        text_color=("#0F172A", "#F8FAFC"),
+                        hover_color=("#CBD5E1", "#475569")
+                    )
+                else:
+                    self.btn_contact_action.configure(
+                        text="➕ Thêm Vào Danh Bạ",
+                        fg_color="#10B981",
+                        text_color="white",
+                        hover_color="#059669"
+                    )
+            self.master.after(0, _apply)
+        threading.Thread(target=_check, daemon=True).start()
+
+    def toggle_contact_friend(self):
+        if not self.active_conv_data or self.active_conv_data.get("type") != "direct":
+            return
+        partner_id = self.active_conv_data.get("partner_id")
+        if not partner_id:
+            return
+
+        def _do():
+            check = self.net.check_friend(self.current_user["id"], partner_id)
+            if check and check.get("is_friend"):
+                # Đang là bạn -> xóa
+                res = self.net.remove_friend(self.current_user["id"], partner_id)
+                msg = res.get("message", "Đã xóa khỏi danh bạ!")
+            else:
+                # Chưa là bạn -> thêm
+                res = self.net.add_friend(self.current_user["id"], partner_id)
+                msg = res.get("message", "Đã thêm vào danh bạ bạn bè!")
+            
+            def _done():
+                self._update_header_friend_status(partner_id)
+                self.load_friends()
+                messagebox.showinfo("Danh bạ", msg)
+            self.master.after(0, _done)
+        threading.Thread(target=_do, daemon=True).start()
 
     def load_messages_for_active_conv(self):
         if not self.active_conv_id:
@@ -579,18 +707,43 @@ class MainWindow(ctk.CTkFrame):
             row = ctk.CTkFrame(self.search_results_frame, fg_color="transparent")
             row.pack(fill="x", pady=2)
             
-            ctk.CTkLabel(row, text=f"{u['full_name']} (@{u['username']} • ID: #{u['id']})", font=ctk.CTkFont(size=12)).pack(side="left", padx=4)
+            ctk.CTkLabel(row, text=f"{u['full_name']} (@{u['username']} • #{u['id']})", font=ctk.CTkFont(size=11)).pack(side="left", padx=4)
             
+            btn_box = ctk.CTkFrame(row, fg_color="transparent")
+            btn_box.pack(side="right", padx=2)
+
             ctk.CTkButton(
-                row, 
-                text="Nhắn tin", 
-                width=65, 
+                btn_box, 
+                text="💬 Nhắn", 
+                width=55, 
+                height=24, 
+                font=ctk.CTkFont(size=11, weight="bold"),
+                fg_color="#0284C7",
+                hover_color="#0369A1",
+                command=lambda uid=u["id"]: self.start_direct_chat_with(uid)
+            ).pack(side="left", padx=2)
+
+            ctk.CTkButton(
+                btn_box, 
+                text="➕ Thêm", 
+                width=55, 
                 height=24, 
                 font=ctk.CTkFont(size=11, weight="bold"),
                 fg_color="#10B981",
                 hover_color="#059669",
-                command=lambda uid=u["id"]: self.start_direct_chat_with(uid)
-            ).pack(side="right", padx=4)
+                command=lambda uid=u["id"]: self.quick_add_contact(uid)
+            ).pack(side="left", padx=2)
+
+    def quick_add_contact(self, friend_id: int):
+        self.search_entry.delete(0, "end")
+        self.search_results_frame.grid_forget()
+        
+        def _add():
+            res = self.net.add_friend(self.current_user["id"], friend_id)
+            msg = res.get("message", "Đã thêm vào danh bạ!") if res else "Lỗi thêm bạn bè"
+            self.master.after(0, lambda: messagebox.showinfo("Danh bạ", msg))
+            self.master.after(0, self.load_friends)
+        threading.Thread(target=_add, daemon=True).start()
 
     def start_direct_chat_with(self, partner_id: int):
         self.search_entry.delete(0, "end")
@@ -602,13 +755,141 @@ class MainWindow(ctk.CTkFrame):
                 conv_id = res["conversation_id"]
                 self.conversations = res.get("conversations", [])
                 
-                # Tìm conv vừa tạo/lấy
-                target_conv = next((c for c in self.conversations if c["id"] == conv_id), None)
-                if target_conv:
-                    self.master.after(0, lambda: self.select_conversation(target_conv))
-                else:
-                    self.master.after(0, self.load_conversations)
+                # Switch to chats tab
+                def _open():
+                    self.tab_selector.set("💬 Tin Nhắn")
+                    self._on_sidebar_tab_changed("💬 Tin Nhắn")
+                    target_conv = next((c for c in self.conversations if c["id"] == conv_id), None)
+                    if target_conv:
+                        self.select_conversation(target_conv)
+                    else:
+                        self.load_conversations()
+                self.master.after(0, _open)
         threading.Thread(target=_call, daemon=True).start()
+
+    # --- DANH BẠ BẠN BÈ (TELEGRAM STYLE CONTACTS) ---
+    def load_friends(self):
+        def _fetch():
+            res = self.net.get_friends(self.current_user["id"])
+            if res and "friends" in res:
+                self.friends = res["friends"]
+                self.master.after(0, self._render_friends_list)
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _render_friends_list(self):
+        for widget in self.friends_scroll.winfo_children():
+            widget.destroy()
+        self.friend_widgets.clear()
+
+        if not self.friends:
+            empty_box = ctk.CTkFrame(self.friends_scroll, fg_color="transparent")
+            empty_box.pack(pady=30, padx=10)
+            ctk.CTkLabel(empty_box, text="👥", font=ctk.CTkFont(size=36)).pack(pady=(0, 6))
+            ctk.CTkLabel(
+                empty_box, 
+                text="Danh bạ trống!\nTìm @username hoặc #ID ở trên\nđể thêm bạn bè.", 
+                font=ctk.CTkFont(size=12), 
+                text_color="gray60",
+                justify="center"
+            ).pack()
+            return
+
+        ctk.CTkLabel(
+            self.friends_scroll, 
+            text=f"BẠN BÈ TRONG DANH BẠ ({len(self.friends)})", 
+            font=ctk.CTkFont(size=11, weight="bold"), 
+            text_color="gray50"
+        ).pack(anchor="w", padx=10, pady=(6, 4))
+
+        for fr in self.friends:
+            f_id = fr["id"]
+            card = ctk.CTkFrame(self.friends_scroll, corner_radius=10, fg_color=("white", "#1E293B"), cursor="hand2")
+            card.pack(fill="x", pady=3)
+            self.friend_widgets[f_id] = card
+
+            row_f = ctk.CTkFrame(card, fg_color="transparent")
+            row_f.pack(fill="x", padx=10, pady=8)
+
+            # Avatar
+            av_col = fr.get("avatar_color", "#10B981")
+            av_btn = ctk.CTkButton(
+                row_f, 
+                text=fr["full_name"][:1].upper(), 
+                width=38, 
+                height=38, 
+                corner_radius=19,
+                fg_color=av_col,
+                font=ctk.CTkFont(size=14, weight="bold"),
+                state="disabled"
+            )
+            av_btn.pack(side="left", padx=(0, 10))
+
+            # Info
+            text_box = ctk.CTkFrame(row_f, fg_color="transparent")
+            text_box.pack(side="left", fill="x", expand=True)
+
+            title_row = ctk.CTkFrame(text_box, fg_color="transparent")
+            title_row.pack(fill="x")
+
+            lbl_name = ctk.CTkLabel(
+                title_row, 
+                text=fr["full_name"], 
+                font=ctk.CTkFont(size=13, weight="bold"),
+                anchor="w"
+            )
+            lbl_name.pack(side="left")
+
+            if fr.get("is_online"):
+                dot = ctk.CTkLabel(title_row, text=" 🟢", font=ctk.CTkFont(size=9))
+                dot.pack(side="left")
+
+            lbl_sub = ctk.CTkLabel(
+                text_box, 
+                text=f"@{fr['username']}  •  ID: #{fr['id']}", 
+                font=ctk.CTkFont(size=11), 
+                text_color="gray50",
+                anchor="w"
+            )
+            lbl_sub.pack(fill="x", pady=(1, 0))
+
+            # Action buttons: Nhắn tin & Xóa
+            btn_action = ctk.CTkFrame(row_f, fg_color="transparent")
+            btn_action.pack(side="right")
+
+            ctk.CTkButton(
+                btn_action,
+                text="💬",
+                width=32,
+                height=32,
+                corner_radius=16,
+                font=ctk.CTkFont(size=13),
+                fg_color="#0284C7",
+                hover_color="#0369A1",
+                command=lambda uid=f_id: self.start_direct_chat_with(uid)
+            ).pack(side="left", padx=2)
+
+            ctk.CTkButton(
+                btn_action,
+                text="✕",
+                width=32,
+                height=32,
+                corner_radius=16,
+                font=ctk.CTkFont(size=13, weight="bold"),
+                fg_color=("#FEE2E2", "#450A0A"),
+                text_color=("#DC2626", "#F87171"),
+                hover_color=("#FECACA", "#7F1D1D"),
+                command=lambda uid=f_id: self._confirm_remove_friend(uid)
+            ).pack(side="left", padx=2)
+
+    def _confirm_remove_friend(self, friend_id: int):
+        if messagebox.askyesno("Xóa khỏi danh bạ", "Bạn có chắc muốn xóa người này khỏi Danh bạ bạn bè?"):
+            def _remove():
+                res = self.net.remove_friend(self.current_user["id"], friend_id)
+                self.master.after(0, self.load_friends)
+                # Cập nhật nút chat header nếu đang mở chat với họ
+                if self.active_conv_data and self.active_conv_data.get("partner_id") == friend_id:
+                    self.master.after(0, lambda: self._update_header_friend_status(friend_id))
+            threading.Thread(target=_remove, daemon=True).start()
 
     def open_create_group_dialog(self):
         CreateGroupDialog(self.master, self.current_user, self.net, on_group_created=self._on_group_created)

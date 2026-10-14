@@ -243,3 +243,32 @@ class NetworkClient:
             "sender_name": sender_name
         })
 
+    # --- Danh bạ Bạn bè (Contacts) ---
+    def get_friends(self, user_id):
+        return self.send_request({
+            "action": "get_friends",
+            "user_id": user_id
+        }, expected_action="get_friends_response")
+
+    def add_friend(self, user_id, friend_id):
+        return self.send_request({
+            "action": "add_friend",
+            "user_id": user_id,
+            "friend_id": friend_id
+        }, expected_action="add_friend_response")
+
+    def remove_friend(self, user_id, friend_id):
+        return self.send_request({
+            "action": "remove_friend",
+            "user_id": user_id,
+            "friend_id": friend_id
+        }, expected_action="remove_friend_response")
+
+    def check_friend(self, user_id, friend_id):
+        return self.send_request({
+            "action": "check_friend",
+            "user_id": user_id,
+            "friend_id": friend_id
+        }, expected_action="check_friend_response")
+
+

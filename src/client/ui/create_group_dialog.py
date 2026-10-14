@@ -11,12 +11,13 @@ class CreateGroupDialog(ctk.CTkToplevel):
         # Danh sách người dùng đã được thêm vào nhóm: id -> user_dict
         self.added_members = {}
 
-        self.title("Tạo Nhóm Trò Chuyện Riêng Tư")
-        self.geometry("460x560")
+        self.title("Tạo Nhóm Trò Chuyện (Telegram Style)")
+        self.geometry("480x600")
         self.resizable(False, False)
         self.grab_set()
         
         self._build_ui()
+        self._load_contacts()
 
     def _build_ui(self):
         # 1. Header
@@ -24,21 +25,21 @@ class CreateGroupDialog(ctk.CTkToplevel):
             self, 
             text="👥 Tạo Nhóm Trò Chuyện Mới", 
             font=ctk.CTkFont(size=18, weight="bold")
-        ).pack(pady=(16, 2))
+        ).pack(pady=(14, 2))
         
         ctk.CTkLabel(
             self, 
-            text="Bảo mật: Chỉ thêm được thành viên khi biết chính xác Username hoặc ID", 
+            text="Chọn bạn bè từ Danh bạ hoặc nhập chính xác @username / ID", 
             font=ctk.CTkFont(size=11),
             text_color="gray60"
-        ).pack(pady=(0, 12))
+        ).pack(pady=(0, 10))
 
         # 2. Tên nhóm
         frame_name = ctk.CTkFrame(self, fg_color="transparent")
         frame_name.pack(fill="x", padx=20, pady=(0, 8))
         
         ctk.CTkLabel(frame_name, text="Tên nhóm chat:", font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", pady=(0, 3))
-        self.name_entry = ctk.CTkEntry(frame_name, placeholder_text="Ví dụ: Nhóm Đồ Án, Team Công Việc...", height=36, corner_radius=8)
+        self.name_entry = ctk.CTkEntry(frame_name, placeholder_text="Ví dụ: Nhóm Đồ Án, Nhóm Học Tập...", height=36, corner_radius=8)
         self.name_entry.pack(fill="x")
 
         # 3. Ô tìm kiếm & thêm thành viên qua Username hoặc ID
@@ -47,7 +48,7 @@ class CreateGroupDialog(ctk.CTkToplevel):
         
         ctk.CTkLabel(
             frame_search, 
-            text="Thêm người tham gia (Nhập đúng Username hoặc ID):", 
+            text="Thêm người tham gia (Username hoặc ID):", 
             font=ctk.CTkFont(size=12, weight="bold")
         ).pack(anchor="w", pady=(0, 3))
         
@@ -56,7 +57,7 @@ class CreateGroupDialog(ctk.CTkToplevel):
         
         self.search_entry = ctk.CTkEntry(
             search_row, 
-            placeholder_text="Nhập Username (vd: thaison) hoặc ID (vd: #2)...", 
+            placeholder_text="Nhập @username hoặc ID (vd: son hoặc #1)...", 
             height=36, 
             corner_radius=8
         )
@@ -75,29 +76,29 @@ class CreateGroupDialog(ctk.CTkToplevel):
         )
         self.btn_add.pack(side="right")
 
-        # Nhãn thông báo kết quả tìm kiếm (lỗi hoặc thành công)
         self.lbl_msg = ctk.CTkLabel(self, text="", font=ctk.CTkFont(size=11), text_color="#EF4444")
-        self.lbl_msg.pack(padx=20, pady=(2, 6))
+        self.lbl_msg.pack(padx=20, pady=(2, 4))
 
-        # 4. Danh sách thành viên đã chọn
-        list_header_row = ctk.CTkFrame(self, fg_color="transparent")
-        list_header_row.pack(fill="x", padx=20, pady=(0, 4))
+        # 4. Tab view nhỏ: Danh bạ của bạn / Thành viên đã chọn
+        self.tabview = ctk.CTkTabview(self, height=240, corner_radius=10)
+        self.tabview.pack(fill="both", expand=True, padx=20, pady=(0, 10))
         
-        self.lbl_count = ctk.CTkLabel(
-            list_header_row, 
-            text="Danh sách thành viên sẽ vào nhóm (0 người):", 
-            font=ctk.CTkFont(size=12, weight="bold")
-        )
-        self.lbl_count.pack(side="left")
-
-        self.members_scroll = ctk.CTkScrollableFrame(self, height=190, corner_radius=10, fg_color=("gray95", "#0F172A"))
-        self.members_scroll.pack(fill="both", expand=True, padx=20, pady=(0, 12))
+        self.tab_contacts = self.tabview.add("👥 Danh Bạ Bạn Bè")
+        self.tab_selected = self.tabview.add("✅ Đã Chọn Vào Nhóm (0)")
         
-        self._refresh_members_list()
+        # Scroll frame danh bạ
+        self.contacts_scroll = ctk.CTkScrollableFrame(self.tab_contacts, fg_color="transparent")
+        self.contacts_scroll.pack(fill="both", expand=True, padx=4, pady=4)
+        
+        # Scroll frame đã chọn
+        self.selected_scroll = ctk.CTkScrollableFrame(self.tab_selected, fg_color="transparent")
+        self.selected_scroll.pack(fill="both", expand=True, padx=4, pady=4)
+        
+        self._refresh_selected_view()
 
         # 5. Nút hành động
         btn_box = ctk.CTkFrame(self, fg_color="transparent")
-        btn_box.pack(fill="x", padx=20, pady=(0, 16))
+        btn_box.pack(fill="x", padx=20, pady=(0, 14))
         
         ctk.CTkButton(
             btn_box, 
@@ -121,10 +122,82 @@ class CreateGroupDialog(ctk.CTkToplevel):
         )
         self.btn_submit.pack(side="right")
 
+    def _load_contacts(self):
+        """Tải danh sách bạn bè trong danh bạ cá nhân của người dùng."""
+        def _fetch():
+            res = self.net.get_friends(self.current_user["id"])
+            friends = res.get("friends", []) if res else []
+            self.master.after(0, lambda: self._render_contacts(friends))
+        import threading
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _render_contacts(self, friends: list):
+        for w in self.contacts_scroll.winfo_children():
+            w.destroy()
+            
+        if not friends:
+            box = ctk.CTkFrame(self.contacts_scroll, fg_color="transparent")
+            box.pack(pady=30)
+            ctk.CTkLabel(
+                box, 
+                text="Danh bạ của bạn chưa có bạn bè nào.\nHãy dùng ô tìm kiếm ở trên để thêm bạn vào nhóm nhé!",
+                font=ctk.CTkFont(size=12),
+                text_color="gray50"
+            ).pack()
+            return
+
+        for u in friends:
+            card = ctk.CTkFrame(self.contacts_scroll, fg_color=("white", "#1E293B"), corner_radius=8, height=44)
+            card.pack(fill="x", padx=4, pady=3)
+            
+            col = u.get("avatar_color", "#2563EB")
+            avatar_btn = ctk.CTkButton(
+                card,
+                text=u["full_name"][:1].upper(),
+                width=30,
+                height=30,
+                corner_radius=15,
+                fg_color=col,
+                text_color="white",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                state="disabled"
+            )
+            avatar_btn.pack(side="left", padx=8, pady=6)
+            
+            info = ctk.CTkFrame(card, fg_color="transparent")
+            info.pack(side="left", fill="both", expand=True, pady=4)
+            
+            ctk.CTkLabel(info, text=u["full_name"], font=ctk.CTkFont(size=12, weight="bold"), anchor="w").pack(anchor="w")
+            ctk.CTkLabel(info, text=f"@{u['username']} • ID: #{u['id']}", font=ctk.CTkFont(size=10), text_color="gray50", anchor="w").pack(anchor="w")
+            
+            # Nút chọn / bỏ chọn
+            is_added = u["id"] in self.added_members
+            btn = ctk.CTkButton(
+                card,
+                text="✓ Đã chọn" if is_added else "➕ Thêm",
+                width=75,
+                height=26,
+                font=ctk.CTkFont(size=11, weight="bold"),
+                fg_color="#10B981" if is_added else ("gray80", "#334155"),
+                hover_color="#059669" if is_added else ("gray70", "#475569"),
+                command=lambda user_item=u: self.toggle_contact(user_item)
+            )
+            btn.pack(side="right", padx=8)
+
+    def toggle_contact(self, user_item):
+        uid = user_item["id"]
+        if uid in self.added_members:
+            del self.added_members[uid]
+        else:
+            self.added_members[uid] = user_item
+            
+        self._load_contacts()
+        self._refresh_selected_view()
+
     def do_search_and_add(self):
         query = self.search_entry.get().strip()
         if not query:
-            self.lbl_msg.configure(text="Vui lòng nhập Username hoặc ID người bạn muốn thêm!", text_color="#EF4444")
+            self.lbl_msg.configure(text="Vui lòng nhập Username hoặc ID!", text_color="#EF4444")
             return
             
         self.btn_add.configure(state="disabled")
@@ -142,7 +215,6 @@ class CreateGroupDialog(ctk.CTkToplevel):
             )
             return
 
-        # Lấy người dùng phù hợp nhất
         target_user = users[0]
         uid = target_user["id"]
         
@@ -151,46 +223,40 @@ class CreateGroupDialog(ctk.CTkToplevel):
             return
             
         if uid in self.added_members:
-            self.lbl_msg.configure(text=f"Người dùng @{target_user['username']} đã có trong danh sách rồi!", text_color="#F59E0B")
+            self.lbl_msg.configure(text=f"Người dùng @{target_user['username']} đã được chọn rồi!", text_color="#F59E0B")
             return
 
-        # Thêm vào danh sách
         self.added_members[uid] = target_user
         self.search_entry.delete(0, "end")
         self.lbl_msg.configure(
             text=f"Đã thêm thành công: {target_user['full_name']} (@{target_user['username']})", 
             text_color="#10B981"
         )
-        self._refresh_members_list()
+        self._load_contacts()
+        self._refresh_selected_view()
 
-    def remove_member(self, uid):
-        if uid in self.added_members:
-            del self.added_members[uid]
-            self.lbl_msg.configure(text="")
-            self._refresh_members_list()
-
-    def _refresh_members_list(self):
-        for w in self.members_scroll.winfo_children():
+    def _refresh_selected_view(self):
+        for w in self.selected_scroll.winfo_children():
             w.destroy()
             
-        self.lbl_count.configure(text=f"Danh sách thành viên sẽ vào nhóm ({len(self.added_members)} người):")
+        count = len(self.added_members)
+        self.tabview.set("👥 Danh Bạ Bạn Bè" if count == 0 else f"✅ Đã Chọn Vào Nhóm ({count})")
         
         if not self.added_members:
-            empty_box = ctk.CTkFrame(self.members_scroll, fg_color="transparent")
-            empty_box.pack(pady=35)
+            box = ctk.CTkFrame(self.selected_scroll, fg_color="transparent")
+            box.pack(pady=30)
             ctk.CTkLabel(
-                empty_box, 
-                text="Chưa có thành viên nào được thêm.\nHãy gõ Username hoặc ID ở trên rồi bấm [➕ Thêm].", 
+                box, 
+                text="Chưa có thành viên nào được chọn vào nhóm.\nHãy chọn từ Danh bạ hoặc tìm kiếm ở trên nhé!", 
                 font=ctk.CTkFont(size=12),
                 text_color="gray50"
             ).pack()
             return
 
         for uid, u in self.added_members.items():
-            card = ctk.CTkFrame(self.members_scroll, fg_color=("white", "#1E293B"), corner_radius=8, height=44)
+            card = ctk.CTkFrame(self.selected_scroll, fg_color=("white", "#1E293B"), corner_radius=8, height=44)
             card.pack(fill="x", padx=4, pady=3)
             
-            # Avatar circle
             col = u.get("avatar_color", "#2563EB")
             avatar_btn = ctk.CTkButton(
                 card,
@@ -205,38 +271,30 @@ class CreateGroupDialog(ctk.CTkToplevel):
             )
             avatar_btn.pack(side="left", padx=8, pady=6)
             
-            # Info text
-            info_frame = ctk.CTkFrame(card, fg_color="transparent")
-            info_frame.pack(side="left", fill="both", expand=True, pady=4)
+            info = ctk.CTkFrame(card, fg_color="transparent")
+            info.pack(side="left", fill="both", expand=True, pady=4)
             
-            ctk.CTkLabel(
-                info_frame, 
-                text=u["full_name"], 
-                font=ctk.CTkFont(size=12, weight="bold"),
-                anchor="w"
-            ).pack(anchor="w")
+            ctk.CTkLabel(info, text=u["full_name"], font=ctk.CTkFont(size=12, weight="bold"), anchor="w").pack(anchor="w")
+            ctk.CTkLabel(info, text=f"@{u['username']}  •  ID: #{u['id']}", font=ctk.CTkFont(size=10), text_color="gray50", anchor="w").pack(anchor="w")
             
-            ctk.CTkLabel(
-                info_frame, 
-                text=f"@{u['username']}  •  ID: #{u['id']}", 
-                font=ctk.CTkFont(size=10),
-                text_color="gray50",
-                anchor="w"
-            ).pack(anchor="w")
-            
-            # Nút xóa X
             ctk.CTkButton(
                 card, 
-                text="✕", 
-                width=28, 
-                height=28, 
-                corner_radius=14,
-                font=ctk.CTkFont(size=12, weight="bold"),
-                fg_color=("gray90", "#334155"),
-                hover_color=("#FEE2E2", "#7F1D1D"),
-                text_color=("#EF4444", "#F87171"),
-                command=lambda id_val=uid: self.remove_member(id_val)
+                text="✕ Bỏ", 
+                width=55, 
+                height=26, 
+                corner_radius=6,
+                font=ctk.CTkFont(size=11, weight="bold"),
+                fg_color=("#FEE2E2", "#7F1D1D"),
+                hover_color=("#FCA5A5", "#991B1B"),
+                text_color=("#DC2626", "#FCA5A5"),
+                command=lambda id_val=uid: self.remove_selected(id_val)
             ).pack(side="right", padx=8)
+
+    def remove_selected(self, uid):
+        if uid in self.added_members:
+            del self.added_members[uid]
+            self._load_contacts()
+            self._refresh_selected_view()
 
     def do_create_group(self):
         name = self.name_entry.get().strip()
@@ -246,7 +304,7 @@ class CreateGroupDialog(ctk.CTkToplevel):
             
         selected_uids = list(self.added_members.keys())
         if not selected_uids:
-            messagebox.showwarning("Cảnh báo", "Vui lòng nhập Username hoặc ID và bấm [➕ Thêm] ít nhất 1 thành viên!")
+            messagebox.showwarning("Cảnh báo", "Vui lòng chọn hoặc thêm ít nhất 1 thành viên tham gia!")
             return
             
         res = self.net.create_group(self.current_user["id"], name, selected_uids)

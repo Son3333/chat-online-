@@ -360,6 +360,30 @@ class ChatServer:
             })
             return None
 
+        # 12. Quản lý Danh bạ Bạn bè (Telegram Contacts)
+        elif action == "get_friends":
+            user_id = packet.get("user_id")
+            friends = self.db.get_friends(user_id)
+            return {"action": "get_friends_response", "success": True, "friends": friends}
+
+        elif action == "add_friend":
+            user_id = packet.get("user_id")
+            friend_id = packet.get("friend_id")
+            res = self.db.add_friend(user_id, friend_id)
+            return {"action": "add_friend_response", **res}
+
+        elif action == "remove_friend":
+            user_id = packet.get("user_id")
+            friend_id = packet.get("friend_id")
+            res = self.db.remove_friend(user_id, friend_id)
+            return {"action": "remove_friend_response", **res}
+
+        elif action == "check_friend":
+            user_id = packet.get("user_id")
+            friend_id = packet.get("friend_id")
+            is_fr = self.db.is_friend(user_id, friend_id)
+            return {"action": "check_friend_response", "is_friend": is_fr}
+
         return None
 
 if __name__ == "__main__":

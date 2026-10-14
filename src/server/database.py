@@ -224,7 +224,50 @@ class Database:
             """, (keyword, f"{keyword}%", current_user_id))
             return [dict(r) for r in cursor.fetchall()]
 
-    # --- Friends & Conversations APIs ---
+    # --- Danh bạ bạn bè (Telegram Contacts APIs) ---
+    def add_friend(self, user_id, friend_id):
+        if user_id == friend_id:
+            return {"success": False, "message": "Không thể kết bạn với chính mình!"}
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, username, full_name, avatar_color, is_online FROM users WHERE id = ?", (friend_id,))
+            target = cursor.fetchone()
+            if not target:
+                return {"success": False, "message": "Người dùng không tồn tại!"}
+                
+            cursor.execute("""
+                INSERT OR IGNORE INTO friends (user_id, friend_id, status)
+                VALUES (?, ?, 'accepted')
+            """, (user_id, friend_id))
+            conn.commit()
+            return {"success": True, "message": f"Đã thêm @{target['username']} vào Danh bạ bạn bè!", "friend": dict(target)}
+
+    def remove_friend(self, user_id, friend_id):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM friends WHERE user_id = ? AND friend_id = ?", (user_id, friend_id))
+            conn.commit()
+            return {"success": True, "message": "Đã xóa người này khỏi Danh bạ bạn bè."}
+
+    def is_friend(self, user_id, friend_id):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM friends WHERE user_id = ? AND friend_id = ?", (user_id, friend_id))
+            return cursor.fetchone() is not None
+
+    def get_friends(self, user_id):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT u.id, u.username, u.full_name, u.avatar_color, u.is_online, u.last_seen
+                FROM friends f
+                JOIN users u ON f.friend_id = u.id
+                WHERE f.user_id = ?
+                ORDER BY u.full_name ASC
+            """, (user_id,))
+            return [dict(r) for r in cursor.fetchall()]
+
+    # --- Conversations APIs ---
     def get_direct_conversation(self, user1_id, user2_id):
         """Lấy hoặc tạo cuộc trò chuyện 1-1 giữa 2 người dùng."""
         with self.get_connection() as conn:
