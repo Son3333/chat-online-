@@ -34,3 +34,4 @@ echo   CAP NHAT HOAN TAT! Ban co the mo lai CHAY_UNG_DUNG.bat de su dung.
 echo ===================================================================
 echo.
 pause
+
