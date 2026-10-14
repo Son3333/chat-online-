@@ -156,8 +156,8 @@ class AuthFrame(ctk.CTkFrame):
         self.server_cfg_frame = ctk.CTkFrame(self.card, fg_color=("gray95", "#0F172A"), corner_radius=8)
         
         # Tự động đọc cấu hình WAN/LAN đã lưu trước đó nếu có
-        saved_host = "127.0.0.1"
-        saved_port = 8888
+        saved_host = "bore.pub"
+        saved_port = 28888
         
         if os.path.exists(self.wan_info_file):
             try:
@@ -173,8 +173,8 @@ class AuthFrame(ctk.CTkFrame):
             try:
                 with open(self.cfg_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    saved_host = data.get("host", "127.0.0.1")
-                    saved_port = data.get("port", 8888)
+                    saved_host = data.get("host", "bore.pub")
+                    saved_port = data.get("port", 28888)
             except Exception:
                 pass
 
@@ -200,11 +200,11 @@ class AuthFrame(ctk.CTkFrame):
             self.show_cfg = True
 
     def _apply_server_settings(self):
-        host = self.entry_server_ip.get().strip() or "127.0.0.1"
+        host = self.entry_server_ip.get().strip() or "bore.pub"
         try:
-            port = int(self.entry_server_port.get().strip() or 8888)
+            port = int(self.entry_server_port.get().strip() or 28888)
         except ValueError:
-            port = 8888
+            port = 28888
         self.net.set_server(host, port)
         try:
             with open(self.cfg_file, "w", encoding="utf-8") as f:

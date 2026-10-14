@@ -79,6 +79,20 @@ class MainWindow(ctk.CTkFrame):
         actions_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
         actions_frame.pack(side="right", padx=16, pady=8)
         
+        # Nút hiển thị & sao chép địa chỉ Máy chủ Online
+        server_info_text = f"🌐 {self.net.host}:{self.net.port}"
+        self.btn_copy_server = ctk.CTkButton(
+            actions_frame, 
+            text=f"{server_info_text} 📋", 
+            height=30,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=("gray90", "#0F172A"),
+            hover_color=("gray80", "#1E293B"),
+            text_color=("#0284C7", "#38BDF8"),
+            command=self.copy_server_info
+        )
+        self.btn_copy_server.pack(side="left", padx=8)
+
         # Nút chuyển chế độ Sáng / Tối
         self.theme_switch = ctk.CTkSwitch(
             actions_frame, 
@@ -113,6 +127,16 @@ class MainWindow(ctk.CTkFrame):
             hover_color="#DC2626",
             command=self.on_logout
         ).pack(side="left", padx=6)
+
+    def copy_server_info(self):
+        info = f"{self.net.host}:{self.net.port}"
+        try:
+            self.master.clipboard_clear()
+            self.master.clipboard_append(info)
+            self.btn_copy_server.configure(text="Đã sao chép! ✓")
+            self.master.after(2000, lambda: self.btn_copy_server.configure(text=f"🌐 {self.net.host}:{self.net.port} 📋"))
+        except Exception:
+            pass
 
     def toggle_theme(self):
         if self.theme_switch.get() == 1:

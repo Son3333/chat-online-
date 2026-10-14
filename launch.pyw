@@ -41,13 +41,13 @@ def is_port_in_use(port=8888):
         return False
 
 if not is_port_in_use(8888):
-    # Khởi chạy server hoàn toàn ẩn dưới nền bằng pythonw hoặc CREATE_NO_WINDOW
+    # Khởi chạy MÁY CHỦ ONLINE (WAN) hoàn toàn ẩn dưới nền
     python_dir = os.path.dirname(sys.executable)
     pythonw = os.path.join(python_dir, "pythonw.exe")
     exe = pythonw if os.path.exists(pythonw) else sys.executable
     
     flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-    server_script = os.path.join(PROJECT_DIR, "run_server.py")
+    server_script = os.path.join(PROJECT_DIR, "run_server_wan.py")
     
     startupinfo = None
     if os.name == 'nt':
@@ -63,13 +63,31 @@ if not is_port_in_use(8888):
     )
     
     # Chờ server mở port
-    for _ in range(25):
+    for _ in range(35):
         time.sleep(0.1)
         if is_port_in_use(8888):
             break
 
-# 3. Khởi chạy giao diện chính Desktop Client
+# 3. Lấy thông tin địa chỉ Online WAN để kết nối xuyên Internet
+wan_host = "bore.pub"
+wan_port = 28888
+info_file = os.path.join(PROJECT_DIR, "wan_server_info.txt")
+
+for _ in range(30):
+    if os.path.exists(info_file):
+        try:
+            with open(info_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("DOMAIN="):
+                        wan_host = line.strip().split("=")[1]
+                    elif line.startswith("PORT="):
+                        wan_port = int(line.strip().split("=")[1])
+            break
+        except Exception:
+            pass
+    time.sleep(0.1)
+
+# 4. Khởi chạy giao diện chính Desktop Client kết nối Online
 if __name__ == "__main__":
     from src.client.client_app import run
-    run(host="127.0.0.1", port=8888)
-
+    run(host=wan_host, port=wan_port)

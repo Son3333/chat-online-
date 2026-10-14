@@ -2,6 +2,11 @@ import sys
 import os
 import time
 import threading
+import subprocess
+import re
+import urllib.request
+import zipfile
+import io
 
 if sys.stdout is not None:
     try:
@@ -14,83 +19,131 @@ if sys.stderr is not None:
     except Exception:
         pass
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, PROJECT_DIR)
 
 from src.server.server import ChatServer
-from pyngrok import ngrok, conf
+
+def safe_log(msg: str):
+    if sys.stdout is not None:
+        try:
+            print(msg)
+        except Exception:
+            try:
+                print(msg.encode('ascii', 'replace').decode('ascii'))
+            except Exception:
+                pass
+
+def ensure_bore_binary() -> str:
+    """Đảm bảo file bore.exe sẵn sàng để mở cổng TCP Internet tự do không cần thẻ."""
+    bore_path = os.path.join(PROJECT_DIR, "bore.exe")
+    if os.path.exists(bore_path):
+        return bore_path
+    try:
+        safe_log("[*] Dang tai tien ich TCP Tunneling bore.exe...")
+        url = "https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-pc-windows-msvc.zip"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = resp.read()
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            z.extractall(PROJECT_DIR)
+        if os.path.exists(bore_path):
+            safe_log("[+] Da tai thanh cong bore.exe!")
+            return bore_path
+    except Exception as e:
+        safe_log(f"[-] Khong the tai bore.exe tu dong: {e}")
+    return None
 
 def start_wan_server():
-    print("=================================================================")
-    print("  ĐỒ ÁN CHUYÊN NGÀNH CÔNG NGHỆ PHẦN MỀM - NHÓM 05")
-    print("  KHỞI ĐỘNG MÁY CHỦ TRUYỀN THÔNG MẠNG DIỆN RỘNG (WAN / INTERNET)")
-    print("=================================================================")
+    safe_log("=================================================================")
+    safe_log("  DO AN CHUYEN NGANH CONG NGHE PHAN MEM - NHOM 05")
+    safe_log("  KHOI DONG MAY CHU TRUYEN THONG MANG DIEN RONG (WAN / INTERNET)")
+    safe_log("=================================================================")
 
     # 1. Khởi động ChatServer nội bộ trên port 8888
     local_port = 8888
     server = ChatServer(host="0.0.0.0", port=local_port)
     server_thread = threading.Thread(target=server.start, daemon=True)
     server_thread.start()
-    time.sleep(1)
+    time.sleep(0.5)
 
-    print("\n[1/2] Đã khởi chạy máy chủ TCP Socket nội bộ tại cổng 8888.")
-    print("[2/2] Đang thiết lập đường hầm mạng Internet (WAN Tunnel qua Ngrok)...")
+    safe_log("\n[1/2] Da khoi chay may chu TCP Socket noi bo tai cong 8888.")
+    safe_log("[2/2] Dang thiet lap duong ham mang Internet (WAN TCP Tunnel)...")
 
-    # 2. Mở cổng TCP qua Ngrok
-    tunnel_url = None
-    try:
-        tunnel = ngrok.connect(local_port, "tcp")
-        tunnel_url = tunnel.public_url # e.g. "tcp://0.tcp.ap.ngrok.io:12345"
-    except Exception as e:
-        err_msg = str(e)
-        if "authtoken" in err_msg.lower():
-            print("\n⚠️ CHÚ Ý: Ngrok yêu cầu Authtoken miễn phí để mở cổng TCP qua Internet.")
-            print("👉 Các bước đơn giản (Chỉ làm 1 lần duy nhất):")
-            print("   1. Vào trang: https://dashboard.ngrok.com/ (Đăng ký nhanh bằng Google)")
-            print("   2. Copy mã Your Authtoken (Ví dụ: 2tcxyz...)")
-            token_input = input("   Nhập AuthToken của bạn vào đây (rồi nhấn Enter): ").strip()
-            if token_input:
-                ngrok.set_auth_token(token_input)
-                try:
-                    tunnel = ngrok.connect(local_port, "tcp")
-                    tunnel_url = tunnel.public_url
-                except Exception as ex2:
-                    print(f"❌ Lỗi kết nối sau khi nhập token: {ex2}")
-                    return
-            else:
-                print("Chưa nhập token. Máy chủ tiếp tục chạy ở chế độ mạng LAN nội bộ (0.0.0.0:8888).")
-                server_thread.join()
-                return
-        else:
-            print(f"❌ Lỗi khởi tạo đường hầm WAN: {err_msg}")
-            print("Máy chủ vẫn tiếp tục hoạt động ở chế độ mạng LAN nội bộ.")
-            server_thread.join()
-            return
+    domain = None
+    port = None
+    tunnel_proc = None
 
-    if tunnel_url:
-        # Tách domain và port từ tunnel_url: "tcp://0.tcp.ap.ngrok.io:12345"
-        clean_url = tunnel_url.replace("tcp://", "")
-        domain, port = clean_url.split(":")
-        
-        print("\n" + "=" * 65)
-        print("🎉 MÁY CHỦ CHAT ĐÃ ĐƯỢC ĐƯA LÊN MẠNG WAN (INTERNET) THÀNH CÔNG!")
-        print("=" * 65)
-        print(f"  • Tên miền WAN (IP/Domain) : {domain}")
-        print(f"  • Cổng WAN (Port)          : {port}")
-        print("-" * 65)
-        print("👉 HƯỚNG DẪN CÁC THÀNH VIÊN TRONG NHÓM KẾT NỐI TỪ XA:")
-        print("   1. Mở ứng dụng Desktop Client.")
-        print("   2. Nhấp vào: '⚙️ Cài đặt IP Máy chủ (Dùng mạng LAN / WAN / Internet)'")
-        print(f"   3. Nhập chính xác:")
-        print(f"      - IP / Domain : {domain}")
-        print(f"      - Port        : {port}")
-        print("   4. Bấm 'Đăng nhập' là có thể chat, gửi ảnh, gửi file xuyên Internet!")
-        print("=" * 65)
-        print("Nhấn Ctrl + C để dừng máy chủ.\n")
-
-        # Lưu thông tin WAN ra file để Client có thể tự đọc nếu cần
+    # 2. Mở cổng TCP Online qua Bore (Ưu tiên 1 - Không cần thẻ tín dụng, không cần token)
+    bore_path = ensure_bore_binary()
+    if bore_path and os.path.exists(bore_path):
         try:
-            with open("wan_server_info.txt", "w", encoding="utf-8") as f:
-                f.write(f"DOMAIN={domain}\nPORT={port}\nFULL={tunnel_url}\n")
+            # Thử yêu cầu port 28888 cố định trước
+            flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            tunnel_proc = subprocess.Popen(
+                [bore_path, "local", str(local_port), "--to", "bore.pub", "--port", "28888"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                creationflags=flags
+            )
+            # Chờ đọc địa chỉ listening
+            for _ in range(40):
+                line = tunnel_proc.stdout.readline()
+                if not line:
+                    time.sleep(0.1)
+                    continue
+                safe_log(f"   [Tunnel] {line.strip()}")
+                if "listening at" in line:
+                    m = re.search(r'listening at ([\w\.-]+):(\d+)', line)
+                    if m:
+                        domain, port = m.group(1), int(m.group(2))
+                        break
+        except Exception as e:
+            safe_log(f"[-] Loi khoi chay bore.exe: {e}")
+
+    # Fallback nếu bore không mở được port mong muốn
+    if not domain or not port:
+        safe_log("[!] Bore fallback: Thu mo cong ngau nhien...")
+        try:
+            flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            tunnel_proc = subprocess.Popen(
+                [bore_path, "local", str(local_port), "--to", "bore.pub"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                creationflags=flags
+            )
+            for _ in range(40):
+                line = tunnel_proc.stdout.readline()
+                if not line:
+                    time.sleep(0.1)
+                    continue
+                safe_log(f"   [Tunnel] {line.strip()}")
+                if "listening at" in line:
+                    m = re.search(r'listening at ([\w\.-]+):(\d+)', line)
+                    if m:
+                        domain, port = m.group(1), int(m.group(2))
+                        break
+        except Exception:
+            pass
+
+    if domain and port:
+        safe_log("\n" + "=" * 65)
+        safe_log("MAY CHU CHAT DA DUOC DUA LEN MANG WAN (INTERNET) THANH CONG!")
+        safe_log("=" * 65)
+        safe_log(f"  * Ten mien WAN (IP/Domain) : {domain}")
+        safe_log(f"  * Cong WAN (Port)          : {port}")
+        safe_log("-" * 65)
+        safe_log("HUONG DAN CAC BAN KHAC KET NOI TU XA:")
+        safe_log(f"  Dia chi ket noi: {domain}:{port}")
+        safe_log("=" * 65)
+
+        # Ghi ra file wan_server_info.txt để Desktop Client tự đọc và kết nối ngay
+        try:
+            info_file = os.path.join(PROJECT_DIR, "wan_server_info.txt")
+            with open(info_file, "w", encoding="utf-8") as f:
+                f.write(f"DOMAIN={domain}\nPORT={port}\nFULL={domain}:{port}\n")
         except Exception:
             pass
 
@@ -98,11 +151,14 @@ def start_wan_server():
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
-            print("\nĐang tắt máy chủ WAN...")
-            ngrok.disconnect(tunnel_url)
+            safe_log("\nDang tat may chu WAN...")
+            if tunnel_proc:
+                tunnel_proc.terminate()
             server.stop()
-            print("Đã dừng an toàn.")
+            safe_log("Da dung an toan.")
+    else:
+        safe_log("[-] Khong the mo duong ham WAN tu dong. May chu tiep tuc chay o che do LAN.")
+        server_thread.join()
 
 if __name__ == "__main__":
     start_wan_server()
-
