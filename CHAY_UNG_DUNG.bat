@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title Ứng Dụng Nhắn Tin & Truyền Dữ Liệu - Khởi Động Tự Động
+title Ung Dung Nhan Tin Va Truyen Du Lieu - Nhom 05
 cd /d "%~dp0"
 
 echo ===================================================================
@@ -86,23 +86,24 @@ if %errorlevel% neq 0 (
 
 echo [3/4] Kiem tra cac thu vien can thiet...
 "%PY_CMD%" -c "import customtkinter, PIL" >nul 2>&1
+if %errorlevel% equ 0 goto :libs_ready
+
+echo   [+] Dang tu dong cai dat thu vien giao dien, vui long cho giay lat...
+"%PY_CMD%" -m pip install -r requirements.txt --disable-pip-version-check --no-warn-script-location
 if %errorlevel% neq 0 (
-    echo   [+] Dang tu dong cai dat thu vien giao dien (Chi chay lan dau tien, vui long cho 10-30s)...
-    "%PY_CMD%" -m pip install -r requirements.txt --disable-pip-version-check --no-warn-script-location
-    if %errorlevel% neq 0 (
-        echo.
-        echo ===================================================================
-        echo [LOI] Khong the tu dong cai dat thu vien qua pip!
-        echo Vui long kiem tra lai ket noi mang Internet cua ban.
-        echo ===================================================================
-        echo.
-        pause
-        exit /b 1
-    )
-    echo   [+] Cai dat thu vien hoan tat thanh cong!
-) else (
-    echo   [+] Cac thu vien da day du va san sang!
+    echo.
+    echo ===================================================================
+    echo [LOI] Khong the tu dong cai dat thu vien qua pip!
+    echo Vui long kiem tra lai ket noi mang Internet cua ban.
+    echo ===================================================================
+    echo.
+    pause
+    exit /b 1
 )
+echo   [+] Cai dat thu vien hoan tat thanh cong!
+
+:libs_ready
+echo   [+] Cac thu vien da day du va san sang!
 
 echo [4/4] Dang khoi chay ung dung chat...
 "%PY_CMD%" "%~dp0launch.pyw"
