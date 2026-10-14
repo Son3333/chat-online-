@@ -47,12 +47,12 @@ class ChatApplication(ctk.CTk):
         y = (screen_height // 2) - (height // 2) - 30
         self.geometry(f"{width}x{height}+{x}+{y}")
 
-    def show_auth_frame(self):
+    def show_auth_frame(self, auto_login: bool = True):
         if self.current_frame:
             self.current_frame.destroy()
         
         self.current_user = None
-        self.current_frame = AuthFrame(self, on_login_success=self.show_main_window, network_client=self.net)
+        self.current_frame = AuthFrame(self, on_login_success=self.show_main_window, network_client=self.net, auto_login=auto_login)
         self.current_frame.grid(row=0, column=0, sticky="nsew")
 
     def show_main_window(self, user_info: dict):
@@ -61,7 +61,12 @@ class ChatApplication(ctk.CTk):
         
         self.current_user = user_info
         self.title(f"Ứng Dụng Nhắn Tin - [{user_info['full_name']}]")
-        self.current_frame = MainWindow(self, current_user=user_info, network_client=self.net, on_logout=self.show_auth_frame)
+        self.current_frame = MainWindow(
+            self, 
+            current_user=user_info, 
+            network_client=self.net, 
+            on_logout=lambda: self.show_auth_frame(auto_login=False)
+        )
         self.current_frame.grid(row=0, column=0, sticky="nsew")
 
     def on_closing(self):

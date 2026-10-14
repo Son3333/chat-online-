@@ -4,10 +4,11 @@ import customtkinter as ctk
 from typing import Callable
 
 class AuthFrame(ctk.CTkFrame):
-    def __init__(self, master, on_login_success: Callable, network_client):
+    def __init__(self, master, on_login_success: Callable, network_client, auto_login: bool = True):
         super().__init__(master, fg_color="transparent")
         self.on_login_success = on_login_success
         self.net = network_client
+        self.auto_login = auto_login
         
         self.auth_cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "user_credentials.json")
         self.cfg_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "server_config.json")
@@ -69,11 +70,11 @@ class AuthFrame(ctk.CTkFrame):
         self.login_pwd_entry.pack(fill="x", padx=15, pady=(0, 8))
         self.login_pwd_entry.bind("<Return>", lambda e: self.do_login())
         
-        # Checkbox ghi nhớ mật khẩu
-        self.remember_var = ctk.BooleanVar(value=False)
+        # Checkbox ghi nhớ đăng nhập (Mặc định tích sẵn để lần sau không phải gõ lại)
+        self.remember_var = ctk.BooleanVar(value=True)
         self.remember_cb = ctk.CTkCheckBox(
             tab,
-            text="Ghi nhớ tài khoản & mật khẩu",
+            text="Ghi nhớ đăng nhập (Tự động vào app lần sau)",
             variable=self.remember_var,
             font=ctk.CTkFont(size=12),
             checkbox_width=20,
@@ -141,15 +142,19 @@ class AuthFrame(ctk.CTkFrame):
         self.btn_register.pack(fill="x", padx=15, pady=(0, 15))
 
     def _load_remembered_credentials(self):
-        """Tự động điền tài khoản và mật khẩu nếu người dùng đã tích Ghi nhớ trước đó."""
+        """Tự động điền và tự động đăng nhập thẳng vào ứng dụng nếu đã đăng nhập trước đó."""
         if os.path.exists(self.auth_cache_file):
             try:
                 with open(self.auth_cache_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    if data.get("remember"):
-                        self.login_user_entry.insert(0, data.get("username", ""))
-                        self.login_pwd_entry.insert(0, data.get("password", ""))
-                        self.remember_var.set(True)
+                    u = data.get("username", "")
+                    p = data.get("password", "")
+                    if u and p:
+                        self.login_user_entry.insert(0, u)
+                        self.login_pwd_entry.insert(0, p)
+                        # Tự động đăng nhập vào ứng dụng sau khi giao diện sẵn sàng (nếu không phải vừa chủ động bấm Đăng xuất)
+                        if getattr(self, "auto_login", True):
+                            self.after(100, self.do_login)
             except Exception:
                 pass
 
@@ -313,6 +318,17 @@ class AuthFrame(ctk.CTkFrame):
         if res is None:
             self.reg_msg_label.configure(text="Không thể kết nối đến Máy chủ!", text_color="#EF4444")
         elif res.get("success"):
+            # Tự động lưu thông tin đăng nhập khi đăng ký tài khoản thành công
+            try:
+                with open(self.auth_cache_file, "w", encoding="utf-8") as f:
+                    json.dump({
+                        "username": username,
+                        "password": password,
+                        "remember": True
+                    }, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+
             self.reg_msg_label.configure(text="Đăng ký thành công! Đang chuyển hướng...", text_color="#10B981")
             self.on_login_success(res["user"])
         else:
