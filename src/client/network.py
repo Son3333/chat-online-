@@ -13,6 +13,9 @@ class NetworkClient:
         self.sock: Optional[socket.socket] = None
         self.connected = False
         self.running = False
+        self.current_user_id: Optional[int] = None
+        self.auto_reconnect_enabled = True
+        self.is_reconnecting = False
         
         # Callbacks
         self.callbacks = {
@@ -23,6 +26,8 @@ class NetworkClient:
             "forced_logout": None,
             "new_friend_request": None,
             "refresh_friends": None,
+            "on_reconnected": None,
+            "connection_lost": None,
         }
         
         # Pending synchronous responses (action_name -> event & response)
@@ -53,6 +58,8 @@ class NetworkClient:
             return False
 
     def disconnect(self):
+        self.auto_reconnect_enabled = False
+        self.current_user_id = None
         self.running = False
         self.connected = False
         if self.sock:
@@ -119,6 +126,62 @@ class NetworkClient:
         
         self.connected = False
         self.running = False
+        
+        # Báo sự kiện mất kết nối
+        if self.callbacks.get("connection_lost"):
+            try:
+                self.callbacks["connection_lost"]({})
+            except Exception:
+                pass
+                
+        # Tự động kích hoạt cơ chế kết nối lại
+        if self.auto_reconnect_enabled:
+            self._start_reconnect_thread()
+
+    def _start_reconnect_thread(self):
+        """Khởi chạy luồng chạy ngầm cố gắng kết nối lại mỗi 2 giây."""
+        with self.lock:
+            if self.is_reconnecting:
+                return
+            self.is_reconnecting = True
+            
+        def _loop():
+            import time
+            while not self.connected and self.auto_reconnect_enabled:
+                time.sleep(2.0)
+                if self.reconnect_and_identify():
+                    break
+            with self.lock:
+                self.is_reconnecting = False
+                
+        threading.Thread(target=_loop, daemon=True).start()
+
+    def reconnect_and_identify(self) -> bool:
+        """Tự động kết nối lại và khôi phục phiên làm việc (Identify) với máy chủ."""
+        if self.connected:
+            return True
+        if not self.connect():
+            return False
+        if self.current_user_id:
+            res = self.send_request({
+                "action": "identify",
+                "user_id": self.current_user_id
+            }, expected_action="identify_response", timeout=5.0)
+            if not res or not res.get("success"):
+                return False
+        if self.callbacks.get("on_reconnected"):
+            try:
+                self.callbacks["on_reconnected"]({})
+            except Exception:
+                pass
+        return True
+
+    def identify(self, user_id: int):
+        self.current_user_id = user_id
+        return self.send_request({
+            "action": "identify",
+            "user_id": user_id
+        }, expected_action="identify_response", timeout=5.0)
 
     def send_request(self, payload: dict, expected_action: str, timeout: float = 10.0) -> Optional[dict]:
         """Gửi request và đồng bộ chờ phản hồi từ Server."""
@@ -146,24 +209,32 @@ class NetworkClient:
         return None
 
     def send_fire_and_forget(self, payload: dict) -> bool:
-        """Gửi packet không cần đợi phản hồi (như typing, gửi tin nhắn nhanh)."""
+        """Gửi packet không cần đợi phản hồi (như typing)."""
         return self._send_packet(payload)
 
     # --- API gọi tiện ích ---
     def login(self, username, password):
-        return self.send_request({
+        self.auto_reconnect_enabled = True
+        res = self.send_request({
             "action": "login",
             "username": username,
             "password": password
         }, expected_action="login_response")
+        if res and res.get("success") and "user" in res:
+            self.current_user_id = res["user"]["id"]
+        return res
 
     def register(self, username, password, full_name):
-        return self.send_request({
+        self.auto_reconnect_enabled = True
+        res = self.send_request({
             "action": "register",
             "username": username,
             "password": password,
             "full_name": full_name
         }, expected_action="register_response")
+        if res and res.get("success") and "user" in res:
+            self.current_user_id = res["user"]["id"]
+        return res
 
     def get_conversations(self, user_id):
         return self.send_request({
@@ -177,14 +248,30 @@ class NetworkClient:
             "conversation_id": conversation_id
         }, expected_action="messages_history")
 
-    def send_message(self, conversation_id, sender_id, content, msg_type="text"):
-        return self.send_fire_and_forget({
+    def send_message(self, conversation_id, sender_id, content, msg_type="text") -> bool:
+        """Gửi tin nhắn đảm bảo có xác nhận từ server và tự động kết nối lại nếu mất mạng."""
+        payload = {
             "action": "send_message",
             "conversation_id": conversation_id,
             "sender_id": sender_id,
             "content": content,
             "message_type": msg_type
-        })
+        }
+        # Nếu chưa kết nối, tự động kết nối lại
+        if not self.connected:
+            if not self.reconnect_and_identify():
+                return False
+        
+        res = self.send_request(payload, expected_action="send_message_response", timeout=5.0)
+        if res and res.get("success"):
+            return True
+        
+        # Thử lại lần 2 nếu bị ngắt kết nối đúng thời điểm gửi
+        if self.reconnect_and_identify():
+            res = self.send_request(payload, expected_action="send_message_response", timeout=5.0)
+            if res and res.get("success"):
+                return True
+        return False
 
     def upload_file(self, conversation_id, sender_id, filepath, caption=""):
         try:

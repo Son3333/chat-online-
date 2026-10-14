@@ -28,6 +28,7 @@ class MainWindow(ctk.CTkFrame):
         self.friend_widgets = {}
         self.last_typing_time = 0
         self.current_sidebar_tab = "chats"
+        self.rendered_msg_ids = set()
         
         # Grid layout
         self.grid_columnconfigure(0, weight=0, minsize=320) # Sidebar
@@ -43,6 +44,8 @@ class MainWindow(ctk.CTkFrame):
         self.net.register_callback("forced_logout", self._on_forced_logout)
         self.net.register_callback("new_friend_request", self._on_new_friend_request)
         self.net.register_callback("refresh_friends", lambda pkt: self.master.after(0, self.load_friends))
+        self.net.register_callback("on_reconnected", lambda pkt: self.master.after(0, self._on_reconnected))
+        self.net.register_callback("connection_lost", lambda pkt: self.master.after(0, self._on_connection_lost))
 
         self._build_top_bar()
         self._build_sidebar()
@@ -859,8 +862,11 @@ class MainWindow(ctk.CTkFrame):
     def _render_messages(self, messages: list):
         for w in self.messages_scroll.winfo_children():
             w.destroy()
+        self.rendered_msg_ids = set()
             
         for msg in messages:
+            if "id" in msg:
+                self.rendered_msg_ids.add(msg["id"])
             bubble = ChatBubble(self.messages_scroll, msg, self.current_user["id"], self.net)
             bubble.pack(fill="x")
         
@@ -891,7 +897,20 @@ class MainWindow(ctk.CTkFrame):
             return
         
         self.msg_entry.delete(0, "end")
-        self.net.send_message(self.active_conv_id, self.current_user["id"], content, msg_type="text")
+        
+        def _send():
+            ok = self.net.send_message(self.active_conv_id, self.current_user["id"], content, msg_type="text")
+            if not ok:
+                def _restore():
+                    cur = self.msg_entry.get().strip()
+                    if not cur:
+                        self.msg_entry.insert(0, content)
+                    messagebox.showwarning(
+                        "Mất kết nối máy chủ",
+                        "Máy chủ đang cập nhật hoặc mạng bị gián đoạn!\nTin nhắn của bạn đã được giữ lại trong ô nhập. Ứng dụng đang tự động kết nối lại, vui lòng thử lại sau vài giây."
+                    )
+                self.master.after(0, _restore)
+        threading.Thread(target=_send, daemon=True).start()
 
     def pick_and_send_file(self):
         if not self.active_conv_id:
@@ -925,12 +944,31 @@ class MainWindow(ctk.CTkFrame):
         threading.Thread(target=_upload, daemon=True).start()
 
     # --- XỬ LÝ SỰ KIỆN TỪ SERVER ---
+    def _on_reconnected(self):
+        """Xử lý khi máy chủ kết nối lại thành công sau khi khởi động hoặc rớt mạng."""
+        self.refresh_all_data()
+        if self.active_conv_id:
+            self.load_messages_for_active_conv()
+
+    def _on_connection_lost(self):
+        """Xử lý khi mất kết nối tới máy chủ."""
+        if self.active_conv_data and self.active_conv_data.get("type") == "direct":
+            self.lbl_chat_subtitle.configure(text="🟡 Đang kết nối lại...")
+
     def _on_new_message_received(self, packet: dict):
         conv_id = packet.get("conversation_id")
         msg = packet.get("message")
+        if not msg:
+            return
         
-        # Nếu đang mở cuộc hội thoại này -> render thêm bong bóng chat
+        # Nếu đang mở cuộc hội thoại này -> render thêm bong bóng chat (tránh trùng lặp)
         if self.active_conv_id == conv_id:
+            msg_id = msg.get("id")
+            if msg_id and msg_id in self.rendered_msg_ids:
+                return
+            if msg_id:
+                self.rendered_msg_ids.add(msg_id)
+                
             def _add():
                 bubble = ChatBubble(self.messages_scroll, msg, self.current_user["id"], self.net)
                 bubble.pack(fill="x")
@@ -1294,11 +1332,12 @@ class MainWindow(ctk.CTkFrame):
                     res = self.net.get_messages(conv_id)
                     if res and res.get("conversation_id") == conv_id:
                         new_msgs = res.get("messages", [])
-                        current_rendered = len(self.messages_scroll.winfo_children())
-                        if len(new_msgs) > current_rendered:
-                            missing_msgs = new_msgs[current_rendered:]
+                        missing_msgs = [m for m in new_msgs if m.get("id") and m.get("id") not in self.rendered_msg_ids]
+                        if missing_msgs:
                             def _append_missing(msgs=missing_msgs):
                                 for m in msgs:
+                                    if m.get("id"):
+                                        self.rendered_msg_ids.add(m["id"])
                                     bubble = ChatBubble(self.messages_scroll, m, self.current_user["id"], self.net)
                                     bubble.pack(fill="x")
                                 self._scroll_to_bottom()

@@ -133,7 +133,7 @@ class ChatServer:
                 if response:
                     self.send_packet(client_sock, response)
                 
-                # Cập nhật user_id của socket nếu đăng nhập thành công
+                # Cập nhật user_id của socket nếu đăng nhập thành công HOẶC kết nối lại (identify)
                 if action in ["login", "register"] and response.get("success"):
                     user_id = response["user"]["id"]
                     with self.lock:
@@ -162,6 +162,16 @@ class ChatServer:
                     # Báo trạng thái online cho các client khác
                     self.notify_status_change(user_id, True)
                     log(f"[+] Nguoi dung [{response['user']['username']}] da dang nhap tu {client_addr}")
+
+                elif action == "identify" and response.get("success"):
+                    user_id = response["user"]["id"]
+                    with self.lock:
+                        # Đăng ký lại socket cho user này sau khi rớt mạng / khởi động server
+                        self.active_clients[user_id] = client_sock
+                        self.socket_to_user[client_sock] = user_id
+                    self.db.set_online_status(user_id, True)
+                    self.notify_status_change(user_id, True)
+                    log(f"[+] Nguoi dung [{response['user']['username']}] da ket noi lai va nhan dien tu {client_addr}")
 
         except Exception as e:
             log(f"[-] Loi xu ly client {client_addr}: {e}")
@@ -218,6 +228,14 @@ class ChatServer:
             res["action"] = "register_response"
             return res
 
+        # 2.1 Nhận diện lại sau khi rớt mạng / máy chủ khởi động lại (Session Resume)
+        elif action == "identify":
+            user_id = packet.get("user_id")
+            user = self.db.get_user_by_id(user_id)
+            if user:
+                return {"action": "identify_response", "success": True, "user": user}
+            return {"action": "identify_response", "success": False, "message": "User not found"}
+
         # 3. Lấy danh sách hội thoại
         elif action == "get_conversations":
             user_id = packet.get("user_id")
@@ -244,7 +262,7 @@ class ChatServer:
             msg_type = packet.get("message_type", "text")
             
             if not content:
-                return None
+                return {"action": "send_message_response", "success": False, "message": "Nội dung rỗng"}
             
             saved_msg = self.db.save_message(conv_id, sender_id, msg_type, content)
             if saved_msg:
@@ -258,7 +276,8 @@ class ChatServer:
                     "message": saved_msg
                 }
                 self.broadcast_to_users(member_ids, broadcast_packet)
-            return None
+                return {"action": "send_message_response", "success": True, "message": saved_msg}
+            return {"action": "send_message_response", "success": False, "message": "Lưu tin nhắn thất bại"}
 
         # 6. Tải lên tệp tin / hình ảnh
         elif action == "upload_file":

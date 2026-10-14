@@ -520,19 +520,22 @@ class Database:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def get_messages(self, conversation_id, limit=50):
+    def get_messages(self, conversation_id, limit=200):
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content, 
-                       m.file_id, m.created_at, u.full_name as sender_name, u.avatar_color,
-                       f.original_name, f.file_size, f.file_type
-                FROM messages m
-                JOIN users u ON m.sender_id = u.id
-                LEFT JOIN files f ON m.file_id = f.id
-                WHERE m.conversation_id = ?
-                ORDER BY m.id ASC
-                LIMIT ?
+                SELECT * FROM (
+                    SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content, 
+                           m.file_id, m.created_at, u.full_name as sender_name, u.avatar_color,
+                           f.original_name, f.file_size, f.file_type
+                    FROM messages m
+                    JOIN users u ON m.sender_id = u.id
+                    LEFT JOIN files f ON m.file_id = f.id
+                    WHERE m.conversation_id = ?
+                    ORDER BY m.id DESC
+                    LIMIT ?
+                ) sub
+                ORDER BY sub.id ASC
             """, (conversation_id, limit))
             return [dict(r) for r in cursor.fetchall()]
 
