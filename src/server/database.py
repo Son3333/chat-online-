@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import hashlib
+import re
 from datetime import datetime
 
 DB_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -11,11 +12,24 @@ def hash_password(password: str) -> str:
     salt = "cnpm_nhom5_chat_salt_"
     return hashlib.sha256((salt + password).encode('utf-8')).hexdigest()
 
+def validate_password_strength(password: str) -> tuple[bool, str]:
+    """Kiểm tra mật khẩu: tối thiểu 6 ký tự, gồm chữ hoa, chữ thường, số và ký tự đặc biệt."""
+    if len(password) < 6:
+        return False, "Mật khẩu phải có độ dài tối thiểu từ 6 ký tự trở lên!"
+    if not re.search(r"[A-Z]", password):
+        return False, "Mật khẩu phải chứa ít nhất 1 chữ cái in hoa (A-Z)!"
+    if not re.search(r"[a-z]", password):
+        return False, "Mật khẩu phải chứa ít nhất 1 chữ cái in thường (a-z)!"
+    if not re.search(r"[0-9]", password):
+        return False, "Mật khẩu phải chứa ít nhất 1 chữ số (0-9)!"
+    if not re.search(r"[!@#$%^&*()_+\-=\[\]{}|;:,.<>?/~`]", password):
+        return False, "Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt (!@#$%^&*...)!"
+    return True, ""
+
 class Database:
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
         self.init_tables()
-        self.seed_default_users()
 
     def get_connection(self):
         conn = sqlite3.connect(self.db_path, check_same_thread=False)
@@ -111,74 +125,16 @@ class Database:
             """)
             conn.commit()
 
-    def seed_default_users(self):
-        """Khởi tạo 5 thành viên của nhóm 5 đồ án nếu chưa có."""
-        initial_members = [
-            ("son", "123", "Vũ Duy Thái Sơn (Nhóm trưởng)", "#2563EB"),
-            ("manh", "123", "Vy Thế Mạnh", "#7C3AED"),
-            ("dan", "123", "Vũ Minh Dân", "#059669"),
-            ("tam", "123", "Phạm Đức Tâm", "#D97706"),
-            ("huu", "123", "Hữu", "#DC2626"),
-        ]
-        
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            user_ids = []
-            for username, pwd, fullname, color in initial_members:
-                cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
-                row = cursor.fetchone()
-                if not row:
-                    pwd_hash = hash_password(pwd)
-                    cursor.execute("""
-                        INSERT INTO users (username, password_hash, full_name, avatar_color)
-                        VALUES (?, ?, ?, ?)
-                    """, (username, pwd_hash, fullname, color))
-                    user_ids.append(cursor.lastrowid)
-                else:
-                    user_ids.append(row["id"])
-            
-            # Kết bạn chéo giữa các thành viên
-            for i in range(len(user_ids)):
-                for j in range(i + 1, len(user_ids)):
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO friends (user_id, friend_id, status)
-                        VALUES (?, ?, 'accepted')
-                    """, (user_ids[i], user_ids[j]))
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO friends (user_id, friend_id, status)
-                        VALUES (?, ?, 'accepted')
-                    """, (user_ids[j], user_ids[i]))
-
-            # Tạo nhóm chat chung mặc định "Nhóm 05 - Đồ Án CNPM"
-            cursor.execute("SELECT id FROM conversations WHERE name = 'Nhóm 05 - Đồ Án CNPM'")
-            group_row = cursor.fetchone()
-            if not group_row and len(user_ids) == 5:
-                cursor.execute("""
-                    INSERT INTO conversations (type, name, created_by)
-                    VALUES ('group', 'Nhóm 05 - Đồ Án CNPM', ?)
-                """, (user_ids[0],))
-                conv_id = cursor.lastrowid
-                for idx, uid in enumerate(user_ids):
-                    role = 'admin' if idx == 0 else 'member'
-                    cursor.execute("""
-                        INSERT INTO conversation_members (conversation_id, user_id, role)
-                        VALUES (?, ?, ?)
-                    """, (conv_id, uid, role))
-                
-                # Thêm tin nhắn chào mừng mặc định
-                cursor.execute("""
-                    INSERT INTO messages (conversation_id, sender_id, message_type, content)
-                    VALUES (?, ?, 'text', 'Chào mừng cả nhóm đến với ứng dụng nhắn tin và truyền thông tin!')
-                """, (conv_id, user_ids[0]))
-
-            conn.commit()
-
     # --- User APIs ---
     def register_user(self, username, password, full_name):
         username = username.strip().lower()
         full_name = full_name.strip()
         if not username or not password or not full_name:
             return {"success": False, "message": "Vui lòng nhập đầy đủ thông tin!"}
+        
+        ok, msg = validate_password_strength(password)
+        if not ok:
+            return {"success": False, "message": msg}
         
         colors = ["#2563EB", "#7C3AED", "#059669", "#D97706", "#DC2626", "#0891B2", "#4F46E5"]
         avatar_color = colors[len(username) % len(colors)]

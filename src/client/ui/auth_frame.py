@@ -107,9 +107,16 @@ class AuthFrame(ctk.CTkFrame):
         self.reg_user_entry.pack(fill="x", padx=15, pady=(0, 6))
         
         ctk.CTkLabel(tab, text="Mật khẩu:", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(2, 2))
-        self.reg_pwd_entry = ctk.CTkEntry(tab, placeholder_text="Mật khẩu bảo mật", show="•", height=36, corner_radius=8)
-        self.reg_pwd_entry.pack(fill="x", padx=15, pady=(0, 10))
+        self.reg_pwd_entry = ctk.CTkEntry(tab, placeholder_text="Ví dụ: Matkhau@123", show="•", height=36, corner_radius=8)
+        self.reg_pwd_entry.pack(fill="x", padx=15, pady=(0, 2))
         self.reg_pwd_entry.bind("<Return>", lambda e: self.do_register())
+        
+        ctk.CTkLabel(
+            tab, 
+            text="* Yêu cầu: >= 6 ký tự, gồm chữ hoa, thường, số & ký tự đặc biệt", 
+            font=ctk.CTkFont(size=10),
+            text_color=("gray50", "gray40")
+        ).pack(anchor="w", padx=15, pady=(0, 8))
         
         self.reg_msg_label = ctk.CTkLabel(tab, text="", font=ctk.CTkFont(size=12), text_color="#EF4444")
         self.reg_msg_label.pack(pady=(0, 6))
@@ -262,6 +269,23 @@ class AuthFrame(ctk.CTkFrame):
         
         if not fullname or not username or not password:
             self.reg_msg_label.configure(text="Vui lòng nhập đầy đủ các trường!", text_color="#EF4444")
+            return
+        
+        import re
+        if len(password) < 6:
+            self.reg_msg_label.configure(text="Mật khẩu phải từ 6 ký tự trở lên!", text_color="#EF4444")
+            return
+        if not re.search(r"[A-Z]", password):
+            self.reg_msg_label.configure(text="Mật khẩu cần ít nhất 1 chữ in hoa (A-Z)!", text_color="#EF4444")
+            return
+        if not re.search(r"[a-z]", password):
+            self.reg_msg_label.configure(text="Mật khẩu cần ít nhất 1 chữ in thường (a-z)!", text_color="#EF4444")
+            return
+        if not re.search(r"[0-9]", password):
+            self.reg_msg_label.configure(text="Mật khẩu cần ít nhất 1 chữ số (0-9)!", text_color="#EF4444")
+            return
+        if not re.search(r"[!@#$%^&*()_+\-=\[\]{}|;:,.<>?/~`]", password):
+            self.reg_msg_label.configure(text="Mật khẩu cần ít nhất 1 ký tự đặc biệt (!@#$%...)!", text_color="#EF4444")
             return
         
         self.btn_register.configure(state="disabled", text="Đang xử lý...")
