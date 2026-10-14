@@ -2,6 +2,11 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import threading
 import time
+import os
+import sys
+import json
+import subprocess
+import urllib.request
 from typing import Optional
 
 from src.client.ui.chat_bubble import ChatBubble
@@ -98,6 +103,19 @@ class MainWindow(ctk.CTkFrame):
         )
         self.btn_copy_server.pack(side="left", padx=8)
 
+        # Nút Cập nhật phiên bản mới (Ẩn mặc định, chỉ hiện nhấp nháy cam khi có update trên GitHub)
+        self.btn_update = ctk.CTkButton(
+            actions_frame,
+            text="🚀 Có Bản Cập Nhật Mới! (Cập nhật ngay)",
+            height=32,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color="#F59E0B",
+            hover_color="#D97706",
+            text_color="black",
+            corner_radius=8,
+            command=self.perform_one_click_update
+        )
+
         # Nút chuyển chế độ Sáng / Tối
         self.theme_switch = ctk.CTkSwitch(
             actions_frame, 
@@ -132,6 +150,132 @@ class MainWindow(ctk.CTkFrame):
             hover_color="#DC2626",
             command=self.on_logout
         ).pack(side="left", padx=6)
+
+        # Bắt đầu luồng kiểm tra bản cập nhật mới trên GitHub định kỳ (mỗi 60s)
+        self.project_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
+        self._start_background_update_checker()
+
+    def _start_background_update_checker(self):
+        def _check():
+            try:
+                # 1. Kiểm tra Git pull dry-run hoặc kiểm tra SHA commit từ GitHub API
+                has_update = False
+                git_dir = os.path.join(self.project_dir, ".git")
+                if os.path.exists(git_dir):
+                    flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                    res = subprocess.run(
+                        ["git", "ls-remote", "origin", "main"],
+                        cwd=self.project_dir,
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        creationflags=flags
+                    )
+                    if res.returncode == 0 and res.stdout.strip():
+                        remote_sha = res.stdout.strip().split()[0]
+                        res_local = subprocess.run(
+                            ["git", "rev-parse", "HEAD"],
+                            cwd=self.project_dir,
+                            capture_output=True,
+                            text=True,
+                            timeout=3,
+                            creationflags=flags
+                        )
+                        local_sha = res_local.stdout.strip()
+                        if remote_sha and local_sha and remote_sha != local_sha:
+                            has_update = True
+                else:
+                    # Kiểm tra qua GitHub Commits API
+                    api_url = "https://api.github.com/repos/Son3333/chat-online-/commits/main"
+                    req = urllib.request.Request(api_url, headers={"User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        data = json.loads(resp.read().decode("utf-8"))
+                        remote_sha = data.get("sha", "")
+                    
+                    version_file = os.path.join(self.project_dir, ".version")
+                    current_ver = ""
+                    if os.path.exists(version_file):
+                        with open(version_file, "r", encoding="utf-8") as f:
+                            current_ver = f.read().strip()
+                    if remote_sha and current_ver and remote_sha != current_ver:
+                        has_update = True
+
+                if has_update:
+                    def _show_btn():
+                        self.btn_update.pack(side="left", padx=8)
+                    self.master.after(0, _show_btn)
+            except Exception:
+                pass
+            finally:
+                # Kiểm tra lại sau mỗi 60 giây
+                try:
+                    self.master.after(60000, lambda: threading.Thread(target=_check, daemon=True).start())
+                except Exception:
+                    pass
+
+        # Lần kiểm tra đầu tiên sau 5 giây mở app
+        self.master.after(5000, lambda: threading.Thread(target=_check, daemon=True).start())
+
+    def perform_one_click_update(self):
+        if not messagebox.askyesno("Cập nhật phần mềm", "Đã có bản cập nhật mới nhất từ máy chủ!\nBạn có muốn cập nhật và khởi động lại ứng dụng ngay bây giờ không?"):
+            return
+
+        self.btn_update.configure(state="disabled", text="⏳ Đang tải bản cập nhật...")
+        self.update_idletasks()
+
+        def _do_update():
+            flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            git_dir = os.path.join(self.project_dir, ".git")
+            success = False
+
+            if os.path.exists(git_dir):
+                try:
+                    subprocess.run(["git", "pull", "origin", "main"], cwd=self.project_dir, timeout=15, creationflags=flags)
+                    success = True
+                except Exception:
+                    pass
+
+            if not success:
+                # Tải zip về giải nén
+                try:
+                    import zipfile, io, shutil
+                    zip_url = "https://github.com/Son3333/chat-online-/archive/refs/heads/main.zip"
+                    req = urllib.request.Request(zip_url, headers={"User-Agent": "Mozilla/5.0"})
+                    with urllib.request.urlopen(req, timeout=25) as resp:
+                        zip_bytes = resp.read()
+                    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
+                        root_prefix = "chat-online--main/"
+                        for member in z.namelist():
+                            if member.startswith(root_prefix) and member != root_prefix:
+                                rel_path = member[len(root_prefix):]
+                                if not rel_path or rel_path.endswith("/"):
+                                    continue
+                                if rel_path in ["src/server/chat_database.db", "user_credentials.json", "server_config.json"]:
+                                    continue
+                                target_path = os.path.join(self.project_dir, rel_path)
+                                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                                with z.open(member) as src, open(target_path, "wb") as dst:
+                                    shutil.copyfileobj(src, dst)
+                    success = True
+                except Exception as e:
+                    self.master.after(0, lambda: messagebox.showerror("Lỗi cập nhật", f"Không thể tải bản cập nhật: {e}"))
+                    self.master.after(0, lambda: self.btn_update.configure(state="normal", text="🚀 Có Bản Cập Nhật Mới!"))
+                    return
+
+            # Khởi động lại ứng dụng
+            def _restart():
+                messagebox.showinfo("Hoàn tất cập nhật", "Đã cập nhật lên phiên bản mới nhất thành công!\nỨng dụng sẽ tự động khởi động lại.")
+                # Chạy lại app bằng launch.pyw hoặc run_client.py
+                launcher = os.path.join(self.project_dir, "launch.pyw")
+                if not os.path.exists(launcher):
+                    launcher = os.path.join(self.project_dir, "run_client.py")
+                
+                subprocess.Popen([sys.executable, launcher], cwd=self.project_dir)
+                self.master.destroy()
+
+            self.master.after(0, _restart)
+
+        threading.Thread(target=_do_update, daemon=True).start()
 
     def refresh_all_data(self):
         self.load_conversations()
