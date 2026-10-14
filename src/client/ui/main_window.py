@@ -943,8 +943,13 @@ class MainWindow(ctk.CTkFrame):
             self.search_results_frame.grid_forget()
             return
             
+        search_kw = kw.lstrip("@").strip()
+        if not search_kw:
+            self.search_results_frame.grid_forget()
+            return
+            
         def _search():
-            res = self.net.search_users(kw, self.current_user["id"])
+            res = self.net.search_users(search_kw, self.current_user["id"])
             users = res.get("users", []) if res else []
             self.master.after(0, lambda: self._show_search_results(users))
         threading.Thread(target=_search, daemon=True).start()

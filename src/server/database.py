@@ -216,11 +216,16 @@ class Database:
         if not keyword:
             return []  # Bảo mật: Không bao giờ trả về danh sách nếu để trống từ khóa!
             
+        # Tự động loại bỏ ký tự @ hoặc # ở đầu (hỗ trợ người dùng gõ @username hoặc #id)
+        clean_keyword = keyword.lstrip("@#").strip()
+        if not clean_keyword:
+            return []
+
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
-            # 1. Tìm theo ID cụ thể (ví dụ: "1", "#1", "id:1")
-            id_query = keyword.lstrip("#").replace("id:", "").strip()
+            # 1. Tìm theo ID cụ thể (ví dụ: "1000000000", "#1000000000", "id:1000000000")
+            id_query = clean_keyword.replace("id:", "").strip()
             if id_query.isdigit():
                 cursor.execute("""
                     SELECT id, username, full_name, avatar_color, is_online
@@ -231,13 +236,17 @@ class Database:
                 if res:
                     return res
             
-            # 2. Tìm theo Username chính xác hoặc tiền tố Username (bảo vệ quyền riêng tư)
+            # 2. Tìm theo Username chính xác, tiền tố Username, hoặc Họ tên người dùng
             cursor.execute("""
                 SELECT id, username, full_name, avatar_color, is_online
                 FROM users
-                WHERE (LOWER(username) = LOWER(?) OR LOWER(username) LIKE LOWER(?)) AND id != ?
+                WHERE (
+                    LOWER(username) = LOWER(?) 
+                    OR LOWER(username) LIKE LOWER(?) 
+                    OR LOWER(full_name) LIKE LOWER(?)
+                ) AND id != ?
                 LIMIT 10
-            """, (keyword, f"{keyword}%", current_user_id))
+            """, (clean_keyword, f"{clean_keyword}%", f"%{clean_keyword}%", current_user_id))
             return [dict(r) for r in cursor.fetchall()]
 
     # --- Danh bạ bạn bè (Telegram Contacts APIs) ---
