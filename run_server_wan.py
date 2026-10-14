@@ -139,11 +139,14 @@ def start_wan_server():
         safe_log(f"  Dia chi ket noi: {domain}:{port}")
         safe_log("=" * 65)
 
-        # Ghi ra file wan_server_info.txt để Desktop Client tự đọc và kết nối ngay
+        # Ghi ra file wan_server_info.txt và server_config.json để Desktop Client tự đọc và kết nối ngay
         try:
             info_file = os.path.join(PROJECT_DIR, "wan_server_info.txt")
             with open(info_file, "w", encoding="utf-8") as f:
                 f.write(f"DOMAIN={domain}\nPORT={port}\nFULL={domain}:{port}\n")
+            cfg_file = os.path.join(PROJECT_DIR, "server_config.json")
+            with open(cfg_file, "w", encoding="utf-8") as f:
+                json.dump({"host": domain, "port": port}, f, indent=2)
         except Exception:
             pass
 
