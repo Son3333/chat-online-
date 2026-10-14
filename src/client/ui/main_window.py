@@ -325,23 +325,46 @@ class MainWindow(ctk.CTkFrame):
         self.input_bar = ctk.CTkFrame(self.chat_active_frame, height=65, corner_radius=0, fg_color=("white", "#1E293B"))
         self.input_bar.grid(row=2, column=0, sticky="ew")
         
-        # Emoji bar buttons
+        # Emoji bar buttons + Nút mở bảng Emoji đầy đủ (😊+)
         self.emoji_bar = ctk.CTkFrame(self.input_bar, fg_color="transparent")
         self.emoji_bar.pack(fill="x", padx=14, pady=(6, 2))
         
-        emojis = ["😊", "👍", "❤️", "🎉", "🔥", "😂", "👏", "🚀", "💯", "🤝"]
-        for em in emojis:
+        # Nút mở bảng chọn tất cả Emoji (Picker Popup phong cách Telegram)
+        self.btn_all_emojis = ctk.CTkButton(
+            self.emoji_bar,
+            text="😃 Bảng Emoji",
+            width=92,
+            height=26,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=("#E0E7FF", "#1E293B"),
+            text_color=("#4338CA", "#818CF8"),
+            hover_color=("#C7D2FE", "#334155"),
+            corner_radius=6,
+            command=self.toggle_emoji_picker
+        )
+        self.btn_all_emojis.pack(side="left", padx=(0, 6))
+
+        # Dải Emoji nhanh phong phú (Cảm xúc, Hành động, Biểu tượng)
+        quick_emojis = [
+            "😀", "😂", "🥰", "😎", "🥳", "🤔", "😭", "😡", 
+            "👍", "👎", "👏", "🙏", "❤️", "🔥", "🎉", "✨", 
+            "🚀", "💯", "🤝", "💪", "⭐", "☕", "🍕", "🎯"
+        ]
+        for em in quick_emojis:
             b = ctk.CTkButton(
                 self.emoji_bar, 
                 text=em, 
-                width=28, 
+                width=26, 
                 height=24, 
                 font=ctk.CTkFont(size=13),
                 fg_color="transparent",
                 hover_color=("gray85", "#334155"),
                 command=lambda e=em: self.insert_emoji(e)
             )
-            b.pack(side="left", padx=2)
+            b.pack(side="left", padx=1)
+
+        # Popup Frame Bảng Emoji Đầy Đủ (Ẩn mặc định, hiển thị nổi khi bấm 😃 Bảng Emoji)
+        self.emoji_picker_popup = None
 
         # Input row
         input_row = ctk.CTkFrame(self.input_bar, fg_color="transparent")
@@ -384,6 +407,78 @@ class MainWindow(ctk.CTkFrame):
             command=self.send_text_message
         )
         self.btn_send.pack(side="right")
+
+    def toggle_emoji_picker(self):
+        """Mở hoặc đóng cửa sổ bảng chọn Emoji phân loại đa dạng (Chuẩn Unicode Telegram)."""
+        if self.emoji_picker_popup and self.emoji_picker_popup.winfo_exists():
+            self.emoji_picker_popup.destroy()
+            self.emoji_picker_popup = None
+            return
+
+        self.emoji_picker_popup = ctk.CTkToplevel(self.master)
+        self.emoji_picker_popup.title("Kho Biểu Tượng Cảm Xúc (Emoji Picker)")
+        self.emoji_picker_popup.geometry("380x360")
+        self.emoji_picker_popup.resizable(False, False)
+        self.emoji_picker_popup.attributes("-topmost", True)
+
+        # Đặt vị trí gần góc dưới phải màn hình
+        try:
+            x = self.btn_all_emojis.winfo_rootx()
+            y = self.btn_all_emojis.winfo_rooty() - 370
+            self.emoji_picker_popup.geometry(f"+{x}+{y}")
+        except Exception:
+            pass
+
+        # Tabview phân loại
+        tabs = ctk.CTkTabview(self.emoji_picker_popup, width=360, height=330, corner_radius=10)
+        tabs.pack(fill="both", expand=True, padx=8, pady=8)
+
+        categories = {
+            "😃 Mặt cười": [
+                "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "🥲", "🥹", "😊", "😇",
+                "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😋", "😛", "😜", "🤪",
+                "😎", "🤓", "🧐", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "😣",
+                "😖", "😫", "😩", "🥺", "😢", "😭", "😮‍💨", "😤", "😠", "😡", "🤬", "🤯",
+                "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗", "🫡", "🤫", "🫠"
+            ],
+            "👍 Bàn tay": [
+                "👍", "👎", "👊", "✊", "🤛", "🤜", "👏", "🙌", "👐", "🤲", "🤝", "🙏",
+                "✍️", "💅", "🤳", "💪", "👈", "👉", "👆", "👇", "☝️", "✌️", "🤞", "🫰",
+                "🤟", "🤘", "🤙", "👋", "🤚", "🖐️", "✋", "🖖", "👌", "🤌", "🤏", "🫳"
+            ],
+            "❤️ Trái tim & Đồ vật": [
+                "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❤️‍🔥", "❤️‍🩹",
+                "💖", "💗", "💓", "💞", "💕", "💌", "💘", "💝", "🎉", "🎊", "🎈", "🎂",
+                "🔥", "✨", "🌟", "💫", "💥", "💯", "🚀", "🏆", "🥇", "🎯", "⭐", "🔔"
+            ],
+            "🍔 Ẩm thực & Thú cưng": [
+                "☕", "🧋", "🍵", "🍺", "🍻", "🍕", "🍔", "🍟", "🌭", "🍿", "🍜", "🍣",
+                "🍰", "🍦", "🍩", "🍪", "🍎", "🍉", "🍇", "🍓", "🐶", "🐱", "🐭", "🐹",
+                "🐰", "🦊", "🐻", "🐼", "🐨", "🐯", "🦁", "🐮", "🐷", "🐸", "🐵", "🐔"
+            ]
+        }
+
+        for cat_name, emoji_list in categories.items():
+            tab_frame = tabs.add(cat_name)
+            scroll = ctk.CTkScrollableFrame(tab_frame, fg_color="transparent")
+            scroll.pack(fill="both", expand=True)
+
+            # Lưới Emoji (6 cột)
+            cols = 6
+            for idx, em in enumerate(emoji_list):
+                r = idx // cols
+                c = idx % cols
+                btn = ctk.CTkButton(
+                    scroll,
+                    text=em,
+                    width=42,
+                    height=38,
+                    font=ctk.CTkFont(size=18),
+                    fg_color="transparent",
+                    hover_color=("gray85", "#334155"),
+                    command=lambda e=em: self.insert_emoji(e)
+                )
+                btn.grid(row=r, column=c, padx=3, pady=3)
 
     def insert_emoji(self, emoji_char: str):
         self.msg_entry.insert("insert", emoji_char)
