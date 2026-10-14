@@ -81,7 +81,7 @@ def auto_update_from_github():
 # Thực hiện đồng bộ ngầm
 auto_update_from_github()
 
-# 2. Tự động kiểm tra và cài đặt ngầm thư viện nếu máy mới chưa cài
+# 2. Tự động kiểm tra và chỉ cài đặt thư viện nếu máy mới chưa có (Không chạy lại pip nếu đã có)
 try:
     import customtkinter
     import PIL
@@ -96,7 +96,7 @@ except ImportError:
     try:
         req_file = os.path.join(PROJECT_DIR, "requirements.txt")
         subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", req_file, "--quiet"],
+            [sys.executable, "-m", "pip", "install", "-r", req_file, "--quiet", "--no-warn-script-location"],
             cwd=PROJECT_DIR,
             startupinfo=startupinfo,
             creationflags=flags

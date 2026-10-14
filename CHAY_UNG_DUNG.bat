@@ -24,8 +24,14 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-echo [3/4] Tu dong kiem tra va cai dat thu vien ngam (customtkinter, pillow, pyngrok)...
-python -m pip install -r requirements.txt --quiet --disable-pip-version-check
+echo [3/4] Kiem tra thu vien giao dien...
+python -c "import customtkinter, PIL" >nul 2>&1
+if %errorlevel% neq 0 (
+    echo   [+] Dang tu dong cai dat thu vien giao dien (Chi chay 1 lan dau tien)...
+    python -m pip install -r requirements.txt --quiet --disable-pip-version-check --no-warn-script-location
+) else (
+    echo   [+] Thu vien da san sang!
+)
 
 echo [4/4] Dang khoi chay ung dung va tu dong ket noi Server Online...
 start "" pythonw "%~dp0launch.pyw"
