@@ -29,6 +29,8 @@ class MainWindow(ctk.CTkFrame):
         self.last_typing_time = 0
         self.current_sidebar_tab = "chats"
         self.rendered_msg_ids = set()
+        self._update_prompted = False
+        self._latest_remote_sha = ""
         
         # Grid layout
         self.grid_columnconfigure(0, weight=0, minsize=320) # Sidebar
@@ -208,10 +210,20 @@ class MainWindow(ctk.CTkFrame):
                             current_ver = f.read().strip()
                     if remote_sha and current_ver and remote_sha != current_ver:
                         has_update = True
+                    elif remote_sha and not current_ver:
+                        has_update = True
 
                 if has_update:
+                    self._latest_remote_sha = remote_sha
                     def _show_btn():
                         self.btn_update.pack(side="left", padx=8)
+                        if not self._update_prompted:
+                            self._update_prompted = True
+                            if messagebox.askyesno(
+                                "🚀 Bản Cập Nhật Mới",
+                                "Đã có bản cập nhật mới nhất từ máy chủ (vá lỗi kết nối, mất tin nhắn & tải tệp)!\n\nBạn có muốn tự động cập nhật và khởi động lại ứng dụng ngay không?"
+                            ):
+                                self.perform_one_click_update(force=True)
                     self.master.after(0, _show_btn)
             except Exception:
                 pass
@@ -225,8 +237,8 @@ class MainWindow(ctk.CTkFrame):
         # Lần kiểm tra đầu tiên sau 5 giây mở app
         self.master.after(5000, lambda: threading.Thread(target=_check, daemon=True).start())
 
-    def perform_one_click_update(self):
-        if not messagebox.askyesno("Cập nhật phần mềm", "Đã có bản cập nhật mới nhất từ máy chủ!\nBạn có muốn cập nhật và khởi động lại ứng dụng ngay bây giờ không?"):
+    def perform_one_click_update(self, force=False):
+        if not force and not messagebox.askyesno("Cập nhật phần mềm", "Đã có bản cập nhật mới nhất từ máy chủ!\nBạn có muốn cập nhật và khởi động lại ứng dụng ngay bây giờ không?"):
             return
 
         self.btn_update.configure(state="disabled", text="⏳ Đang tải bản cập nhật...")
@@ -270,6 +282,13 @@ class MainWindow(ctk.CTkFrame):
                     self.master.after(0, lambda: messagebox.showerror("Lỗi cập nhật", f"Không thể tải bản cập nhật: {e}"))
                     self.master.after(0, lambda: self.btn_update.configure(state="normal", text="🚀 Có Bản Cập Nhật Mới!"))
                     return
+
+            if success and self._latest_remote_sha:
+                try:
+                    with open(os.path.join(self.project_dir, ".version"), "w", encoding="utf-8") as f:
+                        f.write(self._latest_remote_sha)
+                except Exception:
+                    pass
 
             # Khởi động lại ứng dụng
             def _restart():

@@ -105,6 +105,12 @@ echo   [+] Cai dat thu vien hoan tat thanh cong!
 :libs_ready
 echo   [+] Cac thu vien da day du va san sang!
 
+:: Tu dong dong bo ban moi nhat tu GitHub neu co Git
+if exist "%~dp0.git" (
+    echo   [*] Dang tu dong dong bo ban cap nhat moi nhat tu GitHub...
+    git pull origin main --quiet >nul 2>&1
+)
+
 echo [4/4] Dang khoi chay ung dung chat...
 "%PY_CMD%" "%~dp0launch.pyw"
 
