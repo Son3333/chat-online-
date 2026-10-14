@@ -21,3 +21,10 @@ wan_server_info.txt
 server_config.json
 user_credentials.json
 
+# Microsoft Office Documents (Báo cáo nội bộ, không push lên Git)
+*.docx
+*.doc
+~$*.docx
+~$*.doc
+
+
