@@ -73,7 +73,7 @@ class MainWindow(ctk.CTkFrame):
         
         status_box = ctk.CTkFrame(name_box, fg_color="transparent")
         status_box.pack(anchor="w")
-        ctk.CTkLabel(status_box, text="🟢 Trực tuyến  •  @" + self.current_user["username"], font=ctk.CTkFont(size=11), text_color="#10B981").pack(side="left")
+        ctk.CTkLabel(status_box, text=f"🟢 Trực tuyến  •  @{self.current_user['username']}  •  ID: #{self.current_user['id']}", font=ctk.CTkFont(size=11), text_color="#10B981").pack(side="left")
 
         # Right actions
         actions_frame = ctk.CTkFrame(self.top_bar, fg_color="transparent")
@@ -160,7 +160,7 @@ class MainWindow(ctk.CTkFrame):
         
         self.search_entry = ctk.CTkEntry(
             search_frame, 
-            placeholder_text="🔍 Tìm kiếm bạn bè, nhóm...", 
+            placeholder_text="🔍 Nhập Username hoặc ID (vd: #1)...", 
             height=36, 
             corner_radius=8
         )
@@ -579,7 +579,7 @@ class MainWindow(ctk.CTkFrame):
             row = ctk.CTkFrame(self.search_results_frame, fg_color="transparent")
             row.pack(fill="x", pady=2)
             
-            ctk.CTkLabel(row, text=f"{u['full_name']} (@{u['username']})", font=ctk.CTkFont(size=12)).pack(side="left", padx=4)
+            ctk.CTkLabel(row, text=f"{u['full_name']} (@{u['username']} • ID: #{u['id']})", font=ctk.CTkFont(size=12)).pack(side="left", padx=4)
             
             ctk.CTkButton(
                 row, 

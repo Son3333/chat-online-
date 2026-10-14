@@ -196,15 +196,32 @@ class Database:
             return dict(row) if row else None
 
     def search_users(self, keyword, current_user_id):
-        keyword = f"%{keyword.strip().lower()}%"
+        keyword = keyword.strip()
+        if not keyword:
+            return []  # Bảo mật: Không bao giờ trả về danh sách nếu để trống từ khóa!
+            
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            
+            # 1. Tìm theo ID cụ thể (ví dụ: "1", "#1", "id:1")
+            id_query = keyword.lstrip("#").replace("id:", "").strip()
+            if id_query.isdigit():
+                cursor.execute("""
+                    SELECT id, username, full_name, avatar_color, is_online
+                    FROM users
+                    WHERE id = ? AND id != ?
+                """, (int(id_query), current_user_id))
+                res = [dict(r) for r in cursor.fetchall()]
+                if res:
+                    return res
+            
+            # 2. Tìm theo Username chính xác hoặc tiền tố Username (bảo vệ quyền riêng tư)
             cursor.execute("""
                 SELECT id, username, full_name, avatar_color, is_online
                 FROM users
-                WHERE (LOWER(username) LIKE ? OR LOWER(full_name) LIKE ?) AND id != ?
-                LIMIT 20
-            """, (keyword, keyword, current_user_id))
+                WHERE (LOWER(username) = LOWER(?) OR LOWER(username) LIKE LOWER(?)) AND id != ?
+                LIMIT 10
+            """, (keyword, f"{keyword}%", current_user_id))
             return [dict(r) for r in cursor.fetchall()]
 
     # --- Friends & Conversations APIs ---
