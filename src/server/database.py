@@ -2,6 +2,7 @@ import sqlite3
 import os
 import hashlib
 import re
+import random
 from datetime import datetime
 
 DB_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -36,14 +37,22 @@ class Database:
         conn.row_factory = sqlite3.Row
         return conn
 
+    def generate_random_user_id(self, cursor) -> int:
+        """Tạo mã ID ngẫu nhiên gồm 10 chữ số (từ 1,000,000,000 đến 9,999,999,999) và không trùng lặp."""
+        while True:
+            new_id = random.randint(1000000000, 9999999999)
+            cursor.execute("SELECT id FROM users WHERE id = ?", (new_id,))
+            if not cursor.fetchone():
+                return new_id
+
     def init_tables(self):
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
-            # 1. Bảng Người dùng
+            # 1. Bảng Người dùng (ID là dãy số ngẫu nhiên gồm 10 chữ số bảo mật)
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id INTEGER PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 full_name TEXT NOT NULL,
@@ -152,11 +161,12 @@ class Database:
                 return {"success": False, "message": f"Username @{username} đã có người sử dụng! Vui lòng chọn username khác."}
             
             pwd_hash = hash_password(password)
+            new_id = self.generate_random_user_id(cursor)
+            
             cursor.execute("""
-                INSERT INTO users (username, password_hash, full_name, avatar_color)
-                VALUES (?, ?, ?, ?)
-            """, (username, pwd_hash, full_name, avatar_color))
-            new_id = cursor.lastrowid
+                INSERT INTO users (id, username, password_hash, full_name, avatar_color)
+                VALUES (?, ?, ?, ?, ?)
+            """, (new_id, username, pwd_hash, full_name, avatar_color))
             
             # Tự động thêm vào nhóm chat chung nếu có
             cursor.execute("SELECT id FROM conversations WHERE name = 'Nhóm 05 - Đồ Án CNPM'")
