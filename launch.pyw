@@ -65,7 +65,7 @@ def get_target_server():
         return "127.0.0.1", 8888
 
     target_host = "bore.pub"
-    target_port = 35633
+    target_port = 28888
 
     cfg_file = os.path.join(PROJECT_DIR, "server_config.json")
     if os.path.exists(cfg_file):

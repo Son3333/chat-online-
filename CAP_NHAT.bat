@@ -1,5 +1,6 @@
 @echo off
-title CAP NHAT UNG DUNG - NHOM 05
+chcp 65001 >nul
+title Cap Nhat Ung Dung - Nhom 05
 color 0A
 cd /d "%~dp0"
 
@@ -7,6 +8,10 @@ echo ===================================================================
 echo      KIEM TRA VA CAP NHAT BAN MOI NHAT TU GITHUB (NHOM 05)
 echo ===================================================================
 echo.
+
+:: Dong cac tien trinh cu dang chay ngam de giai phong thu muc
+echo [*] Dang giai phong tien trinh cu...
+taskkill /F /IM python.exe /IM pythonw.exe /IM bore.exe >nul 2>&1
 
 :: 1. Neu may tinh da clone bang Git
 if exist ".git" (
@@ -25,13 +30,21 @@ if exist ".git" (
 )
 
 :: 2. Neu may nguoi dung chi tai file ZIP ve (chua cai Git)
-echo [*] Dang ket noi toi GitHub (https://github.com/Son3333/chat-online-)...
-powershell -Command "& {[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/Son3333/chat-online-/archive/refs/heads/main.zip' -OutFile 'update_temp.zip'; Expand-Archive -Path 'update_temp.zip' -DestinationPath 'temp_update' -Force; Copy-Item -Path 'temp_update\chat-online--main\*' -Destination '.' -Recurse -Force; Remove-Item 'update_temp.zip' -Force; Remove-Item 'temp_update' -Recurse -Force; Write-Host '[OK] Da tai va de ma nguon phien ban moi nhat thanh cong!' -ForegroundColor Green}"
+echo [*] Dang tai ban cap nhat moi nhat tu GitHub...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $zip = 'update_temp.zip'; $dest = 'temp_update'; if (Test-Path $zip) { Remove-Item $zip -Force }; if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }; Write-Host '  [+] Dang tai goi zip tu GitHub...'; Invoke-WebRequest -Uri 'https://github.com/Son3333/chat-online-/archive/refs/heads/main.zip' -OutFile $zip; Write-Host '  [+] Dang giai nen ban moi...'; Expand-Archive -Path $zip -DestinationPath $dest -Force; Write-Host '  [+] Dang ghi de tap tin...'; Copy-Item -Path \"$dest\chat-online--main\*\" -Destination '.' -Recurse -Force; Remove-Item $zip -Force; Remove-Item $dest -Recurse -Force; Write-Host '  [+] Hoan tat cap nhat thanh cong!' -ForegroundColor Green } catch { Write-Host '  [-] Loi cap nhat: ' $_.Exception.Message -ForegroundColor Red; exit 1 }"
 
-echo.
-echo ===================================================================
-echo   CAP NHAT HOAN TAT! Ban co the mo lai CHAY_UNG_DUNG.bat de su dung.
-echo ===================================================================
+if %errorlevel% neq 0 (
+    echo.
+    echo ===================================================================
+    echo [LOI] Khong the tai ban cap nhat tu dong!
+    echo Ban co the tai truc tiep file zip moi nhat tai:
+    echo   https://github.com/Son3333/chat-online-/archive/refs/heads/main.zip
+    echo ===================================================================
+) else (
+    echo.
+    echo ===================================================================
+    echo   CAP NHAT HOAN TAT! Ban co the mo lai CHAY_UNG_DUNG.bat de su dung.
+    echo ===================================================================
+)
 echo.
 pause
-
