@@ -27,4 +27,12 @@ user_credentials.json
 ~$*.docx
 ~$*.doc
 
+# Database & Sensitive Data (Bảo mật: Không bao giờ đẩy CSDL thật và file upload lên Git)
+*.db
+*.sqlite
+*.sqlite3
+src/server/uploads/
+uploads/
+
+
 
