@@ -34,6 +34,7 @@ class MainWindow(ctk.CTkFrame):
         self.net.register_callback("user_status_changed", self._on_user_status_changed)
         self.net.register_callback("user_typing", self._on_user_typing)
         self.net.register_callback("refresh_conversations", lambda pkt: self.master.after(0, self.refresh_all_data))
+        self.net.register_callback("forced_logout", self._on_forced_logout)
 
         self._build_top_bar()
         self._build_sidebar()
@@ -679,6 +680,22 @@ class MainWindow(ctk.CTkFrame):
                 # Xóa sau 3 giây
                 self.master.after(3000, lambda: self.lbl_typing.configure(text=""))
             self.master.after(0, _show)
+
+    def _on_forced_logout(self, packet: dict):
+        """Xử lý khi tài khoản được đăng nhập trên một thiết bị khác (Cơ chế Facebook)."""
+        msg = packet.get("message", "Tài khoản của bạn vừa đăng nhập trên thiết bị khác!")
+        def _handle():
+            # Xóa mật khẩu đã lưu để buộc người dùng phải nhập lại mật khẩu
+            auth_cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "user_credentials.json")
+            if os.path.exists(auth_cache_file):
+                try:
+                    os.remove(auth_cache_file)
+                except Exception:
+                    pass
+
+            messagebox.showwarning("Cảnh báo bảo mật đăng nhập", msg)
+            self.on_logout()
+        self.master.after(0, _handle)
 
     # --- TÌM KIẾM NGƯỜI DÙNG & TẠO CHAT 1-1 ---
     def _on_search_key(self, event):

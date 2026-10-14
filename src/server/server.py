@@ -137,6 +137,24 @@ class ChatServer:
                 if action in ["login", "register"] and response.get("success"):
                     user_id = response["user"]["id"]
                     with self.lock:
+                        # KIỂM TRA ĐĂNG NHẬP THIẾT BỊ KHÁC (Cơ chế Facebook / Telegram):
+                        # Nếu tài khoản này đang online ở một thiết bị khác -> Đăng xuất thiết bị cũ ngay lập tức!
+                        if user_id in self.active_clients:
+                            old_sock = self.active_clients[user_id]
+                            if old_sock != client_sock:
+                                try:
+                                    kick_packet = {
+                                        "type": "forced_logout",
+                                        "message": "Tài khoản của bạn vừa được đăng nhập trên một thiết bị khác!\nThiết bị hiện tại đã bị đăng xuất để bảo vệ bảo mật."
+                                    }
+                                    self.send_packet(old_sock, kick_packet)
+                                    if old_sock in self.socket_to_user:
+                                        del self.socket_to_user[old_sock]
+                                    old_sock.close()
+                                    log(f"[!] Tai khoan [ID: {user_id}] dang nhap thiet bi moi -> Da buoc dang xuat thiet bi cu.")
+                                except Exception:
+                                    pass
+
                         self.active_clients[user_id] = client_sock
                         self.socket_to_user[client_sock] = user_id
                     
@@ -152,7 +170,7 @@ class ChatServer:
             with self.lock:
                 if client_sock in self.socket_to_user:
                     uid = self.socket_to_user.pop(client_sock)
-                    if uid in self.active_clients:
+                    if uid in self.active_clients and self.active_clients[uid] == client_sock:
                         del self.active_clients[uid]
                     self.db.set_online_status(uid, False)
                     self.notify_status_change(uid, False)

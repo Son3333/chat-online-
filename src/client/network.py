@@ -20,6 +20,7 @@ class NetworkClient:
             "user_status_changed": None,
             "user_typing": None,
             "refresh_conversations": None,
+            "forced_logout": None,
         }
         
         # Pending synchronous responses (action_name -> event & response)
