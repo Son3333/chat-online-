@@ -251,10 +251,14 @@ class MainWindow(ctk.CTkFrame):
 
             if os.path.exists(git_dir):
                 try:
-                    subprocess.run(["git", "pull", "origin", "main"], cwd=self.project_dir, timeout=15, creationflags=flags)
-                    success = True
+                    # Dùng git fetch + reset --hard để đồng bộ 100%, không bị lỗi xung đột file cục bộ
+                    r1 = subprocess.run(["git", "fetch", "origin", "main"], cwd=self.project_dir, timeout=15, creationflags=flags)
+                    if r1.returncode == 0:
+                        r2 = subprocess.run(["git", "reset", "--hard", "origin/main"], cwd=self.project_dir, timeout=10, creationflags=flags)
+                        if r2.returncode == 0:
+                            success = True
                 except Exception:
-                    pass
+                    success = False
 
             if not success:
                 # Tải zip về giải nén
@@ -262,7 +266,7 @@ class MainWindow(ctk.CTkFrame):
                     import zipfile, io, shutil
                     zip_url = "https://github.com/Son3333/chat-online-/archive/refs/heads/main.zip"
                     req = urllib.request.Request(zip_url, headers={"User-Agent": "Mozilla/5.0"})
-                    with urllib.request.urlopen(req, timeout=25) as resp:
+                    with urllib.request.urlopen(req, timeout=30) as resp:
                         zip_bytes = resp.read()
                     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
                         root_prefix = "chat-online--main/"

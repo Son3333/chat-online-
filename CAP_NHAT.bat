@@ -9,41 +9,43 @@ echo      KIEM TRA VA CAP NHAT BAN MOI NHAT TU GITHUB (NHOM 05)
 echo ===================================================================
 echo.
 
-:: Dong cac tien trinh cu dang chay ngam de giai phong thu muc
-echo [*] Dang giai phong tien trinh cu...
-taskkill /F /IM python.exe /IM pythonw.exe /IM bore.exe >nul 2>&1
+:: Dong cac tien trinh cu dang chay de giai phong file
+echo [*] Dang dong ung dung de giai phong thu muc...
+taskkill /F /IM python.exe /IM pythonw.exe >nul 2>&1
+timeout /t 1 /nobreak >nul
 
-:: 1. Neu may tinh da clone bang Git
+set "UPDATE_OK=0"
+
+:: 1. Neu may tinh da clone bang Git:
 if exist ".git" (
-    echo [*] Phat hien kho ma nguon Git. Dang dong bo ban moi nhat...
-    git pull origin main
+    echo [*] Phat hien kho ma nguon Git. Dang dong bo tuyet doi voi origin/main...
+    git fetch origin main
     if %errorlevel% equ 0 (
-        echo.
-        echo [OK] Da cap nhat ung dung len phien ban moi nhat thanh cong!
-    ) else (
-        echo.
-        echo [!] Khong the dong bo qua Git (co the do mat ket noi mang).
+        git reset --hard origin/main
+        if %errorlevel% equ 0 (
+            set "UPDATE_OK=1"
+        )
     )
-    echo.
-    pause
-    exit /b
 )
 
-:: 2. Neu may nguoi dung chi tai file ZIP ve (chua cai Git)
-echo [*] Dang tai ban cap nhat moi nhat tu GitHub...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $zip = 'update_temp.zip'; $dest = 'temp_update'; if (Test-Path $zip) { Remove-Item $zip -Force }; if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }; Write-Host '  [+] Dang tai goi zip tu GitHub...'; Invoke-WebRequest -Uri 'https://github.com/Son3333/chat-online-/archive/refs/heads/main.zip' -OutFile $zip; Write-Host '  [+] Dang giai nen ban moi...'; Expand-Archive -Path $zip -DestinationPath $dest -Force; Write-Host '  [+] Dang ghi de tap tin...'; Copy-Item -Path \"$dest\chat-online--main\*\" -Destination '.' -Recurse -Force; Remove-Item $zip -Force; Remove-Item $dest -Recurse -Force; Write-Host '  [+] Hoan tat cap nhat thanh cong!' -ForegroundColor Green } catch { Write-Host '  [-] Loi cap nhat: ' $_.Exception.Message -ForegroundColor Red; exit 1 }"
+:: 2. Neu khong co Git hoac Git gap loi -> Tu dong tai ZIP de ghi de:
+if "%UPDATE_OK%"=="0" (
+    echo [*] Dang tai goi ma nguon ZIP moi nhat tu GitHub...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $zip = 'update_temp.zip'; $dest = 'temp_update'; if (Test-Path $zip) { Remove-Item $zip -Force }; if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }; Write-Host '  [+] Dang tai goi zip tu GitHub...'; Invoke-WebRequest -Uri 'https://github.com/Son3333/chat-online-/archive/refs/heads/main.zip' -OutFile $zip; Write-Host '  [+] Dang giai nen ban moi...'; Expand-Archive -Path $zip -DestinationPath $dest -Force; Write-Host '  [+] Dang ghi de tap tin...'; Copy-Item -Path \"$dest\chat-online--main\*\" -Destination '.' -Recurse -Force; Remove-Item $zip -Force; Remove-Item $dest -Recurse -Force; exit 0 } catch { Write-Host '  [-] Loi cap nhat zip: ' $_.Exception.Message -ForegroundColor Red; exit 1 }"
+    if %errorlevel% equ 0 (
+        set "UPDATE_OK=1"
+    )
+)
 
-if %errorlevel% neq 0 (
-    echo.
+echo.
+if "%UPDATE_OK%"=="1" (
     echo ===================================================================
-    echo [LOI] Khong the tai ban cap nhat tu dong!
-    echo Ban co the tai truc tiep file zip moi nhat tai:
-    echo   https://github.com/Son3333/chat-online-/archive/refs/heads/main.zip
+    echo   [THANH CONG] DA CAP NHAT LEN PHIEN BAN MOI NHAT CUA NHOM 05!
+    echo   Ban co the mo lai CHAY_UNG_DUNG.bat de su dung ngay.
     echo ===================================================================
 ) else (
-    echo.
     echo ===================================================================
-    echo   CAP NHAT HOAN TAT! Ban co the mo lai CHAY_UNG_DUNG.bat de su dung.
+    echo   [THAT BAI] Khong the cap nhat tu dong! Vui long kiem tra ket noi mang.
     echo ===================================================================
 )
 echo.

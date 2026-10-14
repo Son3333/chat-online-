@@ -274,6 +274,8 @@ class NetworkClient:
         return False
 
     def upload_file(self, conversation_id, sender_id, filepath, caption=""):
+        if not self.connected:
+            self.reconnect_and_identify()
         try:
             filename = os.path.basename(filepath)
             filesize = os.path.getsize(filepath)
@@ -298,6 +300,8 @@ class NetworkClient:
             return {"success": False, "message": str(e)}
 
     def download_file(self, file_id):
+        if not self.connected:
+            self.reconnect_and_identify()
         return self.send_request({
             "action": "download_file",
             "file_id": file_id

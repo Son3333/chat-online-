@@ -329,15 +329,19 @@ class ChatBubble(ctk.CTkFrame):
             except Exception:
                 pass
 
-        res = self.net.download_file(file_id)
-        if not res or not res.get("success"):
-            messagebox.showerror("Lỗi", res.get("message", "Không thể tải tệp từ máy chủ!"))
-            return
-        
-        try:
-            raw_bytes = base64.b64decode(res.get("file_data", ""))
-            with open(save_path, "wb") as f:
-                f.write(raw_bytes)
-            messagebox.showinfo("Thành công", f"Đã lưu tệp thành công tại:\n{save_path}")
-        except Exception as e:
-            messagebox.showerror("Lỗi", f"Lỗi khi lưu tệp: {e}")
+        def _do_download():
+            res = self.net.download_file(file_id)
+            def _done():
+                if not res or not res.get("success"):
+                    messagebox.showerror("Lỗi tải tệp", res.get("message", "Không thể tải tệp từ máy chủ!"))
+                    return
+                try:
+                    raw_bytes = base64.b64decode(res.get("file_data", ""))
+                    with open(save_path, "wb") as f:
+                        f.write(raw_bytes)
+                    messagebox.showinfo("Thành công", f"Đã lưu tệp thành công tại:\n{save_path}")
+                except Exception as e:
+                    messagebox.showerror("Lỗi", f"Lỗi khi lưu tệp: {e}")
+            self.after(0, _done)
+
+        threading.Thread(target=_do_download, daemon=True).start()
