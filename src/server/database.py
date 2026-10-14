@@ -127,11 +127,17 @@ class Database:
 
     # --- User APIs ---
     def register_user(self, username, password, full_name):
-        username = username.strip().lower()
+        username = username.strip().lower().lstrip("@")
         full_name = full_name.strip()
         if not username or not password or not full_name:
             return {"success": False, "message": "Vui lòng nhập đầy đủ thông tin!"}
         
+        # Kiểm tra tính hợp lệ của username (chuẩn như Telegram: a-z, 0-9, dấu gạch dưới, dài từ 3 - 20 ký tự)
+        if len(username) < 3 or len(username) > 20:
+            return {"success": False, "message": "Username phải có độ dài từ 3 đến 20 ký tự!"}
+        if not re.match(r"^[a-z0-9_]+$", username):
+            return {"success": False, "message": "Username chỉ được gồm chữ cái thường, số và dấu gạch dưới (_), không dấu, không khoảng trắng!"}
+
         ok, msg = validate_password_strength(password)
         if not ok:
             return {"success": False, "message": msg}
@@ -143,7 +149,7 @@ class Database:
             cursor = conn.cursor()
             cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
             if cursor.fetchone():
-                return {"success": False, "message": "Tên đăng nhập đã tồn tại!"}
+                return {"success": False, "message": f"Username @{username} đã có người sử dụng! Vui lòng chọn username khác."}
             
             pwd_hash = hash_password(password)
             cursor.execute("""

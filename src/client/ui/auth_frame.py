@@ -102,9 +102,16 @@ class AuthFrame(ctk.CTkFrame):
         self.reg_name_entry = ctk.CTkEntry(tab, placeholder_text="Ví dụ: Nguyễn Văn A", height=36, corner_radius=8)
         self.reg_name_entry.pack(fill="x", padx=15, pady=(0, 6))
         
-        ctk.CTkLabel(tab, text="Tên đăng nhập (username):", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(2, 2))
-        self.reg_user_entry = ctk.CTkEntry(tab, placeholder_text="Tên viết liền, không dấu", height=36, corner_radius=8)
-        self.reg_user_entry.pack(fill="x", padx=15, pady=(0, 6))
+        ctk.CTkLabel(tab, text="Tên đăng nhập (@username duy nhất):", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(2, 2))
+        self.reg_user_entry = ctk.CTkEntry(tab, placeholder_text="Ví dụ: son_nguyen hoặc nguyenvana", height=36, corner_radius=8)
+        self.reg_user_entry.pack(fill="x", padx=15, pady=(0, 2))
+
+        ctk.CTkLabel(
+            tab, 
+            text="* Username là duy nhất toàn hệ thống (không trùng ai, dùng để tìm kiếm)", 
+            font=ctk.CTkFont(size=10),
+            text_color="#0284C7"
+        ).pack(anchor="w", padx=15, pady=(0, 6))
         
         ctk.CTkLabel(tab, text="Mật khẩu:", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(2, 2))
         self.reg_pwd_entry = ctk.CTkEntry(tab, placeholder_text="Ví dụ: Matkhau@123", show="•", height=36, corner_radius=8)
@@ -272,6 +279,14 @@ class AuthFrame(ctk.CTkFrame):
             return
         
         import re
+        clean_user = username.lstrip("@").lower()
+        if len(clean_user) < 3 or len(clean_user) > 20:
+            self.reg_msg_label.configure(text="Username phải dài từ 3 đến 20 ký tự!", text_color="#EF4444")
+            return
+        if not re.match(r"^[a-z0-9_]+$", clean_user):
+            self.reg_msg_label.configure(text="Username chỉ được gồm chữ cái, số và gạch dưới (_), không dấu/khoảng trắng!", text_color="#EF4444")
+            return
+
         if len(password) < 6:
             self.reg_msg_label.configure(text="Mật khẩu phải từ 6 ký tự trở lên!", text_color="#EF4444")
             return
