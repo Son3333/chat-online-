@@ -1,0 +1,23 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# OS specific
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Temporary local config and wan info
+wan_server_info.txt
+server_config.json
+user_credentials.json
+
