@@ -217,13 +217,7 @@ class MainWindow(ctk.CTkFrame):
                     self._latest_remote_sha = remote_sha
                     def _show_btn():
                         self.btn_update.pack(side="left", padx=8)
-                        if not self._update_prompted:
-                            self._update_prompted = True
-                            if messagebox.askyesno(
-                                "🚀 Bản Cập Nhật Mới",
-                                "Đã có bản cập nhật mới nhất từ máy chủ (vá lỗi kết nối, mất tin nhắn & tải tệp)!\n\nBạn có muốn tự động cập nhật và khởi động lại ứng dụng ngay không?"
-                            ):
-                                self.perform_one_click_update(force=True)
+                        self._start_update_button_pulse()
                     self.master.after(0, _show_btn)
             except Exception:
                 pass
@@ -237,11 +231,27 @@ class MainWindow(ctk.CTkFrame):
         # Lần kiểm tra đầu tiên sau 5 giây mở app
         self.master.after(5000, lambda: threading.Thread(target=_check, daemon=True).start())
 
-    def perform_one_click_update(self, force=False):
-        if not force and not messagebox.askyesno("Cập nhật phần mềm", "Đã có bản cập nhật mới nhất từ máy chủ!\nBạn có muốn cập nhật và khởi động lại ứng dụng ngay bây giờ không?"):
+    def _start_update_button_pulse(self):
+        if getattr(self, "_pulsing_update", False):
             return
+        self._pulsing_update = True
+        self._pulse_state = 0
+        def _pulse():
+            if not getattr(self, "_pulsing_update", False):
+                return
+            try:
+                if self.btn_update.winfo_exists():
+                    colors = ["#F59E0B", "#D97706", "#F59E0B", "#EA580C"]
+                    self._pulse_state = (self._pulse_state + 1) % len(colors)
+                    self.btn_update.configure(fg_color=colors[self._pulse_state])
+                    self.master.after(800, _pulse)
+            except Exception:
+                pass
+        _pulse()
 
-        self.btn_update.configure(state="disabled", text="⏳ Đang tải bản cập nhật...")
+    def perform_one_click_update(self, force=True):
+        self._pulsing_update = False
+        self.btn_update.configure(state="disabled", text="⏳ Đang tải bản cập nhật...", fg_color="#D97706")
         self.update_idletasks()
 
         def _do_update():
@@ -283,8 +293,7 @@ class MainWindow(ctk.CTkFrame):
                                     shutil.copyfileobj(src, dst)
                     success = True
                 except Exception as e:
-                    self.master.after(0, lambda: messagebox.showerror("Lỗi cập nhật", f"Không thể tải bản cập nhật: {e}"))
-                    self.master.after(0, lambda: self.btn_update.configure(state="normal", text="🚀 Có Bản Cập Nhật Mới!"))
+                    self.master.after(0, lambda: self.btn_update.configure(state="normal", text="🚀 Có Bản Cập Nhật Mới!", fg_color="#F59E0B"))
                     return
 
             if success and self._latest_remote_sha:
@@ -294,10 +303,9 @@ class MainWindow(ctk.CTkFrame):
                 except Exception:
                     pass
 
-            # Khởi động lại ứng dụng
+            # Khởi động lại ứng dụng mượt mà không cần popup cản trở
             def _restart():
-                messagebox.showinfo("Hoàn tất cập nhật", "Đã cập nhật lên phiên bản mới nhất thành công!\nỨng dụng sẽ tự động khởi động lại.")
-                # Chạy lại app bằng launch.pyw hoặc run_client.py
+                self.btn_update.configure(text="✅ Đã tải xong! Đang mở lại...")
                 launcher = os.path.join(self.project_dir, "launch.pyw")
                 if not os.path.exists(launcher):
                     launcher = os.path.join(self.project_dir, "run_client.py")
@@ -305,7 +313,7 @@ class MainWindow(ctk.CTkFrame):
                 subprocess.Popen([sys.executable, launcher], cwd=self.project_dir)
                 self.master.destroy()
 
-            self.master.after(0, _restart)
+            self.master.after(400, _restart)
 
         threading.Thread(target=_do_update, daemon=True).start()
 
@@ -542,9 +550,20 @@ class MainWindow(ctk.CTkFrame):
         # Popup Frame Bảng Emoji Đầy Đủ (Ẩn mặc định, hiển thị nổi khi bấm 😃 Bảng Emoji)
         self.emoji_picker_popup = None
 
+        # Toast banner màu cam nhấp nháy/hiển thị nhẹ nhàng khi mạng chập chờn (không bật popup cản trở)
+        self.toast_banner = ctk.CTkFrame(self.input_bar, fg_color=("#FEF3C7", "#78350F"), corner_radius=6)
+        self.toast_label = ctk.CTkLabel(
+            self.toast_banner, 
+            text="", 
+            font=ctk.CTkFont(size=11, weight="bold"), 
+            text_color=("#B45309", "#FDE68A")
+        )
+        self.toast_label.pack(side="left", padx=10, pady=3)
+
         # Input row
-        input_row = ctk.CTkFrame(self.input_bar, fg_color="transparent")
-        input_row.pack(fill="x", padx=14, pady=(0, 8))
+        self.input_row = ctk.CTkFrame(self.input_bar, fg_color="transparent")
+        self.input_row.pack(fill="x", padx=14, pady=(0, 8))
+        input_row = self.input_row
 
         # Nút Đính kèm tệp / ảnh
         self.btn_attach = ctk.CTkButton(
@@ -912,6 +931,19 @@ class MainWindow(ctk.CTkFrame):
             pass
 
     # --- GỬI TIN NHẮN & TỆP TIN ---
+    def _show_toast(self, text: str, duration_ms=4000):
+        try:
+            self.toast_label.configure(text=text)
+            self.toast_banner.pack(fill="x", padx=14, pady=(0, 4), before=self.input_row)
+            def _hide():
+                try:
+                    self.toast_banner.pack_forget()
+                except Exception:
+                    pass
+            self.master.after(duration_ms, _hide)
+        except Exception:
+            pass
+
     def send_text_message(self):
         if not self.active_conv_id:
             return
@@ -928,16 +960,13 @@ class MainWindow(ctk.CTkFrame):
                     cur = self.msg_entry.get().strip()
                     if not cur:
                         self.msg_entry.insert(0, content)
-                    messagebox.showwarning(
-                        "Mất kết nối máy chủ",
-                        "Máy chủ đang cập nhật hoặc mạng bị gián đoạn!\nTin nhắn của bạn đã được giữ lại trong ô nhập. Ứng dụng đang tự động kết nối lại, vui lòng thử lại sau vài giây."
-                    )
+                    self._show_toast("⚠️ Máy chủ đang cập nhật/kết nối lại... Tin nhắn đã được giữ lại trong ô nhập!")
                 self.master.after(0, _restore)
         threading.Thread(target=_send, daemon=True).start()
 
     def pick_and_send_file(self):
         if not self.active_conv_id:
-            messagebox.showwarning("Thông báo", "Vui lòng chọn một cuộc trò chuyện trước!")
+            self._show_toast("⚠️ Vui lòng chọn một cuộc trò chuyện trước!")
             return
         
         filepath = filedialog.askopenfilename(
@@ -961,7 +990,7 @@ class MainWindow(ctk.CTkFrame):
             def _done():
                 self.btn_attach.configure(state="normal", text="📎 Đính Kèm")
                 if not res or not res.get("success"):
-                    messagebox.showerror("Lỗi gửi tệp", res.get("message", "Gửi tệp thất bại!"))
+                    self._show_toast(f"❌ {res.get('message', 'Gửi tệp thất bại!') if res else 'Không thể gửi tệp do mất kết nối!'}")
             self.master.after(0, _done)
             
         threading.Thread(target=_upload, daemon=True).start()
