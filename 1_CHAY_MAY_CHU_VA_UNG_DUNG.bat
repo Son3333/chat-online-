@@ -51,7 +51,7 @@ netstat -ano | findstr :8888 | findstr LISTENING >nul 2>&1
 if %errorlevel% equ 0 (
     echo [1/2] May chu WAN da dang chay san sang tren cong 8888.
 ) else (
-    echo [1/2] Dang khoi dong Chat Server WAN (bore.pub:28888)...
+    echo [1/2] Dang khoi dong Chat Server WAN (bore.pub:38888)...
     start "CHAT SERVER WAN - NHOM 05" "%PY_CMD%" "%~dp0run_server_wan.py"
     timeout /t 3 /nobreak >nul
 )
