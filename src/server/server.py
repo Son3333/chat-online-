@@ -24,10 +24,10 @@ if sys.stderr is not None:
 def log(msg: str):
     if sys.stdout is not None:
         try:
-            print(msg)
+            print(msg, flush=True)
         except Exception:
             try:
-                print(msg.encode('ascii', 'replace').decode('ascii'))
+                print(msg.encode('ascii', 'replace').decode('ascii'), flush=True)
             except Exception:
                 pass
 
@@ -122,11 +122,13 @@ class ChatServer:
 
     def broadcast_to_users(self, user_ids: list, payload: dict):
         """Gửi thông báo tới danh sách các user_id đang online."""
+        sockets = []
         with self.lock:
             for uid in user_ids:
                 if uid in self.active_clients:
-                    sock = self.active_clients[uid]
-                    self.send_packet(sock, payload)
+                    sockets.append(self.active_clients[uid])
+        for sock in sockets:
+            self.send_packet(sock, payload)
 
     def handle_client(self, client_sock: socket.socket, client_addr):
         user_id = None
@@ -143,7 +145,7 @@ class ChatServer:
                     self.send_packet(client_sock, response)
                 
                 # Cập nhật user_id của socket nếu đăng nhập thành công HOẶC kết nối lại (identify)
-                if action in ["login", "register", "identify"] and response.get("success"):
+                if action in ["login", "register"] and response.get("success"):
                     user_id = response["user"]["id"]
                     with self.lock:
                         # KIỂM TRA ĐĂNG NHẬP THIẾT BỊ KHÁC (Cơ chế Facebook / Telegram):
@@ -175,7 +177,16 @@ class ChatServer:
                 elif action == "identify" and response.get("success"):
                     user_id = response["user"]["id"]
                     with self.lock:
-                        # Đăng ký lại socket cho user này sau khi rớt mạng / khởi động server
+                        # Đăng ký lại socket cho user này sau khi rớt mạng / khởi động server (không kích forced_logout)
+                        if user_id in self.active_clients:
+                            old_sock = self.active_clients[user_id]
+                            if old_sock != client_sock:
+                                if old_sock in self.socket_to_user:
+                                    del self.socket_to_user[old_sock]
+                                try:
+                                    old_sock.close()
+                                except Exception:
+                                    pass
                         self.active_clients[user_id] = client_sock
                         self.socket_to_user[client_sock] = user_id
                     self.db.set_online_status(user_id, True)
@@ -285,6 +296,7 @@ class ChatServer:
                     "message": saved_msg
                 }
                 self.broadcast_to_users(member_ids, broadcast_packet)
+                log(f"[+] Tin nhan moi trong Hoi thoai #{conv_id} tu User #{sender_id}: {content[:30]}")
                 return {"action": "send_message_response", "success": True, "message": saved_msg}
             return {"action": "send_message_response", "success": False, "message": "Lưu tin nhắn thất bại"}
 
