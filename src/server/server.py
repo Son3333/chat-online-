@@ -47,6 +47,7 @@ class ChatServer:
         # Mapping: client_socket -> user_id
         self.socket_to_user = {}
         self.lock = threading.Lock()
+        self.send_lock = threading.Lock()
 
     def start(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -79,14 +80,15 @@ class ChatServer:
 
     def send_packet(self, sock: socket.socket, payload: dict):
         """Gửi packet JSON có tiền tố độ dài 4-byte (Big-Endian)."""
-        try:
-            data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
-            header = struct.pack("!I", len(data))
-            sock.sendall(header + data)
-            return True
-        except Exception as e:
-            # print(f"Lỗi gửi packet: {e}")
-            return False
+        with self.send_lock:
+            try:
+                data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+                header = struct.pack("!I", len(data))
+                sock.sendall(header + data)
+                return True
+            except Exception as e:
+                # print(f"Lỗi gửi packet: {e}")
+                return False
 
     def receive_packet(self, sock: socket.socket):
         """Đọc chính xác 1 packet JSON theo tiền tố độ dài 4-byte."""

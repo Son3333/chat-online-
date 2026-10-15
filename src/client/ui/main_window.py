@@ -54,8 +54,7 @@ class MainWindow(ctk.CTkFrame):
         self._build_chat_area()
         
         # Load danh sách cuộc hội thoại & danh bạ ban đầu
-        self.load_conversations()
-        self.load_friends()
+        self.refresh_all_data()
 
         # Bắt đầu tự động đồng bộ tin nhắn mới nhất cả hai bên
         self._start_periodic_sync()
@@ -316,8 +315,31 @@ class MainWindow(ctk.CTkFrame):
         threading.Thread(target=_do_update, daemon=True).start()
 
     def refresh_all_data(self):
-        self.load_conversations()
-        self.load_friends()
+        def _fetch_all():
+            try:
+                res_fr = self.net.get_friends(self.current_user["id"])
+                if res_fr:
+                    self.friends = res_fr.get("friends", [])
+                    self.pending_requests = res_fr.get("pending_requests", [])
+            except Exception:
+                pass
+
+            try:
+                res_cv = self.net.get_conversations(self.current_user["id"])
+                if res_cv and "conversations" in res_cv:
+                    self.conversations = res_cv["conversations"]
+                else:
+                    self.conversations = []
+            except Exception:
+                self.conversations = []
+
+            def _update_ui():
+                if getattr(self, "current_sidebar_tab", "chats") == "chats":
+                    self._render_conversation_list()
+                else:
+                    self._render_friends_list()
+            self.master.after(0, _update_ui)
+        threading.Thread(target=_fetch_all, daemon=True).start()
 
     def copy_server_info(self):
         info = f"{self.net.host}:{self.net.port}"
@@ -699,7 +721,74 @@ class MainWindow(ctk.CTkFrame):
         self.conv_widgets.clear()
 
         if not self.conversations:
-            ctk.CTkLabel(self.conv_scroll, text="Chưa có cuộc trò chuyện nào.\nHãy tìm bạn bè để bắt đầu!", font=ctk.CTkFont(size=12), text_color="gray60").pack(pady=30)
+            empty_box = ctk.CTkFrame(self.conv_scroll, fg_color="transparent")
+            empty_box.pack(pady=15, padx=8, fill="x")
+            ctk.CTkLabel(empty_box, text="💬", font=ctk.CTkFont(size=32)).pack(pady=(0, 2))
+            ctk.CTkLabel(
+                empty_box, 
+                text="Chưa có tin nhắn nào gần đây.", 
+                font=ctk.CTkFont(size=12, weight="bold"), 
+                text_color="gray60",
+                justify="center"
+            ).pack(pady=(0, 6))
+
+            # Hiển thị luôn danh sách bạn bè sẵn có để bấm vào là nhắn tin ngay!
+            if self.friends:
+                ctk.CTkLabel(
+                    empty_box, 
+                    text="DANH SÁCH BẠN BÈ CỦA BẠN:", 
+                    font=ctk.CTkFont(size=11, weight="bold"), 
+                    text_color="#0284C7"
+                ).pack(anchor="w", padx=4, pady=(6, 4))
+                for fr in self.friends:
+                    f_id = fr["id"]
+                    f_card = ctk.CTkFrame(empty_box, corner_radius=8, fg_color=("white", "#1E293B"))
+                    f_card.pack(fill="x", pady=2)
+                    f_row = ctk.CTkFrame(f_card, fg_color="transparent")
+                    f_row.pack(fill="x", padx=8, pady=6)
+                    
+                    # Avatar
+                    f_av = ctk.CTkButton(
+                        f_row,
+                        text=fr["full_name"][:1].upper(),
+                        width=30,
+                        height=30,
+                        corner_radius=15,
+                        fg_color=fr.get("avatar_color", "#2563EB"),
+                        font=ctk.CTkFont(size=11, weight="bold"),
+                        state="disabled"
+                    )
+                    f_av.pack(side="left", padx=(0, 6))
+
+                    f_info = ctk.CTkFrame(f_row, fg_color="transparent")
+                    f_info.pack(side="left", fill="x", expand=True)
+
+                    name_row = ctk.CTkFrame(f_info, fg_color="transparent")
+                    name_row.pack(anchor="w")
+                    ctk.CTkLabel(name_row, text=fr["full_name"], font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
+                    if fr.get("is_online"):
+                        ctk.CTkLabel(name_row, text=" 🟢", font=ctk.CTkFont(size=9)).pack(side="left")
+
+                    ctk.CTkLabel(f_info, text=f"@{fr['username']}", font=ctk.CTkFont(size=10), text_color="gray50").pack(anchor="w")
+
+                    ctk.CTkButton(
+                        f_row, 
+                        text="💬 Nhắn", 
+                        width=56, 
+                        height=26, 
+                        font=ctk.CTkFont(size=11, weight="bold"),
+                        fg_color="#0284C7",
+                        hover_color="#0369A1",
+                        command=lambda uid=f_id: self.start_direct_chat_with(uid)
+                    ).pack(side="right")
+            else:
+                ctk.CTkLabel(
+                    empty_box,
+                    text="Chuyển sang tab '👥 Danh Bạ' để kết bạn\nhoặc tìm kiếm ở ô trên!",
+                    font=ctk.CTkFont(size=11),
+                    text_color="gray50",
+                    justify="center"
+                ).pack(pady=4)
             return
 
         for conv in self.conversations:
@@ -1068,11 +1157,19 @@ class MainWindow(ctk.CTkFrame):
         kw = self.search_entry.get().strip()
         if not kw:
             self.search_results_frame.grid_forget()
+            if getattr(self, "current_sidebar_tab", "chats") == "chats":
+                self.conv_scroll.grid(row=3, column=0, sticky="nsew", padx=6, pady=(0, 6))
+            else:
+                self.friends_scroll.grid(row=3, column=0, sticky="nsew", padx=6, pady=(0, 6))
             return
             
         search_kw = kw.lstrip("@#").strip()
         if not search_kw:
             self.search_results_frame.grid_forget()
+            if getattr(self, "current_sidebar_tab", "chats") == "chats":
+                self.conv_scroll.grid(row=3, column=0, sticky="nsew", padx=6, pady=(0, 6))
+            else:
+                self.friends_scroll.grid(row=3, column=0, sticky="nsew", padx=6, pady=(0, 6))
             return
             
         def _search():
@@ -1087,33 +1184,73 @@ class MainWindow(ctk.CTkFrame):
     def _show_search_error(self, message: str):
         for w in self.search_results_frame.winfo_children():
             w.destroy()
-        self.search_results_frame.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 4))
-        ctk.CTkLabel(self.search_results_frame, text=message, font=ctk.CTkFont(size=11), text_color="#EF4444").pack(pady=8)
+        self.conv_scroll.grid_forget()
+        self.friends_scroll.grid_forget()
+        self.search_results_frame.grid(row=3, column=0, sticky="nsew", padx=6, pady=(0, 6))
+        ctk.CTkLabel(self.search_results_frame, text=message, font=ctk.CTkFont(size=11), text_color="#EF4444").pack(pady=20)
 
     def _show_search_results(self, users: list):
         for w in self.search_results_frame.winfo_children():
             w.destroy()
             
-        self.search_results_frame.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 4))
+        self.conv_scroll.grid_forget()
+        self.friends_scroll.grid_forget()
+        self.search_results_frame.grid(row=3, column=0, sticky="nsew", padx=6, pady=(0, 6))
         
         if not users:
-            ctk.CTkLabel(self.search_results_frame, text="Không tìm thấy người dùng.", font=ctk.CTkFont(size=11), text_color="gray60").pack(pady=8)
+            ctk.CTkLabel(
+                self.search_results_frame, 
+                text="🔍 Không tìm thấy người dùng phù hợp.", 
+                font=ctk.CTkFont(size=12), 
+                text_color="gray60"
+            ).pack(pady=30)
             return
 
+        ctk.CTkLabel(
+            self.search_results_frame,
+            text=f"KẾT QUẢ TÌM KIẾM ({len(users)}):",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#0284C7"
+        ).pack(anchor="w", padx=6, pady=(6, 4))
+
         for u in users:
-            row = ctk.CTkFrame(self.search_results_frame, fg_color="transparent")
-            row.pack(fill="x", pady=2)
+            card = ctk.CTkFrame(self.search_results_frame, corner_radius=10, fg_color=("white", "#1E293B"))
+            card.pack(fill="x", pady=3, padx=2)
+
+            row = ctk.CTkFrame(card, fg_color="transparent")
+            row.pack(fill="x", padx=10, pady=8)
             
-            ctk.CTkLabel(row, text=f"{u['full_name']} (@{u['username']} • #{u['id']})", font=ctk.CTkFont(size=11)).pack(side="left", padx=4)
+            # Avatar
+            ctk.CTkButton(
+                row,
+                text=u["full_name"][:1].upper(),
+                width=34,
+                height=34,
+                corner_radius=17,
+                fg_color=u.get("avatar_color", "#0284C7"),
+                font=ctk.CTkFont(size=12, weight="bold"),
+                state="disabled"
+            ).pack(side="left", padx=(0, 8))
+
+            info = ctk.CTkFrame(row, fg_color="transparent")
+            info.pack(side="left", fill="x", expand=True)
+
+            t_row = ctk.CTkFrame(info, fg_color="transparent")
+            t_row.pack(anchor="w")
+            ctk.CTkLabel(t_row, text=u["full_name"], font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
+            if u.get("is_online"):
+                ctk.CTkLabel(t_row, text=" 🟢", font=ctk.CTkFont(size=9)).pack(side="left")
+            
+            ctk.CTkLabel(info, text=f"@{u['username']} • #{u['id']}", font=ctk.CTkFont(size=10), text_color="gray50").pack(anchor="w")
             
             btn_box = ctk.CTkFrame(row, fg_color="transparent")
-            btn_box.pack(side="right", padx=2)
+            btn_box.pack(side="right")
 
             ctk.CTkButton(
                 btn_box, 
                 text="💬 Nhắn", 
                 width=55, 
-                height=24, 
+                height=28, 
                 font=ctk.CTkFont(size=11, weight="bold"),
                 fg_color="#0284C7",
                 hover_color="#0369A1",
@@ -1122,9 +1259,9 @@ class MainWindow(ctk.CTkFrame):
 
             ctk.CTkButton(
                 btn_box, 
-                text="➕ Thêm", 
-                width=55, 
-                height=24, 
+                text="➕ Bạn", 
+                width=50, 
+                height=28, 
                 font=ctk.CTkFont(size=11, weight="bold"),
                 fg_color="#10B981",
                 hover_color="#059669",

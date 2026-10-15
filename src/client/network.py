@@ -33,6 +33,7 @@ class NetworkClient:
         # Pending synchronous responses (action_name -> event & response)
         self.pending_responses = {}
         self.lock = threading.Lock()
+        self.send_lock = threading.Lock()
 
     def set_server(self, host: str, port: int):
         if self.connected:
@@ -90,14 +91,15 @@ class NetworkClient:
     def _send_packet(self, payload: dict) -> bool:
         if not self.connected or not self.sock:
             return False
-        try:
-            data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
-            header = struct.pack("!I", len(data))
-            self.sock.sendall(header + data)
-            return True
-        except Exception:
-            self.connected = False
-            return False
+        with self.send_lock:
+            try:
+                data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+                header = struct.pack("!I", len(data))
+                self.sock.sendall(header + data)
+                return True
+            except Exception:
+                self.connected = False
+                return False
 
     def _listen_loop(self):
         while self.running:
