@@ -102,10 +102,12 @@ def get_target_server():
     if os.path.exists(wan_script):
         try:
             flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-            # Ưu tiên dùng pythonw hoặc python để chạy ngầm
             subprocess.Popen(
                 [sys.executable, wan_script],
                 cwd=PROJECT_DIR,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 creationflags=flags
             )
             # Chờ tối đa 3 giây cho socket 8888 mở
