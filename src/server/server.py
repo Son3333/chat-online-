@@ -359,6 +359,8 @@ class ChatServer:
             user2_id = packet.get("partner_id")
             conv_id = self.db.get_direct_conversation(user1_id, user2_id)
             convs = self.db.get_user_conversations(user1_id)
+            # Thông báo cho đối phương cập nhật danh sách hội thoại nếu đang online
+            self.broadcast_to_users([user2_id], {"type": "refresh_conversations"})
             return {
                 "action": "direct_chat_started",
                 "conversation_id": conv_id,
