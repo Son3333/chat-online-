@@ -872,20 +872,20 @@ class MainWindow(ctk.CTkFrame):
             if st == "friends":
                 if messagebox.askyesno("Hủy kết bạn", "Bạn có chắc chắn muốn xóa người này khỏi Danh bạ bạn bè?"):
                     res = self.net.remove_friend(self.current_user["id"], partner_id)
-                    msg = res.get("message", "Đã xóa khỏi danh bạ!")
+                    msg = res.get("message", "Đã xóa khỏi danh bạ!") if res else "Không thể kết nối máy chủ!"
                 else:
                     return
             elif st == "received_pending":
                 res = self.net.accept_friend(self.current_user["id"], partner_id)
-                msg = res.get("message", "Đã đồng ý kết bạn thành công!")
+                msg = res.get("message", "Đã đồng ý kết bạn thành công!") if res else "Không thể kết nối máy chủ!"
             else:
                 res = self.net.add_friend(self.current_user["id"], partner_id)
-                msg = res.get("message", "Đã gửi lời mời kết bạn! Đang chờ đối phương chấp nhận.")
+                msg = res.get("message", "Đã gửi lời mời kết bạn! Đang chờ đối phương chấp nhận.") if res else "Không thể gửi lời mời kết bạn do máy chủ gián đoạn!"
             
             def _done():
                 self._update_header_friend_status(partner_id)
                 self.load_friends()
-                messagebox.showinfo("Danh bạ", msg)
+                self._show_toast(msg)
             self.master.after(0, _done)
         threading.Thread(target=_do, daemon=True).start()
 

@@ -134,7 +134,7 @@ class ChatServer:
                     self.send_packet(client_sock, response)
                 
                 # Cập nhật user_id của socket nếu đăng nhập thành công HOẶC kết nối lại (identify)
-                if action in ["login", "register"] and response.get("success"):
+                if action in ["login", "register", "identify"] and response.get("success"):
                     user_id = response["user"]["id"]
                     with self.lock:
                         # KIỂM TRA ĐĂNG NHẬP THIẾT BỊ KHÁC (Cơ chế Facebook / Telegram):
