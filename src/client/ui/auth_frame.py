@@ -10,9 +10,10 @@ class AuthFrame(ctk.CTkFrame):
         self.net = network_client
         self.auto_login = auto_login
         
-        self.auth_cache_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "user_credentials.json")
-        self.cfg_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "server_config.json")
-        self.wan_info_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "wan_server_info.txt")
+        project_root = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
+        self.auth_cache_file = os.path.join(project_root, "user_credentials.json")
+        self.cfg_file = os.path.join(project_root, "server_config.json")
+        self.wan_info_file = os.path.join(project_root, "wan_server_info.txt")
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -176,7 +177,7 @@ class AuthFrame(ctk.CTkFrame):
         
         # Tự động đọc cấu hình WAN/LAN đã lưu trước đó nếu có
         saved_host = "bore.pub"
-        saved_port = 28888
+        saved_port = 38888
         
         if os.path.exists(self.wan_info_file):
             try:
@@ -193,7 +194,7 @@ class AuthFrame(ctk.CTkFrame):
                 with open(self.cfg_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     saved_host = data.get("host", "bore.pub")
-                    saved_port = data.get("port", 28888)
+                    saved_port = data.get("port", 38888)
             except Exception:
                 pass
 

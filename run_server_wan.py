@@ -77,30 +77,40 @@ def start_wan_server():
     # 2. Mở cổng TCP Online qua Bore (Ưu tiên 1 - Không cần thẻ tín dụng, không cần token)
     bore_path = ensure_bore_binary()
     if bore_path and os.path.exists(bore_path):
-        try:
-            # Thử yêu cầu port 28888 cố định trước
-            flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-            tunnel_proc = subprocess.Popen(
-                [bore_path, "local", str(local_port), "--to", "bore.pub", "--port", "28888"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                creationflags=flags
-            )
-            # Chờ đọc địa chỉ listening
-            for _ in range(40):
-                line = tunnel_proc.stdout.readline()
-                if not line:
-                    time.sleep(0.1)
-                    continue
-                safe_log(f"   [Tunnel] {line.strip()}")
-                if "listening at" in line:
-                    m = re.search(r'listening at ([\w\.-]+):(\d+)', line)
-                    if m:
-                        domain, port = m.group(1), int(m.group(2))
+        flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+        preferred_ports = [38888, 48888, 28888, 58888]
+        for p in preferred_ports:
+            try:
+                safe_log(f"[*] Dang thu mo cong WAN co dinh: bore.pub:{p}...")
+                tunnel_proc = subprocess.Popen(
+                    [bore_path, "local", str(local_port), "--to", "bore.pub", "--port", str(p)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    creationflags=flags
+                )
+                for _ in range(25):
+                    line = tunnel_proc.stdout.readline()
+                    if not line:
+                        time.sleep(0.1)
+                        continue
+                    safe_log(f"   [Tunnel] {line.strip()}")
+                    if "listening at" in line:
+                        m = re.search(r'listening at ([\w\.-]+):(\d+)', line)
+                        if m:
+                            domain, port = m.group(1), int(m.group(2))
+                            break
+                    elif "already in use" in line or "error" in line.lower():
                         break
-        except Exception as e:
-            safe_log(f"[-] Loi khoi chay bore.exe: {e}")
+                if domain and port:
+                    break
+                else:
+                    try:
+                        tunnel_proc.terminate()
+                    except Exception:
+                        pass
+            except Exception as e:
+                safe_log(f"[-] Loi thu cong {p}: {e}")
 
     # Fallback nếu bore không mở được port mong muốn
     if not domain or not port:
