@@ -274,8 +274,12 @@ class ChatBubble(ctk.CTkFrame):
                 ctk_thumb = ctk.CTkImage(light_image=resized_img, dark_image=resized_img, size=(thumb_w, thumb_h))
 
                 def _apply():
-                    self.img_ref = ctk_thumb  # Lưu ref
-                    self.preview_label.configure(image=ctk_thumb, text="")
+                    try:
+                        if self.winfo_exists() and self.preview_label.winfo_exists():
+                            self.img_ref = ctk_thumb  # Lưu ref
+                            self.preview_label.configure(image=ctk_thumb, text="")
+                    except Exception:
+                        pass
                 self.master.after(0, _apply)
             except Exception:
                 pass

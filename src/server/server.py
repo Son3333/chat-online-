@@ -90,26 +90,32 @@ class ChatServer:
                 # print(f"Lỗi gửi packet: {e}")
                 return False
 
+    def _recv_exact(self, sock: socket.socket, num_bytes: int) -> Optional[bytes]:
+        """Đọc chính xác num_bytes từ TCP socket, không bao giờ ngắt kết nối do phân mảnh gói tin."""
+        data = bytearray()
+        while len(data) < num_bytes and self.running:
+            try:
+                chunk = sock.recv(num_bytes - len(data))
+                if not chunk:
+                    return None
+                data.extend(chunk)
+            except Exception:
+                return None
+        return bytes(data) if len(data) == num_bytes else None
+
     def receive_packet(self, sock: socket.socket):
         """Đọc chính xác 1 packet JSON theo tiền tố độ dài 4-byte."""
         try:
-            header = sock.recv(4)
-            if not header or len(header) < 4:
+            header = self._recv_exact(sock, 4)
+            if not header:
                 return None
             length = struct.unpack("!I", header)[0]
             
-            # Đọc đúng length bytes
-            chunks = []
-            bytes_read = 0
-            while bytes_read < length:
-                chunk = sock.recv(min(length - bytes_read, 65536))
-                if not chunk:
-                    return None
-                chunks.append(chunk)
-                bytes_read += len(chunk)
+            raw_bytes = self._recv_exact(sock, length)
+            if not raw_bytes:
+                return None
             
-            raw_data = b"".join(chunks).decode('utf-8')
-            return json.loads(raw_data)
+            return json.loads(raw_bytes.decode('utf-8'))
         except Exception:
             return None
 

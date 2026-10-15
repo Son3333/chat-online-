@@ -101,28 +101,32 @@ class NetworkClient:
                 self.connected = False
                 return False
 
+    def _recv_exact(self, num_bytes: int) -> Optional[bytes]:
+        """Đọc chính xác num_bytes từ TCP socket, không bao giờ ngắt kết nối do phân mảnh gói tin."""
+        data = bytearray()
+        while len(data) < num_bytes and self.running:
+            try:
+                chunk = self.sock.recv(num_bytes - len(data))
+                if not chunk:
+                    return None
+                data.extend(chunk)
+            except Exception:
+                return None
+        return bytes(data) if len(data) == num_bytes else None
+
     def _listen_loop(self):
         while self.running:
             try:
-                header = self.sock.recv(4)
-                if not header or len(header) < 4:
+                header = self._recv_exact(4)
+                if not header:
                     break
                 length = struct.unpack("!I", header)[0]
                 
-                chunks = []
-                bytes_read = 0
-                while bytes_read < length:
-                    chunk = self.sock.recv(min(length - bytes_read, 65536))
-                    if not chunk:
-                        break
-                    chunks.append(chunk)
-                    bytes_read += len(chunk)
-                
-                if bytes_read < length:
+                raw_bytes = self._recv_exact(length)
+                if not raw_bytes:
                     break
                 
-                raw_data = b"".join(chunks).decode('utf-8')
-                packet = json.loads(raw_data)
+                packet = json.loads(raw_bytes.decode('utf-8'))
                 
                 # Phân loại packet: Event broadcast hay Response của request
                 pkt_type = packet.get("type")
