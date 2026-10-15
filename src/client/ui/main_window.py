@@ -303,17 +303,15 @@ class MainWindow(ctk.CTkFrame):
                 except Exception:
                     pass
 
-            # Khởi động lại ứng dụng mượt mà không cần popup cản trở
-            def _restart():
-                self.btn_update.configure(text="✅ Đã tải xong! Đang mở lại...")
-                launcher = os.path.join(self.project_dir, "launch.pyw")
-                if not os.path.exists(launcher):
-                    launcher = os.path.join(self.project_dir, "run_client.py")
-                
-                subprocess.Popen([sys.executable, launcher], cwd=self.project_dir)
-                self.master.destroy()
+            # Cập nhật thành công: Tự động làm mới dữ liệu trực tiếp trong app KHÔNG làm tắt/mất ứng dụng!
+            def _on_success():
+                self.btn_update.configure(state="normal", text="✅ Đã Cập Nhật Mới Nhất!", fg_color="#10B981")
+                self._show_toast("✅ Đã cập nhật phiên bản mới nhất! Danh bạ bạn bè đã được làm mới.")
+                self.refresh_all_data()
+                # Tự động ẩn nút cập nhật sau 4 giây
+                self.master.after(4000, lambda: self.btn_update.pack_forget())
 
-            self.master.after(400, _restart)
+            self.master.after(0, _on_success)
 
         threading.Thread(target=_do_update, daemon=True).start()
 
