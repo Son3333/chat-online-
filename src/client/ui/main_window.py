@@ -29,6 +29,7 @@ class MainWindow(ctk.CTkFrame):
         self.last_typing_time = 0
         self.current_sidebar_tab = "chats"
         self.rendered_msg_ids = set()
+        self.msg_bubbles = {}
         self._update_prompted = False
         self._latest_remote_sha = ""
         
@@ -40,6 +41,9 @@ class MainWindow(ctk.CTkFrame):
         
         # 1. Đăng ký nhận sự kiện thời gian thực từ NetworkClient
         self.net.register_callback("new_message", self._on_new_message_received)
+        self.net.register_callback("message_recalled", self._on_message_recalled)
+        self.net.register_callback("conversation_deleted", self._on_conversation_deleted)
+        self.net.register_callback("block_status_changed", self._on_block_status_changed)
         self.net.register_callback("user_status_changed", self._on_user_status_changed)
         self.net.register_callback("user_typing", self._on_user_typing)
         self.net.register_callback("refresh_conversations", lambda pkt: self.master.after(0, self.refresh_all_data))
@@ -520,6 +524,34 @@ class MainWindow(ctk.CTkFrame):
             command=self.toggle_contact_friend
         )
 
+        # Nút Chặn / Bỏ chặn người dùng (Dành cho chat 1-1)
+        self.btn_block_action = ctk.CTkButton(
+            right_header,
+            text="🚫 Chặn",
+            height=30,
+            width=70,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=("#FEE2E2", "#450A0A"),
+            text_color=("#DC2626", "#F87171"),
+            hover_color=("#FECACA", "#7F1D1D"),
+            corner_radius=6,
+            command=self.toggle_block_user
+        )
+
+        # Nút Xóa đoạn chat
+        self.btn_delete_chat = ctk.CTkButton(
+            right_header,
+            text="🗑️ Xóa chat",
+            height=30,
+            width=80,
+            font=ctk.CTkFont(size=11),
+            fg_color=("#F1F5F9", "#334155"),
+            text_color=("#475569", "#94A3B8"),
+            hover_color=("#E2E8F0", "#475569"),
+            corner_radius=6,
+            command=self.delete_current_conversation
+        )
+
         # 2. Scrollable Messages View
         self.messages_scroll = ctk.CTkScrollableFrame(self.chat_active_frame, fg_color="transparent")
         self.messages_scroll.grid(row=1, column=0, sticky="nsew", padx=12, pady=6)
@@ -871,6 +903,7 @@ class MainWindow(ctk.CTkFrame):
             )
             lbl_snip.pack(fill="x", pady=(2, 0))
             lbl_snip.bind("<Button-1>", lambda e, c=conv: self.select_conversation(c))
+            self._bind_conv_context_menu(card, conv)
 
     def select_conversation(self, conv: dict):
         self.active_conv_id = conv["id"]
@@ -882,22 +915,27 @@ class MainWindow(ctk.CTkFrame):
 
         # Cập nhật Header
         self.lbl_chat_title.configure(text=conv["title"])
+        self.btn_delete_chat.pack(side="right", padx=(6, 0))
         if conv["type"] == "group":
             count = conv.get("member_count", 2)
             self.lbl_chat_subtitle.configure(text=f"👥 Nhóm trò chuyện  •  {count} thành viên")
             self.btn_contact_action.pack_forget()
+            self.btn_block_action.pack_forget()
         else:
             is_on = conv.get("is_online", 0)
             status_text = "🟢 Trực tuyến" if is_on else "⚪ Ngoại tuyến"
             self.lbl_chat_subtitle.configure(text=status_text)
             
-            # Kiểm tra trạng thái bạn bè để hiện nút Telegram Style
+            # Kiểm tra trạng thái bạn bè và chặn
             partner_id = conv.get("partner_id")
             if partner_id:
-                self.btn_contact_action.pack(side="right")
+                self.btn_block_action.pack(side="right", padx=(6, 0))
+                self.btn_contact_action.pack(side="right", padx=(6, 0))
                 self._update_header_friend_status(partner_id)
+                self._update_header_block_status(partner_id)
             else:
                 self.btn_contact_action.pack_forget()
+                self.btn_block_action.pack_forget()
 
         # Highlight lại list
         self._render_conversation_list()
@@ -992,12 +1030,16 @@ class MainWindow(ctk.CTkFrame):
         for w in self.messages_scroll.winfo_children():
             w.destroy()
         self.rendered_msg_ids = set()
+        self.msg_bubbles = {}
             
         for msg in messages:
-            if "id" in msg:
-                self.rendered_msg_ids.add(msg["id"])
-            bubble = ChatBubble(self.messages_scroll, msg, self.current_user["id"], self.net)
+            m_id = msg.get("id")
+            if m_id:
+                self.rendered_msg_ids.add(m_id)
+            bubble = ChatBubble(self.messages_scroll, msg, self.current_user["id"], self.net, on_recall_callback=self.recall_message)
             bubble.pack(fill="x")
+            if m_id:
+                self.msg_bubbles[m_id] = bubble
         
         self.master.after(50, self._scroll_to_bottom)
 
@@ -1109,8 +1151,10 @@ class MainWindow(ctk.CTkFrame):
                 self.rendered_msg_ids.add(msg_id)
                 
             def _add():
-                bubble = ChatBubble(self.messages_scroll, msg, self.current_user["id"], self.net)
+                bubble = ChatBubble(self.messages_scroll, msg, self.current_user["id"], self.net, on_recall_callback=self.recall_message)
                 bubble.pack(fill="x")
+                if msg_id:
+                    self.msg_bubbles[msg_id] = bubble
                 self._scroll_to_bottom()
             self.master.after(0, _add)
         
@@ -1151,6 +1195,186 @@ class MainWindow(ctk.CTkFrame):
             messagebox.showwarning("Cảnh báo bảo mật đăng nhập", msg)
             self.on_logout()
         self.master.after(0, _handle)
+
+    # --- TÍNH NĂNG THU HỒI TIN NHẮN, XÓA ĐOẠN CHAT & CHẶN NGƯỜI DÙNG ---
+    def recall_message(self, message_id: int):
+        """Yêu cầu máy chủ thu hồi tin nhắn ở cả hai phía."""
+        def _do_recall():
+            res = self.net.recall_message(message_id, self.current_user["id"])
+            if res and res.get("success"):
+                def _ui():
+                    if message_id in self.msg_bubbles:
+                        self.msg_bubbles[message_id].mark_as_recalled()
+                    self._show_toast("✅ Đã thu hồi tin nhắn thành công!")
+                self.master.after(0, _ui)
+            else:
+                err = res.get("message", "Thu hồi tin nhắn thất bại!") if res else "Không thể kết nối máy chủ!"
+                self.master.after(0, lambda: messagebox.showerror("Lỗi", err))
+        threading.Thread(target=_do_recall, daemon=True).start()
+
+    def _on_message_recalled(self, packet: dict):
+        """Xử lý sự kiện tin nhắn bị thu hồi từ thành viên khác trong phòng."""
+        conv_id = packet.get("conversation_id")
+        msg_id = packet.get("message_id")
+        if self.active_conv_id == conv_id and msg_id in self.msg_bubbles:
+            self.master.after(0, lambda: self.msg_bubbles[msg_id].mark_as_recalled())
+        self.master.after(0, self.load_conversations)
+
+    def delete_current_conversation(self):
+        """Xóa cuộc trò chuyện đang mở."""
+        if not self.active_conv_id:
+            return
+        conv_id = self.active_conv_id
+        title = self.active_conv_data.get("title", "cuộc trò chuyện này") if self.active_conv_data else "cuộc trò chuyện này"
+        if not messagebox.askyesno("Xác nhận xóa đoạn chat", f"Bạn có chắc chắn muốn xóa toàn bộ đoạn chat '{title}' không?\nTất cả lịch sử tin nhắn sẽ bị xóa vĩnh viễn và không thể khôi phục."):
+            return
+        self.delete_conversation_by_id(conv_id)
+
+    def delete_conversation_by_id(self, conv_id: int):
+        """Gửi yêu cầu xóa cuộc trò chuyện lên máy chủ."""
+        def _do_del():
+            res = self.net.delete_conversation(conv_id, self.current_user["id"])
+            if res and res.get("success"):
+                def _ui():
+                    if self.active_conv_id == conv_id:
+                        self.active_conv_id = None
+                        self.active_conv_data = None
+                        self.chat_active_frame.grid_forget()
+                        self.empty_state.place(relx=0.5, rely=0.5, anchor="center")
+                    self._show_toast("🗑️ Đã xóa đoạn chat thành công!")
+                    self.load_conversations()
+                self.master.after(0, _ui)
+            else:
+                err = res.get("message", "Xóa đoạn chat thất bại!") if res else "Không thể kết nối máy chủ!"
+                self.master.after(0, lambda: messagebox.showerror("Lỗi", err))
+        threading.Thread(target=_do_del, daemon=True).start()
+
+    def _on_conversation_deleted(self, packet: dict):
+        """Xử lý sự kiện cuộc trò chuyện đã bị xóa."""
+        conv_id = packet.get("conversation_id")
+        if self.active_conv_id == conv_id:
+            def _close():
+                self.active_conv_id = None
+                self.active_conv_data = None
+                self.chat_active_frame.grid_forget()
+                self.empty_state.place(relx=0.5, rely=0.5, anchor="center")
+                self._show_toast("ℹ️ Cuộc trò chuyện này đã bị xóa.")
+            self.master.after(0, _close)
+        self.master.after(0, self.load_conversations)
+
+    def toggle_block_user(self, target_id=None):
+        """Chặn hoặc bỏ chặn người dùng."""
+        if not target_id:
+            if not self.active_conv_data or self.active_conv_data.get("type") != "direct":
+                return
+            target_id = self.active_conv_data.get("partner_id")
+        if not target_id:
+            return
+
+        def _work():
+            status_res = self.net.get_block_status(self.current_user["id"], target_id)
+            is_blocked = status_res.get("is_blocked_by_me", False) if status_res else False
+            
+            if is_blocked:
+                # Thực hiện bỏ chặn
+                res = self.net.unblock_user(self.current_user["id"], target_id)
+                if res and res.get("success"):
+                    self.master.after(0, lambda: (
+                        self._show_toast("✅ Đã bỏ chặn người dùng thành công!"),
+                        self._update_header_block_status(target_id)
+                    ))
+                else:
+                    self.master.after(0, lambda: messagebox.showerror("Lỗi", "Bỏ chặn thất bại!"))
+            else:
+                # Thực hiện chặn
+                def _confirm_and_block():
+                    if messagebox.askyesno("Xác nhận chặn người dùng", "Sau khi chặn, người này sẽ không thể gửi tin nhắn cho bạn nữa.\nBạn có chắc chắn muốn chặn?"):
+                        def _do_block():
+                            res = self.net.block_user(self.current_user["id"], target_id)
+                            if res and res.get("success"):
+                                self.master.after(0, lambda: (
+                                    self._show_toast("🚫 Đã chặn người dùng thành công!"),
+                                    self._update_header_block_status(target_id)
+                                ))
+                            else:
+                                self.master.after(0, lambda: messagebox.showerror("Lỗi", "Chặn người dùng thất bại!"))
+                        threading.Thread(target=_do_block, daemon=True).start()
+                self.master.after(0, _confirm_and_block)
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _update_header_block_status(self, partner_id: int):
+        """Cập nhật giao diện nút Chặn / Bỏ chặn trên Header."""
+        def _check():
+            res = self.net.get_block_status(self.current_user["id"], partner_id)
+            if not res:
+                return
+            is_by_me = res.get("is_blocked_by_me", False)
+            def _apply():
+                if is_by_me:
+                    self.btn_block_action.configure(
+                        text="🔓 Bỏ chặn",
+                        fg_color=("#E2E8F0", "#334155"),
+                        text_color=("#0F172A", "#F8FAFC"),
+                        hover_color=("#CBD5E1", "#475569")
+                    )
+                else:
+                    self.btn_block_action.configure(
+                        text="🚫 Chặn",
+                        fg_color=("#FEE2E2", "#450A0A"),
+                        text_color=("#DC2626", "#F87171"),
+                        hover_color=("#FECACA", "#7F1D1D")
+                    )
+            self.master.after(0, _apply)
+        threading.Thread(target=_check, daemon=True).start()
+
+    def _on_block_status_changed(self, packet: dict):
+        """Nhận sự kiện thay đổi trạng thái chặn."""
+        if self.active_conv_data and self.active_conv_data.get("type") == "direct":
+            partner_id = self.active_conv_data.get("partner_id")
+            if partner_id in [packet.get("user_id"), packet.get("target_id")]:
+                self.master.after(0, lambda: self._update_header_block_status(partner_id))
+
+    def _bind_conv_context_menu(self, widget, conv: dict):
+        """Gắn menu ngữ cảnh chuột phải vào mục hội thoại trong danh sách."""
+        def _popup(e):
+            try:
+                import tkinter as tk
+                menu = tk.Menu(self.master, tearoff=0)
+                menu.add_command(label=f"💬 Mở cuộc trò chuyện", command=lambda: self.select_conversation(conv))
+                menu.add_separator()
+                if conv.get("type") == "direct" and conv.get("partner_id"):
+                    pid = conv["partner_id"]
+                    menu.add_command(label="🚫 Chặn / Bỏ chặn người này", command=lambda: self.toggle_block_user(pid))
+                menu.add_command(label="🗑️ Xóa đoạn chat này", command=lambda: self.delete_conversation_by_id(conv["id"]))
+                menu.tk_popup(e.x_root, e.y_root)
+            except Exception:
+                pass
+        try:
+            widget.bind("<Button-3>", _popup)
+            for child in widget.winfo_children():
+                self._bind_conv_context_menu(child, conv)
+        except Exception:
+            pass
+
+    def _bind_friend_context_menu(self, widget, friend: dict):
+        """Gắn menu ngữ cảnh chuột phải vào bạn bè trong danh bạ."""
+        def _popup(e):
+            try:
+                import tkinter as tk
+                menu = tk.Menu(self.master, tearoff=0)
+                menu.add_command(label=f"💬 Nhắn tin với {friend['full_name']}", command=lambda: self.start_direct_chat_with(friend["id"]))
+                menu.add_separator()
+                menu.add_command(label="🚫 Chặn / Bỏ chặn bạn này", command=lambda: self.toggle_block_user(friend["id"]))
+                menu.add_command(label="✕ Xóa khỏi danh bạ", command=lambda: self._confirm_remove_friend(friend["id"]))
+                menu.tk_popup(e.x_root, e.y_root)
+            except Exception:
+                pass
+        try:
+            widget.bind("<Button-3>", _popup)
+            for child in widget.winfo_children():
+                self._bind_friend_context_menu(child, friend)
+        except Exception:
+            pass
 
     # --- TÌM KIẾM NGƯỜI DÙNG & TẠO CHAT 1-1 ---
     def _on_search_key(self, event):
@@ -1489,6 +1713,7 @@ class MainWindow(ctk.CTkFrame):
                 hover_color=("#FECACA", "#7F1D1D"),
                 command=lambda uid=f_id: self._confirm_remove_friend(uid)
             ).pack(side="left", padx=2)
+            self._bind_friend_context_menu(card, fr)
 
     def _accept_friend_request(self, requester_id: int):
         def _do():
@@ -1528,14 +1753,25 @@ class MainWindow(ctk.CTkFrame):
                     res = self.net.get_messages(conv_id)
                     if res and res.get("conversation_id") == conv_id:
                         new_msgs = res.get("messages", [])
+                        # Đồng bộ trạng thái tin nhắn đã thu hồi
+                        for m in new_msgs:
+                            m_id = m.get("id")
+                            if m_id and m.get("is_deleted") and m_id in self.msg_bubbles:
+                                bubble = self.msg_bubbles[m_id]
+                                if not bubble.message.get("is_deleted"):
+                                    self.master.after(0, bubble.mark_as_recalled)
+
                         missing_msgs = [m for m in new_msgs if m.get("id") and m.get("id") not in self.rendered_msg_ids]
                         if missing_msgs:
                             def _append_missing(msgs=missing_msgs):
                                 for m in msgs:
-                                    if m.get("id"):
-                                        self.rendered_msg_ids.add(m["id"])
-                                    bubble = ChatBubble(self.messages_scroll, m, self.current_user["id"], self.net)
+                                    m_id = m.get("id")
+                                    if m_id:
+                                        self.rendered_msg_ids.add(m_id)
+                                    bubble = ChatBubble(self.messages_scroll, m, self.current_user["id"], self.net, on_recall_callback=self.recall_message)
                                     bubble.pack(fill="x")
+                                    if m_id:
+                                        self.msg_bubbles[m_id] = bubble
                                 self._scroll_to_bottom()
                             self.master.after(0, _append_missing)
                 # 2. Cập nhật danh sách hội thoại ngầm

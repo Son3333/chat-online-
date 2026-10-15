@@ -284,6 +284,19 @@ class ChatServer:
             if not content:
                 return {"action": "send_message_response", "success": False, "message": "Nội dung rỗng"}
             
+            # Kiểm tra xem cuộc trò chuyện có bị chặn không (đối với chat 1-1)
+            members = self.db.get_conversation_members(conv_id)
+            if len(members) == 2:
+                other_members = [m for m in members if m["id"] != sender_id]
+                if other_members:
+                    other_id = other_members[0]["id"]
+                    if self.db.is_blocked(sender_id, other_id):
+                        return {
+                            "action": "send_message_response", 
+                            "success": False, 
+                            "message": "Không thể gửi tin nhắn vì cuộc trò chuyện đã bị chặn!"
+                        }
+            
             saved_msg = self.db.save_message(conv_id, sender_id, msg_type, content)
             if saved_msg:
                 # Gửi cho tất cả thành viên trong nhóm đang online
@@ -311,6 +324,19 @@ class ChatServer:
             
             if not file_base64:
                 return {"action": "upload_response", "success": False, "message": "Dữ liệu tệp rỗng!"}
+            
+            # Kiểm tra xem cuộc trò chuyện có bị chặn không (đối với chat 1-1)
+            members = self.db.get_conversation_members(conv_id)
+            if len(members) == 2:
+                other_members = [m for m in members if m["id"] != sender_id]
+                if other_members:
+                    other_id = other_members[0]["id"]
+                    if self.db.is_blocked(sender_id, other_id):
+                        return {
+                            "action": "upload_response", 
+                            "success": False, 
+                            "message": "Không thể gửi tệp vì cuộc trò chuyện đã bị chặn!"
+                        }
             
             try:
                 # Lưu file vào thư mục uploads
@@ -482,6 +508,84 @@ class ChatServer:
                 "action": "check_friend_response", 
                 "is_friend": (status == "friends"),
                 "friendship_status": status
+            }
+
+        # 16. Thu hồi tin nhắn ở cả 2 phía
+        elif action == "recall_message":
+            msg_id = packet.get("message_id")
+            user_id = packet.get("user_id")
+            success, msg, conv_id = self.db.recall_message(msg_id, user_id)
+            if success and conv_id:
+                members = self.db.get_conversation_members(conv_id)
+                member_ids = [m["id"] for m in members]
+                self.broadcast_to_users(member_ids, {
+                    "type": "message_recalled",
+                    "conversation_id": conv_id,
+                    "message_id": msg_id
+                })
+                log(f"[+] User #{user_id} da thu hoi Tin nhan #{msg_id} trong Hoi thoai #{conv_id}")
+                return {"action": "recall_message_response", "success": True, "message_id": msg_id, "conversation_id": conv_id}
+            return {"action": "recall_message_response", "success": False, "message": msg}
+
+        # 17. Xóa cuộc trò chuyện
+        elif action == "delete_conversation":
+            conv_id = packet.get("conversation_id")
+            user_id = packet.get("user_id")
+            members = self.db.get_conversation_members(conv_id)
+            member_ids = [m["id"] for m in members]
+            ok = self.db.delete_conversation(conv_id, user_id)
+            if ok:
+                self.broadcast_to_users(member_ids, {
+                    "type": "conversation_deleted",
+                    "conversation_id": conv_id
+                })
+                log(f"[+] User #{user_id} da xoa Cuoc tro chuyen #{conv_id}")
+                return {"action": "delete_conversation_response", "success": True, "conversation_id": conv_id}
+            return {"action": "delete_conversation_response", "success": False, "message": "Xóa cuộc trò chuyện thất bại"}
+
+        # 18. Chặn người dùng (Block)
+        elif action == "block_user":
+            user_id = packet.get("user_id")
+            target_id = packet.get("target_id")
+            success, msg = self.db.block_user(user_id, target_id)
+            if success:
+                log(f"[+] User #{user_id} da chan User #{target_id}")
+                self.broadcast_to_users([user_id, target_id], {
+                    "type": "block_status_changed",
+                    "user_id": user_id,
+                    "target_id": target_id,
+                    "is_blocked": True
+                })
+            return {"action": "block_user_response", "success": success, "message": msg, "target_id": target_id}
+
+        # 19. Bỏ chặn người dùng (Unblock)
+        elif action == "unblock_user":
+            user_id = packet.get("user_id")
+            target_id = packet.get("target_id")
+            success, msg = self.db.unblock_user(user_id, target_id)
+            if success:
+                log(f"[+] User #{user_id} da bo chan User #{target_id}")
+                self.broadcast_to_users([user_id, target_id], {
+                    "type": "block_status_changed",
+                    "user_id": user_id,
+                    "target_id": target_id,
+                    "is_blocked": False
+                })
+            return {"action": "unblock_user_response", "success": success, "message": msg, "target_id": target_id}
+
+        # 20. Kiểm tra trạng thái chặn
+        elif action == "get_block_status":
+            user_id = packet.get("user_id")
+            target_id = packet.get("target_id")
+            is_blocked_by_me = self.db.is_user_blocked_by_me(user_id, target_id)
+            is_blocked_by_them = self.db.is_user_blocked_by_me(target_id, user_id)
+            return {
+                "action": "get_block_status_response",
+                "success": True,
+                "target_id": target_id,
+                "is_blocked_by_me": is_blocked_by_me,
+                "is_blocked_by_them": is_blocked_by_them,
+                "is_blocked": (is_blocked_by_me or is_blocked_by_them)
             }
 
         return None

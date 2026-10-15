@@ -126,10 +126,30 @@ class Database:
                 message_type TEXT DEFAULT 'text', -- 'text', 'image', 'file'
                 content TEXT,
                 file_id INTEGER,
+                is_deleted INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id),
                 FOREIGN KEY (sender_id) REFERENCES users(id),
                 FOREIGN KEY (file_id) REFERENCES files(id)
+            )
+            """)
+
+            # Tự động thêm cột is_deleted vào CSDL cũ nếu chưa có
+            try:
+                cursor.execute("ALTER TABLE messages ADD COLUMN is_deleted INTEGER DEFAULT 0")
+            except Exception:
+                pass
+
+            # 7. Bảng Chặn người dùng (Block / Unblock)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS blocked_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                blocked_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, blocked_id),
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (blocked_id) REFERENCES users(id)
             )
             """)
             conn.commit()
@@ -570,7 +590,7 @@ class Database:
             # Lấy thông tin tin nhắn vừa lưu kèm thông tin người gửi
             cursor.execute("""
                 SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content, 
-                       m.file_id, m.created_at, u.full_name as sender_name, u.avatar_color,
+                       m.file_id, m.is_deleted, m.created_at, u.full_name as sender_name, u.avatar_color,
                        f.original_name, f.file_size, f.file_type
                 FROM messages m
                 JOIN users u ON m.sender_id = u.id
@@ -586,7 +606,7 @@ class Database:
             cursor.execute("""
                 SELECT * FROM (
                     SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content, 
-                           m.file_id, m.created_at, u.full_name as sender_name, u.avatar_color,
+                           m.file_id, m.is_deleted, m.created_at, u.full_name as sender_name, u.avatar_color,
                            f.original_name, f.file_size, f.file_type
                     FROM messages m
                     JOIN users u ON m.sender_id = u.id
@@ -597,6 +617,95 @@ class Database:
                 ) sub
                 ORDER BY sub.id ASC
             """, (conversation_id, limit))
+            return [dict(r) for r in cursor.fetchall()]
+
+    def recall_message(self, message_id: int, user_id: int):
+        """Thu hồi tin nhắn ở cả 2 phía (người gửi và người nhận)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT conversation_id, sender_id FROM messages WHERE id = ?", (message_id,))
+            row = cursor.fetchone()
+            if not row:
+                return False, "Tin nhắn không tồn tại!", None
+            if row["sender_id"] != user_id:
+                return False, "Bạn chỉ có thể thu hồi tin nhắn do chính mình gửi!", None
+            
+            cursor.execute("""
+                UPDATE messages 
+                SET is_deleted = 1, content = 'Tin nhắn đã được thu hồi'
+                WHERE id = ?
+            """, (message_id,))
+            conn.commit()
+            return True, "Đã thu hồi tin nhắn thành công!", row["conversation_id"]
+
+    def delete_conversation(self, conversation_id: int, user_id: int):
+        """Xóa toàn bộ cuộc trò chuyện và lịch sử tin nhắn."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            # Xóa các tin nhắn trong hội thoại
+            cursor.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
+            # Xóa các thành viên
+            cursor.execute("DELETE FROM conversation_members WHERE conversation_id = ?", (conversation_id,))
+            # Xóa cuộc trò chuyện
+            cursor.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+            conn.commit()
+            return True
+
+    # --- Block / Unblock User APIs ---
+    def block_user(self, user_id: int, blocked_id: int):
+        """Chặn một người dùng (không cho gửi tin nhắn hoặc kết bạn)."""
+        if user_id == blocked_id:
+            return False, "Không thể chặn chính mình!"
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR IGNORE INTO blocked_users (user_id, blocked_id)
+                VALUES (?, ?)
+            """, (user_id, blocked_id))
+            conn.commit()
+            return True, "Đã chặn người dùng thành công!"
+
+    def unblock_user(self, user_id: int, blocked_id: int):
+        """Bỏ chặn người dùng."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                DELETE FROM blocked_users 
+                WHERE user_id = ? AND blocked_id = ?
+            """, (user_id, blocked_id))
+            conn.commit()
+            return True, "Đã bỏ chặn người dùng thành công!"
+
+    def is_blocked(self, user_a: int, user_b: int) -> bool:
+        """Kiểm tra xem giữa 2 user có ai đang chặn người kia không."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 1 FROM blocked_users 
+                WHERE (user_id = ? AND blocked_id = ?) OR (user_id = ? AND blocked_id = ?)
+            """, (user_a, user_b, user_b, user_a))
+            return cursor.fetchone() is not None
+
+    def is_user_blocked_by_me(self, user_id: int, target_id: int) -> bool:
+        """Kiểm tra xem user_id có đang chặn target_id không."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 1 FROM blocked_users 
+                WHERE user_id = ? AND blocked_id = ?
+            """, (user_id, target_id))
+            return cursor.fetchone() is not None
+
+    def get_blocked_users(self, user_id: int):
+        """Lấy danh sách các tài khoản mà user_id đã chặn."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT b.blocked_id, u.username, u.full_name, u.avatar_color, b.created_at
+                FROM blocked_users b
+                JOIN users u ON b.blocked_id = u.id
+                WHERE b.user_id = ?
+            """, (user_id,))
             return [dict(r) for r in cursor.fetchall()]
 
     def save_file_record(self, original_name, stored_path, file_size, file_type, uploader_id):

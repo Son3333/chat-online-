@@ -59,12 +59,15 @@ def format_time(ts_str: str) -> str:
     except Exception:
         return ts_str
 
+import tkinter as tk
+
 class ChatBubble(ctk.CTkFrame):
-    def __init__(self, master, message: dict, current_user_id: int, network_client):
+    def __init__(self, master, message: dict, current_user_id: int, network_client, on_recall_callback=None):
         super().__init__(master, fg_color="transparent")
         self.message = message
         self.current_user_id = current_user_id
         self.net = network_client
+        self.on_recall_callback = on_recall_callback
         self.is_self = (message.get("sender_id") == current_user_id)
         self.img_ref = None  # Giữ tham chiếu ảnh CTkImage tránh bị garbage collect
         
@@ -80,9 +83,10 @@ class ChatBubble(ctk.CTkFrame):
         msg_type = self.message.get("message_type", "text")
         content = self.message.get("content", "")
         file_id = self.message.get("file_id")
+        is_deleted = self.message.get("is_deleted", 0)
 
         # Kiểm tra tin nhắn Emoji siêu to phong cách Facebook
-        pure_emoji = (msg_type == "text" and is_pure_emoji(content))
+        pure_emoji = (not is_deleted and msg_type == "text" and is_pure_emoji(content))
 
         # Nếu là tin nhắn của người khác, hiển thị tên người gửi
         if not self.is_self:
@@ -96,12 +100,15 @@ class ChatBubble(ctk.CTkFrame):
             name_label.pack(anchor="w", padx=4, pady=(0, 2))
 
         # Thiết lập màu nền bóng chat
-        if pure_emoji:
+        if is_deleted:
+            bg_color = ("#F1F5F9", "#1E293B")
+            text_color = ("#64748B", "#94A3B8")
+        elif pure_emoji:
             bg_color = "transparent"
+            text_color = "white" if self.is_self else ("#0F172A", "#F8FAFC")
         else:
             bg_color = "#2563EB" if self.is_self else ("#E2E8F0", "#334155")
-        
-        text_color = "white" if self.is_self else ("#0F172A", "#F8FAFC")
+            text_color = "white" if self.is_self else ("#0F172A", "#F8FAFC")
         
         bubble_card = ctk.CTkFrame(
             bubble_wrapper, 
@@ -110,8 +117,20 @@ class ChatBubble(ctk.CTkFrame):
         )
         bubble_card.pack(anchor=bubble_align)
 
+        # 0. Nếu là tin nhắn đã bị thu hồi
+        if is_deleted:
+            recalled_label = ctk.CTkLabel(
+                bubble_card,
+                text="🚫 Tin nhắn đã được thu hồi",
+                font=ctk.CTkFont(size=12, slant="italic"),
+                text_color=text_color,
+                wraplength=450,
+                justify="left"
+            )
+            recalled_label.pack(padx=14, pady=(8, 4), anchor="w")
+
         # 1. Tin nhắn Text hoặc Emoji
-        if msg_type == "text" or not file_id:
+        elif msg_type == "text" or not file_id:
             if pure_emoji:
                 # Emoji to kiểu Facebook Messenger
                 emoji_font_size = 42 if len(content.strip()) <= 2 else 32
@@ -234,6 +253,57 @@ class ChatBubble(ctk.CTkFrame):
             text_color=("white" if self.is_self else ("#64748B", "#94A3B8")) if not pure_emoji else ("#64748B", "#94A3B8")
         )
         time_label.pack(side="right")
+
+        # Gắn menu chuột phải tiện lợi (Sao chép, Thu hồi tin nhắn)
+        self._bind_context_menu(bubble_card)
+        self._bind_context_menu(bubble_wrapper)
+
+    def _bind_context_menu(self, widget):
+        try:
+            widget.bind("<Button-3>", self._show_context_menu)
+            for child in widget.winfo_children():
+                self._bind_context_menu(child)
+        except Exception:
+            pass
+
+    def _show_context_menu(self, event):
+        try:
+            menu = tk.Menu(self, tearoff=0)
+            content = self.message.get("content", "")
+            is_deleted = self.message.get("is_deleted", 0)
+            
+            if not is_deleted and content:
+                menu.add_command(label="📋 Sao chép nội dung", command=self._copy_text)
+            
+            if self.is_self and not is_deleted:
+                menu.add_separator()
+                menu.add_command(label="🗑️ Thu hồi tin nhắn", command=self._confirm_recall)
+                
+            menu.tk_popup(event.x_root, event.y_root)
+        except Exception:
+            pass
+
+    def _copy_text(self):
+        try:
+            self.clipboard_clear()
+            self.clipboard_append(self.message.get("content", ""))
+        except Exception:
+            pass
+
+    def _confirm_recall(self):
+        msg_id = self.message.get("id")
+        if not msg_id or not self.on_recall_callback:
+            return
+        if messagebox.askyesno("Thu hồi tin nhắn", "Bạn có chắc chắn muốn thu hồi tin nhắn này ở cả hai phía không?"):
+            self.on_recall_callback(msg_id)
+
+    def mark_as_recalled(self):
+        """Cập nhật giao diện bong bóng thành trạng thái đã thu hồi."""
+        self.message["is_deleted"] = 1
+        self.message["content"] = "Tin nhắn đã được thu hồi"
+        for w in self.winfo_children():
+            w.destroy()
+        self._build_bubble()
 
     def _get_cache_path(self) -> str:
         file_id = self.message.get("file_id")

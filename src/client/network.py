@@ -401,4 +401,40 @@ class NetworkClient:
             "friend_id": friend_id
         }, expected_action="check_friend_response")
 
+    # --- Xóa tin nhắn, Xóa đoạn chat & Chặn người dùng ---
+    def recall_message(self, message_id, user_id):
+        return self.send_request({
+            "action": "recall_message",
+            "message_id": message_id,
+            "user_id": user_id
+        }, expected_action="recall_message_response", timeout=8.0)
+
+    def delete_conversation(self, conversation_id, user_id):
+        return self.send_request({
+            "action": "delete_conversation",
+            "conversation_id": conversation_id,
+            "user_id": user_id
+        }, expected_action="delete_conversation_response", timeout=8.0)
+
+    def block_user(self, user_id, target_id):
+        return self.send_request({
+            "action": "block_user",
+            "user_id": user_id,
+            "target_id": target_id
+        }, expected_action="block_user_response", timeout=8.0)
+
+    def unblock_user(self, user_id, target_id):
+        return self.send_request({
+            "action": "unblock_user",
+            "user_id": user_id,
+            "target_id": target_id
+        }, expected_action="unblock_user_response", timeout=8.0)
+
+    def get_block_status(self, user_id, target_id):
+        return self.send_request({
+            "action": "get_block_status",
+            "user_id": user_id,
+            "target_id": target_id
+        }, expected_action="get_block_status_response", timeout=6.0)
+
 
