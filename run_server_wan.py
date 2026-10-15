@@ -171,6 +171,44 @@ def start_wan_server():
                 pass
         threading.Thread(target=_drain_tunnel_pipe, args=(tunnel_proc,), daemon=True).start()
 
+        # Watchdog: Tu dong phuc hoi duong ham WAN ngay lap tuc neu bi rot mang hoac bore thoat
+        def _tunnel_watchdog():
+            nonlocal tunnel_proc
+            flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            while True:
+                time.sleep(3)
+                if tunnel_proc is None or tunnel_proc.poll() is not None:
+                    safe_log("[!] Duong ham WAN bi giam doan! Dang tu dong phuc hoi bore.pub:38888...")
+                    try:
+                        new_proc = subprocess.Popen(
+                            [bore_path, "local", str(local_port), "--to", "bore.pub", "--port", str(port or 38888)],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            creationflags=flags
+                        )
+                        time.sleep(1.5)
+                        if new_proc.poll() is None:
+                            tunnel_proc = new_proc
+                            threading.Thread(target=_drain_tunnel_pipe, args=(tunnel_proc,), daemon=True).start()
+                            safe_log("[+] Da phuc hoi duong ham WAN thanh cong!")
+                    except Exception as ex:
+                        safe_log(f"[-] Loi phuc hoi duong ham: {ex}")
+        threading.Thread(target=_tunnel_watchdog, daemon=True).start()
+
+        # Keepalive: Gui ping giu ket noi bore.pub moi 35 giay tranh bi server ngat do idle
+        def _keepalive_loop():
+            import socket
+            while True:
+                time.sleep(35)
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.settimeout(2.0)
+                        s.connect(("bore.pub", port or 38888))
+                except Exception:
+                    pass
+        threading.Thread(target=_keepalive_loop, daemon=True).start()
+
         try:
             while True:
                 time.sleep(1)
