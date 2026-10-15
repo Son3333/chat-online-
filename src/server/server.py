@@ -6,6 +6,7 @@ import os
 import sys
 import base64
 import uuid
+from typing import Optional
 from datetime import datetime
 from src.server.database import Database
 
