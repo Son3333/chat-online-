@@ -1043,16 +1043,25 @@ class MainWindow(ctk.CTkFrame):
             self.search_results_frame.grid_forget()
             return
             
-        search_kw = kw.lstrip("@").strip()
+        search_kw = kw.lstrip("@#").strip()
         if not search_kw:
             self.search_results_frame.grid_forget()
             return
             
         def _search():
             res = self.net.search_users(search_kw, self.current_user["id"])
-            users = res.get("users", []) if res else []
+            if res is None:
+                self.master.after(0, lambda: self._show_search_error("Mất kết nối máy chủ! Đang thử lại..."))
+                return
+            users = res.get("users", [])
             self.master.after(0, lambda: self._show_search_results(users))
         threading.Thread(target=_search, daemon=True).start()
+
+    def _show_search_error(self, message: str):
+        for w in self.search_results_frame.winfo_children():
+            w.destroy()
+        self.search_results_frame.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 4))
+        ctk.CTkLabel(self.search_results_frame, text=message, font=ctk.CTkFont(size=11), text_color="#EF4444").pack(pady=8)
 
     def _show_search_results(self, users: list):
         for w in self.search_results_frame.winfo_children():

@@ -221,33 +221,61 @@ class Database:
         if not clean_keyword:
             return []
 
+        import unicodedata
+        def _strip_accents(s: str) -> str:
+            if not s:
+                return ""
+            s = s.replace("đ", "d").replace("Đ", "D")
+            return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn").lower()
+
+        search_normalized = _strip_accents(clean_keyword)
+        search_lower = clean_keyword.lower()
+
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
-            # 1. Tìm theo ID cụ thể (ví dụ: "1000000000", "#1000000000", "id:1000000000")
+            # 1. Tìm theo ID cụ thể nếu là số (ví dụ: "2844831592", "#2844831592", "id:2844831592")
             id_query = clean_keyword.replace("id:", "").strip()
             if id_query.isdigit():
                 cursor.execute("""
                     SELECT id, username, full_name, avatar_color, is_online
                     FROM users
-                    WHERE id = ? AND id != ?
-                """, (int(id_query), current_user_id))
+                    WHERE (id = ? OR CAST(id AS TEXT) LIKE ?) AND id != ?
+                """, (int(id_query), f"{id_query}%", current_user_id))
                 res = [dict(r) for r in cursor.fetchall()]
                 if res:
                     return res
             
-            # 2. Tìm theo Username chính xác, tiền tố Username, hoặc Họ tên người dùng
+            # 2. Tìm kiếm thông minh hỗ trợ cả tiếng Việt có dấu, không dấu, username và họ tên
             cursor.execute("""
                 SELECT id, username, full_name, avatar_color, is_online
                 FROM users
-                WHERE (
-                    LOWER(username) = LOWER(?) 
-                    OR LOWER(username) LIKE LOWER(?) 
-                    OR LOWER(full_name) LIKE LOWER(?)
-                ) AND id != ?
-                LIMIT 10
-            """, (clean_keyword, f"{clean_keyword}%", f"%{clean_keyword}%", current_user_id))
-            return [dict(r) for r in cursor.fetchall()]
+                WHERE id != ?
+            """, (current_user_id,))
+            all_users = [dict(r) for r in cursor.fetchall()]
+
+            matched = []
+            for u in all_users:
+                uname = (u.get("username") or "").lower()
+                fname = (u.get("full_name") or "").lower()
+                uname_norm = _strip_accents(uname)
+                fname_norm = _strip_accents(fname)
+                uid_str = str(u.get("id"))
+
+                # Kiểm tra khớp:
+                # - ID chứa từ khóa
+                # - Username khớp hoàn toàn hoặc chứa từ khóa (cả có dấu và không dấu)
+                # - Họ tên chứa từ khóa (cả có dấu và không dấu)
+                if (search_lower == uname or 
+                    search_normalized in uname_norm or 
+                    search_lower in fname or 
+                    search_normalized in fname_norm or
+                    search_lower in uid_str):
+                    matched.append(u)
+                    if len(matched) >= 15:
+                        break
+
+            return matched
 
     # --- Danh bạ bạn bè & Lời mời kết bạn (Friend Request & Approval APIs) ---
     def send_friend_request(self, user_id, friend_id):
