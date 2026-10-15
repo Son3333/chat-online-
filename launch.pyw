@@ -67,17 +67,6 @@ def get_target_server():
     target_host = "bore.pub"
     target_port = 38888
 
-    cfg_file = os.path.join(PROJECT_DIR, "server_config.json")
-    if os.path.exists(cfg_file):
-        try:
-            with open(cfg_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                target_host = data.get("host", target_host)
-                target_port = int(data.get("port", target_port))
-                return target_host, target_port
-        except Exception:
-            pass
-
     info_file = os.path.join(PROJECT_DIR, "wan_server_info.txt")
     if os.path.exists(info_file):
         try:
@@ -87,6 +76,17 @@ def get_target_server():
                         target_host = line.strip().split("=")[1]
                     elif line.startswith("PORT="):
                         target_port = int(line.strip().split("=")[1])
+                return target_host, target_port
+        except Exception:
+            pass
+
+    cfg_file = os.path.join(PROJECT_DIR, "server_config.json")
+    if os.path.exists(cfg_file):
+        try:
+            with open(cfg_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                target_host = data.get("host", target_host)
+                target_port = int(data.get("port", target_port))
                 return target_host, target_port
         except Exception:
             pass

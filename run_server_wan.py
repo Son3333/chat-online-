@@ -160,6 +160,17 @@ def start_wan_server():
         except Exception:
             pass
 
+        # Luôn đọc cạn buffer stdout của bore trong thread riêng để tránh tràn bộ đệm làm bore bị treo
+        def _drain_tunnel_pipe(proc):
+            try:
+                while proc.poll() is None:
+                    line = proc.stdout.readline()
+                    if not line:
+                        break
+            except Exception:
+                pass
+        threading.Thread(target=_drain_tunnel_pipe, args=(tunnel_proc,), daemon=True).start()
+
         try:
             while True:
                 time.sleep(1)

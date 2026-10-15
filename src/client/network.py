@@ -43,7 +43,7 @@ class NetworkClient:
     def connect(self) -> bool:
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.settimeout(5.0) # Hỗ trợ timeout khi kết nối mạng LAN / WAN
+            self.sock.settimeout(4.0) # Hỗ trợ timeout khi kết nối mạng LAN / WAN
             self.sock.connect((self.host, self.port))
             self.sock.settimeout(None)
             self.connected = True
@@ -53,7 +53,23 @@ class NetworkClient:
             self.recv_thread = threading.Thread(target=self._listen_loop, daemon=True)
             self.recv_thread.start()
             return True
-        except Exception as e:
+        except Exception:
+            # Fallback nếu kết nối WAN thất bại nhưng máy này đang chạy Server local 8888
+            if self.host != "127.0.0.1":
+                try:
+                    self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    self.sock.settimeout(1.0)
+                    self.sock.connect(("127.0.0.1", 8888))
+                    self.sock.settimeout(None)
+                    self.host = "127.0.0.1"
+                    self.port = 8888
+                    self.connected = True
+                    self.running = True
+                    self.recv_thread = threading.Thread(target=self._listen_loop, daemon=True)
+                    self.recv_thread.start()
+                    return True
+                except Exception:
+                    pass
             self.connected = False
             return False
 

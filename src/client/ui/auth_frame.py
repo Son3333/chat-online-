@@ -175,11 +175,23 @@ class AuthFrame(ctk.CTkFrame):
         
         self.server_cfg_frame = ctk.CTkFrame(self.card, fg_color=("gray95", "#0F172A"), corner_radius=8)
         
-        # Tự động đọc cấu hình WAN/LAN đã lưu trước đó nếu có
+        # Tự động đọc cấu hình: Ưu tiên 127.0.0.1 nếu máy chủ local đang mở, ngược lại đọc WAN info
         saved_host = "bore.pub"
         saved_port = 38888
         
-        if os.path.exists(self.wan_info_file):
+        import socket
+        def _is_local_server_active():
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.25)
+                    return s.connect_ex(('127.0.0.1', 8888)) == 0
+            except Exception:
+                return False
+
+        if _is_local_server_active():
+            saved_host = "127.0.0.1"
+            saved_port = 8888
+        elif os.path.exists(self.wan_info_file):
             try:
                 with open(self.wan_info_file, "r", encoding="utf-8") as f:
                     for line in f:
@@ -222,9 +234,9 @@ class AuthFrame(ctk.CTkFrame):
     def _apply_server_settings(self):
         host = self.entry_server_ip.get().strip() or "bore.pub"
         try:
-            port = int(self.entry_server_port.get().strip() or 28888)
+            port = int(self.entry_server_port.get().strip() or 38888)
         except ValueError:
-            port = 28888
+            port = 38888
         self.net.set_server(host, port)
         try:
             with open(self.cfg_file, "w", encoding="utf-8") as f:
@@ -246,6 +258,21 @@ class AuthFrame(ctk.CTkFrame):
         self.update_idletasks()
         
         res = self.net.login(username, password)
+        
+        # Tự động chuyển kết nối dự phòng nếu mạng Internet WAN lag nhưng local server đang chạy
+        if res is None:
+            import socket
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.3)
+                    local_live = (s.connect_ex(('127.0.0.1', 8888)) == 0)
+            except Exception:
+                local_live = False
+
+            if local_live and self.net.host != "127.0.0.1":
+                self.net.set_server("127.0.0.1", 8888)
+                res = self.net.login(username, password)
+
         self.btn_login.configure(state="normal", text="Đăng Nhập Ngay")
         
         if res is None:
