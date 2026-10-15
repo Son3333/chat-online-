@@ -132,6 +132,11 @@ class CreateGroupDialog(ctk.CTkToplevel):
         threading.Thread(target=_fetch, daemon=True).start()
 
     def _render_contacts(self, friends: list):
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
         for w in self.contacts_scroll.winfo_children():
             w.destroy()
             
@@ -236,6 +241,11 @@ class CreateGroupDialog(ctk.CTkToplevel):
         self._refresh_selected_view()
 
     def _refresh_selected_view(self):
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
         for w in self.selected_scroll.winfo_children():
             w.destroy()
             

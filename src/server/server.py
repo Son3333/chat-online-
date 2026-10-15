@@ -65,7 +65,12 @@ class ChatServer:
 
         try:
             while self.running:
-                client_sock, client_addr = self.server_socket.accept()
+                try:
+                    client_sock, client_addr = self.server_socket.accept()
+                except (OSError, socket.error):
+                    if not self.running:
+                        break
+                    continue
                 thread = threading.Thread(target=self.handle_client, args=(client_sock, client_addr), daemon=True)
                 thread.start()
         except KeyboardInterrupt:
@@ -74,9 +79,15 @@ class ChatServer:
             self.stop()
 
     def stop(self):
+        if not self.running and not self.server_socket:
+            return
         self.running = False
         if self.server_socket:
-            self.server_socket.close()
+            try:
+                self.server_socket.close()
+            except Exception:
+                pass
+            self.server_socket = None
         log("May chu da dung.")
 
     def send_packet(self, sock: socket.socket, payload: dict):
