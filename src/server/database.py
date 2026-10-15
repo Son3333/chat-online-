@@ -288,18 +288,35 @@ class Database:
             if not target:
                 return {"success": False, "message": "Người dùng không tồn tại!"}
 
-            # Kiểm tra xem đã là bạn bè chưa
-            cursor.execute("SELECT status FROM friends WHERE user_id = ? AND friend_id = ?", (user_id, friend_id))
-            row1 = cursor.fetchone()
-            if row1 and row1["status"] == "accepted":
-                return {"success": False, "message": f"Bạn và @{target['username']} đã là bạn bè của nhau rồi!"}
+            # Kiểm tra xem đã là bạn bè chưa (cả 2 chiều)
+            cursor.execute("SELECT status FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)", (user_id, friend_id, friend_id, user_id))
+            existing_rows = cursor.fetchall()
+            for r in existing_rows:
+                if r["status"] == "accepted":
+                    # Đảm bảo đồng bộ cả 2 chiều thành accepted
+                    cursor.execute("""
+                        INSERT INTO friends (user_id, friend_id, status)
+                        VALUES (?, ?, 'accepted')
+                        ON CONFLICT(user_id, friend_id) DO UPDATE SET status = 'accepted'
+                    """, (user_id, friend_id))
+                    cursor.execute("""
+                        INSERT INTO friends (user_id, friend_id, status)
+                        VALUES (?, ?, 'accepted')
+                        ON CONFLICT(user_id, friend_id) DO UPDATE SET status = 'accepted'
+                    """, (friend_id, user_id))
+                    conn.commit()
+                    return {"success": False, "message": f"Bạn và @{target['username']} đã là bạn bè của nhau rồi!"}
 
             # Kiểm tra xem đối phương có đang gửi lời mời chờ mình duyệt không
             cursor.execute("SELECT status FROM friends WHERE user_id = ? AND friend_id = ?", (friend_id, user_id))
             row2 = cursor.fetchone()
             if row2 and row2["status"] == "pending":
                 # Đối phương đã mời trước -> Tự động chấp nhận luôn cả 2 chiều!
-                cursor.execute("UPDATE friends SET status = 'accepted' WHERE user_id = ? AND friend_id = ?", (friend_id, user_id))
+                cursor.execute("""
+                    INSERT INTO friends (user_id, friend_id, status)
+                    VALUES (?, ?, 'accepted')
+                    ON CONFLICT(user_id, friend_id) DO UPDATE SET status = 'accepted'
+                """, (friend_id, user_id))
                 cursor.execute("""
                     INSERT INTO friends (user_id, friend_id, status)
                     VALUES (?, ?, 'accepted')
@@ -336,10 +353,13 @@ class Database:
             if not requester:
                 return {"success": False, "message": "Người dùng không tồn tại!"}
 
-            # Cập nhật chiều gửi: requester -> user thành accepted
-            cursor.execute("UPDATE friends SET status = 'accepted' WHERE user_id = ? AND friend_id = ?", (requester_id, user_id))
+            # Đồng bộ cả 2 chiều thành accepted
+            cursor.execute("""
+                INSERT INTO friends (user_id, friend_id, status)
+                VALUES (?, ?, 'accepted')
+                ON CONFLICT(user_id, friend_id) DO UPDATE SET status = 'accepted'
+            """, (requester_id, user_id))
             
-            # Đảm bảo chiều ngược lại: user -> requester cũng là accepted
             cursor.execute("""
                 INSERT INTO friends (user_id, friend_id, status)
                 VALUES (?, ?, 'accepted')
@@ -371,13 +391,21 @@ class Database:
             return "self"
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            # 1. Nếu bất kỳ chiều nào đã accepted -> đã là bạn bè
+            cursor.execute("SELECT status FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)",
+                           (user_id, other_id, other_id, user_id))
+            rows = cursor.fetchall()
+            for r in rows:
+                if r["status"] == "accepted":
+                    return "friends"
+
+            # 2. Chiều mình gửi đang pending
             cursor.execute("SELECT status FROM friends WHERE user_id = ? AND friend_id = ?", (user_id, other_id))
             my_rel = cursor.fetchone()
-            if my_rel and my_rel["status"] == "accepted":
-                return "friends"
             if my_rel and my_rel["status"] == "pending":
                 return "sent_pending"
 
+            # 3. Chiều đối phương gửi đang pending chờ mình duyệt
             cursor.execute("SELECT status FROM friends WHERE user_id = ? AND friend_id = ?", (other_id, user_id))
             other_rel = cursor.fetchone()
             if other_rel and other_rel["status"] == "pending":
@@ -389,16 +417,20 @@ class Database:
         return self.get_friendship_status(user_id, friend_id) == "friends"
 
     def get_friends(self, user_id):
-        """Lấy danh sách bạn bè chính thức (status = 'accepted')."""
+        """Lấy danh sách bạn bè chính thức (status = 'accepted') hai chiều."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT u.id, u.username, u.full_name, u.avatar_color, u.is_online, u.last_seen
-                FROM friends f
-                JOIN users u ON f.friend_id = u.id
-                WHERE f.user_id = ? AND f.status = 'accepted'
+                SELECT DISTINCT u.id, u.username, u.full_name, u.avatar_color, u.is_online, u.last_seen
+                FROM users u
+                JOIN friends f ON (
+                    (f.user_id = ? AND f.friend_id = u.id AND f.status = 'accepted')
+                    OR
+                    (f.friend_id = ? AND f.user_id = u.id AND f.status = 'accepted')
+                )
+                WHERE u.id != ?
                 ORDER BY u.full_name ASC
-            """, (user_id,))
+            """, (user_id, user_id, user_id))
             return [dict(r) for r in cursor.fetchall()]
 
     def get_pending_requests(self, user_id):
