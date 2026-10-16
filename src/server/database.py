@@ -276,6 +276,38 @@ class Database:
             row = cursor.fetchone()
             return dict(row) if row else None
 
+    def update_user_profile(self, user_id, full_name=None, avatar_color=None, new_password=None):
+        """Cập nhật thông tin hồ sơ cá nhân."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            updates = []
+            params = []
+            if full_name and full_name.strip():
+                updates.append("full_name = ?")
+                params.append(full_name.strip())
+            if avatar_color and avatar_color.strip():
+                updates.append("avatar_color = ?")
+                params.append(avatar_color.strip())
+            if new_password and new_password.strip():
+                is_valid, msg = validate_password_strength(new_password)
+                if not is_valid:
+                    return {"success": False, "error": msg}
+                salt = bcrypt.gensalt()
+                pw_hash = bcrypt.hashpw(new_password.encode('utf-8'), salt).decode('utf-8')
+                updates.append("password_hash = ?")
+                params.append(pw_hash)
+
+            if not updates:
+                return {"success": False, "error": "Không có thông tin thay đổi!"}
+
+            params.append(user_id)
+            query = f"UPDATE users SET {', '.join(updates)} WHERE id = ?"
+            cursor.execute(query, tuple(params))
+            conn.commit()
+
+            user = self.get_user_by_id(user_id)
+            return {"success": True, "user": user}
+
     def search_users(self, keyword, current_user_id=None):
         keyword = (keyword or "").strip()
         if not keyword:

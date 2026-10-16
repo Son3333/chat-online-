@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, Cloud, Users, User as UserIcon, LogOut, Shield, MessageCircle, Pin, Archive, Ban, Trash2 } from 'lucide-react';
+import { Search, Plus, Cloud, Users, User as UserIcon, LogOut, Shield, MessageCircle, Pin, Archive, Ban, Trash2, Settings } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { getInitials, formatDate } from '../../lib/utils';
 import { apiService } from '../../services/api';
 import { User, Conversation } from '../../types';
+import { ProfileSettingsModal } from '../settings/ProfileSettingsModal';
 
 interface SidebarProps {
   onOpenCreateGroup: () => void;
@@ -27,6 +28,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'direct' | 'group' | 'archived'>('all');
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [globalUsers, setGlobalUsers] = useState<User[]>([]);
   const [isSearchingUsers, setIsSearchingUsers] = useState(false);
 
@@ -187,15 +189,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
     <aside className="w-[320px] h-full flex flex-col bg-white dark:bg-[#17212b] border-r border-slate-200 dark:border-slate-800/80 flex-shrink-0 select-none">
       {/* Top Header / Profile */}
       <div className="p-3 border-b border-slate-100 dark:border-slate-800/60 flex items-center justify-between relative">
-        <div className="flex items-center space-x-2.5">
+        <div
+          onClick={() => setShowProfileSettings(true)}
+          className="flex items-center space-x-2.5 cursor-pointer hover:opacity-85 transition-opacity group"
+          title="Xem hồ sơ & Cài đặt cá nhân"
+        >
           <div
-            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm"
+            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-transparent group-hover:ring-[#2481cc]/40 transition-all"
             style={{ backgroundColor: currentUser?.avatar_color || '#2481cc' }}
           >
             {getInitials(currentUser?.full_name)}
           </div>
           <div className="flex flex-col">
-            <span className="font-semibold text-sm text-slate-800 dark:text-slate-100 leading-tight">
+            <span className="font-semibold text-sm text-slate-800 dark:text-slate-100 leading-tight group-hover:text-[#2481cc] transition-colors">
               {currentUser?.full_name || 'Người dùng'}
             </span>
             <span className="text-xs text-emerald-500 font-medium">
@@ -220,6 +226,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
           {/* Dropdown Menu */}
           {showUserMenu && (
             <div className="absolute right-0 top-10 w-48 bg-white dark:bg-[#1e2c3a] border border-slate-200 dark:border-slate-700/80 rounded-xl shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+              <button
+                onClick={() => {
+                  setShowUserMenu(false);
+                  setShowProfileSettings(true);
+                }}
+                className="w-full px-3 py-2 text-left text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 flex items-center space-x-2"
+              >
+                <Settings className="w-4 h-4 text-[#2481cc]" />
+                <span>Hồ sơ & Cài đặt</span>
+              </button>
+
               <button
                 onClick={() => {
                   setShowUserMenu(false);
@@ -569,6 +586,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
           </div>
         </>
       )}
+
+      {/* Modal Cài đặt & Hồ sơ cá nhân kiểu Telegram */}
+      <ProfileSettingsModal
+        isOpen={showProfileSettings}
+        onClose={() => setShowProfileSettings(false)}
+        onOpenContacts={onOpenContacts}
+      />
     </aside>
   );
 };

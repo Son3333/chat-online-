@@ -296,6 +296,22 @@ class ChatServer:
                 return {"action": "identify_response", "success": True, "user": user}
             return {"action": "identify_response", "success": False, "message": "User not found"}
 
+        # 2.2 Cập nhật hồ sơ cá nhân
+        elif action == "update_profile":
+            user_id = packet.get("user_id")
+            full_name = packet.get("full_name")
+            avatar_color = packet.get("avatar_color")
+            new_password = packet.get("new_password")
+            res = self.db.update_user_profile(user_id, full_name, avatar_color, new_password)
+            if res.get("success"):
+                with self.lock:
+                    all_online = list(self.active_clients.keys())
+                self.broadcast_to_users(all_online, {
+                    "type": "profile_updated",
+                    "user": res.get("user")
+                })
+            return {"action": "update_profile_response", **res}
+
         # 3. Lấy danh sách hội thoại
         elif action == "get_conversations":
             user_id = packet.get("user_id")

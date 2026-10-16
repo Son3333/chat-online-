@@ -1,0 +1,505 @@
+import React, { useState } from 'react';
+import {
+  X,
+  ArrowLeft,
+  Bell,
+  Moon,
+  Sun,
+  Lock,
+  Cloud,
+  Users,
+  KeyRound,
+  LogOut,
+  Check,
+  Edit2,
+  Palette,
+  Shield,
+  ChevronRight
+} from 'lucide-react';
+import { useChat } from '../../context/ChatContext';
+import { getInitials } from '../../lib/utils';
+import { apiService } from '../../services/api';
+
+interface ProfileSettingsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onOpenContacts?: () => void;
+}
+
+const AVATAR_COLORS = [
+  '#2481cc', // Telegram Blue
+  '#2563eb', // Royal Blue
+  '#0d9488', // Teal
+  '#059669', // Emerald
+  '#16a34a', // Green
+  '#d97706', // Amber
+  '#ea580c', // Orange
+  '#e11d48', // Rose
+  '#7c3aed', // Violet
+  '#9333ea', // Purple
+];
+
+export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
+  isOpen,
+  onClose,
+  onOpenContacts,
+}) => {
+  const {
+    currentUser,
+    setCurrentUser,
+    theme,
+    setTheme,
+    setIsLocked,
+    openSavedMessages,
+    logout,
+    refreshConversations,
+  } = useChat();
+
+  const [activeSubView, setActiveSubView] = useState<'main' | 'edit_profile' | 'change_password'>('main');
+
+  // Edit profile state
+  const [fullName, setFullName] = useState(currentUser?.full_name || '');
+  const [selectedColor, setSelectedColor] = useState(currentUser?.avatar_color || '#2481cc');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Change password state
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Notifications toggle (saved in localStorage)
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('vibe_notification_sound') !== 'false';
+  });
+
+  if (!isOpen || !currentUser) return null;
+
+  const handleToggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    localStorage.setItem('vibe_notification_sound', String(next));
+  };
+
+  const handleSaveProfile = async () => {
+    if (!fullName.trim()) {
+      setErrorMsg('Họ và tên không được để trống!');
+      return;
+    }
+    setIsSaving(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiService.updateProfile(currentUser.id, {
+        full_name: fullName.trim(),
+        avatar_color: selectedColor,
+      });
+      if (res && res.success && res.user) {
+        setCurrentUser(res.user);
+        localStorage.setItem('vibe_user', JSON.stringify(res.user));
+        setSuccessMsg('Đã cập nhật hồ sơ thành công!');
+        await refreshConversations();
+        setTimeout(() => {
+          setSuccessMsg(null);
+          setActiveSubView('main');
+        }, 800);
+      } else {
+        setErrorMsg(res.error || 'Cập nhật hồ sơ thất bại!');
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Lỗi kết nối máy chủ!');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!newPassword) {
+      setErrorMsg('Vui lòng nhập mật khẩu mới!');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setErrorMsg('Mật khẩu xác nhận không khớp!');
+      return;
+    }
+    setIsSaving(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiService.updateProfile(currentUser.id, {
+        new_password: newPassword,
+      });
+      if (res && res.success) {
+        setSuccessMsg('Đã đổi mật khẩu thành công!');
+        setNewPassword('');
+        setConfirmPassword('');
+        setTimeout(() => {
+          setSuccessMsg(null);
+          setActiveSubView('main');
+        }, 1000);
+      } else {
+        setErrorMsg(res.error || 'Đổi mật khẩu thất bại!');
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Lỗi khi đổi mật khẩu!');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 select-none animate-in fade-in duration-150"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm bg-white dark:bg-[#17212b] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh] animate-in zoom-in-95 duration-150"
+      >
+        {/* Top Header */}
+        <div className="h-14 px-4 border-b border-slate-100 dark:border-slate-800/80 flex items-center justify-between bg-white dark:bg-[#17212b]">
+          <div className="flex items-center space-x-2.5">
+            {activeSubView !== 'main' ? (
+              <button
+                onClick={() => {
+                  setErrorMsg(null);
+                  setSuccessMsg(null);
+                  setActiveSubView('main');
+                }}
+                className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+            ) : null}
+            <h3 className="font-bold text-base text-slate-800 dark:text-slate-100">
+              {activeSubView === 'main'
+                ? 'Cài đặt'
+                : activeSubView === 'edit_profile'
+                ? 'Chỉnh sửa hồ sơ'
+                : 'Đổi mật khẩu'}
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="flex-1 overflow-y-auto">
+          {activeSubView === 'main' ? (
+            <div className="flex flex-col pb-4">
+              {/* Telegram-style Avatar Profile Card */}
+              <div className="flex flex-col items-center justify-center pt-6 pb-5 px-4 bg-gradient-to-b from-blue-500/5 dark:from-blue-500/10 to-transparent">
+                <div className="relative group/avatar cursor-pointer" onClick={() => setActiveSubView('edit_profile')}>
+                  <div
+                    className="w-24 h-24 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-xl transition-transform group-hover/avatar:scale-105"
+                    style={{ backgroundColor: currentUser.avatar_color || '#2481cc' }}
+                  >
+                    {getInitials(currentUser.full_name)}
+                  </div>
+                  <div className="absolute bottom-0 right-0 p-1.5 rounded-full bg-[#2481cc] text-white shadow-md border-2 border-white dark:border-[#17212b]">
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+
+                <h2 className="mt-3.5 text-base font-bold text-slate-800 dark:text-slate-100 flex items-center space-x-1.5">
+                  <span>{currentUser.full_name}</span>
+                </h2>
+                <div className="flex items-center space-x-1.5 mt-0.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-xs text-emerald-500 font-medium">Trực tuyến</span>
+                </div>
+              </div>
+
+              {/* Account Info Section */}
+              <div className="mx-4 my-2 p-3 rounded-2xl bg-slate-50 dark:bg-[#202b36] border border-slate-200/60 dark:border-slate-800/80 space-y-2.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500 dark:text-slate-400">Tên người dùng</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-100 font-mono">
+                    @{currentUser.username}
+                  </span>
+                </div>
+                <div className="h-px bg-slate-200/60 dark:bg-slate-700/60" />
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500 dark:text-slate-400">Mã định danh ID</span>
+                  <span className="font-semibold text-[#2481cc] font-mono">
+                    #{currentUser.id}
+                  </span>
+                </div>
+              </div>
+
+              {/* Settings Action Items List */}
+              <div className="mx-4 mt-2 rounded-2xl bg-slate-50 dark:bg-[#202b36] border border-slate-200/60 dark:border-slate-800/80 overflow-hidden divide-y divide-slate-200/50 dark:divide-slate-700/50">
+                {/* 1. Edit Profile & Avatar */}
+                <button
+                  onClick={() => setActiveSubView('edit_profile')}
+                  className="w-full px-3.5 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 flex items-center justify-between text-xs transition-colors"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-7 h-7 rounded-lg bg-blue-500/15 text-[#2481cc] flex items-center justify-center">
+                      <Palette className="w-4 h-4" />
+                    </div>
+                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                      Chỉnh sửa hồ sơ & Màu sắc
+                    </span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </button>
+
+                {/* 2. Saved Messages / Cloud */}
+                <button
+                  onClick={() => {
+                    onClose();
+                    openSavedMessages();
+                  }}
+                  className="w-full px-3.5 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 flex items-center justify-between text-xs transition-colors"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-500/15 text-indigo-500 flex items-center justify-center">
+                      <Cloud className="w-4 h-4" />
+                    </div>
+                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                      Cloud của tôi (Saved Messages)
+                    </span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </button>
+
+                {/* 3. Contacts & Friends */}
+                {onOpenContacts && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenContacts();
+                    }}
+                    className="w-full px-3.5 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 flex items-center justify-between text-xs transition-colors"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
+                        <Users className="w-4 h-4" />
+                      </div>
+                      <span className="font-medium text-slate-700 dark:text-slate-200">
+                        Danh bạ & Bạn bè
+                      </span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </button>
+                )}
+
+                {/* 4. Notification Sounds */}
+                <button
+                  onClick={handleToggleSound}
+                  className="w-full px-3.5 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 flex items-center justify-between text-xs transition-colors"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-7 h-7 rounded-lg bg-rose-500/15 text-rose-500 flex items-center justify-center">
+                      <Bell className="w-4 h-4" />
+                    </div>
+                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                      Âm thanh thông báo
+                    </span>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      soundEnabled
+                        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                    }`}
+                  >
+                    {soundEnabled ? 'Bật' : 'Tắt'}
+                  </span>
+                </button>
+
+                {/* 5. Theme Toggle */}
+                <button
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  className="w-full px-3.5 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 flex items-center justify-between text-xs transition-colors"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-500 flex items-center justify-center">
+                      {theme === 'dark' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                    </div>
+                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                      Giao diện (Chủ đề)
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 capitalize">
+                    {theme === 'dark' ? 'Giao diện Tối' : 'Giao diện Sáng'}
+                  </span>
+                </button>
+
+                {/* 6. Change Password */}
+                <button
+                  onClick={() => setActiveSubView('change_password')}
+                  className="w-full px-3.5 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 flex items-center justify-between text-xs transition-colors"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-7 h-7 rounded-lg bg-violet-500/15 text-violet-500 flex items-center justify-center">
+                      <KeyRound className="w-4 h-4" />
+                    </div>
+                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                      Đổi mật khẩu tài khoản
+                    </span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </button>
+
+                {/* 7. App Screen Lock */}
+                <button
+                  onClick={() => {
+                    onClose();
+                    setIsLocked(true);
+                  }}
+                  className="w-full px-3.5 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 flex items-center justify-between text-xs transition-colors"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-7 h-7 rounded-lg bg-cyan-500/15 text-cyan-500 flex items-center justify-center">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                      Khóa màn hình (Ctrl+L)
+                    </span>
+                  </div>
+                  <Shield className="w-3.5 h-3.5 text-cyan-500" />
+                </button>
+              </div>
+
+              {/* Logout Button */}
+              <div className="mx-4 mt-3">
+                <button
+                  onClick={() => {
+                    onClose();
+                    logout();
+                  }}
+                  className="w-full py-2.5 px-4 rounded-2xl bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs flex items-center justify-center space-x-2 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Đăng xuất tài khoản</span>
+                </button>
+              </div>
+            </div>
+          ) : activeSubView === 'edit_profile' ? (
+            /* Sub-view: Edit Profile */
+            <div className="p-5 flex flex-col space-y-4 text-xs">
+              {/* Preview Avatar */}
+              <div className="flex flex-col items-center justify-center pb-2">
+                <div
+                  className="w-20 h-20 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg mb-2"
+                  style={{ backgroundColor: selectedColor }}
+                >
+                  {getInitials(fullName || currentUser.full_name)}
+                </div>
+                <span className="text-slate-400 text-[11px]">Xem trước ảnh đại diện</span>
+              </div>
+
+              {/* Name Input */}
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  Họ và tên hiển thị:
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Nhập họ và tên..."
+                  className="w-full h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-[#2481cc] border border-transparent dark:border-slate-700/60"
+                />
+              </div>
+
+              {/* Color Presets */}
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-2">
+                  Chọn màu sắc đại diện:
+                </label>
+                <div className="grid grid-cols-5 gap-2.5">
+                  {AVATAR_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setSelectedColor(c)}
+                      className="w-10 h-10 rounded-full flex items-center justify-center transition-transform hover:scale-110 active:scale-95 shadow-sm"
+                      style={{ backgroundColor: c }}
+                    >
+                      {selectedColor === c && <Check className="w-4 h-4 text-white stroke-[3]" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {errorMsg && (
+                <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs">
+                  {errorMsg}
+                </div>
+              )}
+
+              {successMsg && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-1.5">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{successMsg}</span>
+                </div>
+              )}
+
+              <button
+                disabled={isSaving}
+                onClick={handleSaveProfile}
+                className="w-full py-2.5 rounded-xl bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-blue-500/20"
+              >
+                {isSaving ? 'Đang lưu...' : 'Lưu Thay Đổi'}
+              </button>
+            </div>
+          ) : (
+            /* Sub-view: Change Password */
+            <div className="p-5 flex flex-col space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  Mật khẩu mới:
+                </label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Tối thiểu 6 ký tự (Hoa, thường, số, ký tự đặc biệt)..."
+                  className="w-full h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-[#2481cc] border border-transparent dark:border-slate-700/60"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  Xác nhận mật khẩu mới:
+                </label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Nhập lại mật khẩu mới..."
+                  className="w-full h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-[#2481cc] border border-transparent dark:border-slate-700/60"
+                />
+              </div>
+
+              {errorMsg && (
+                <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs">
+                  {errorMsg}
+                </div>
+              )}
+
+              {successMsg && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-1.5">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{successMsg}</span>
+                </div>
+              )}
+
+              <button
+                disabled={isSaving}
+                onClick={handleChangePassword}
+                className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-violet-500/20"
+              >
+                {isSaving ? 'Đang cập nhật...' : 'Cập Nhật Mật Khẩu'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

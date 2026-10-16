@@ -53,6 +53,10 @@ export const apiService = {
     return await this.sendRequest('register', { username, password, full_name });
   },
 
+  async updateProfile(userId: number, data: { full_name?: string; avatar_color?: string; new_password?: string }): Promise<{ success: boolean; user?: User; error?: string }> {
+    return await this.sendRequest('update_profile', { user_id: userId, ...data });
+  },
+
   // Conversations
   async getConversations(userId: number): Promise<{ success: boolean; conversations: Conversation[] }> {
     const res = await this.sendRequest('get_conversations', { user_id: userId });
