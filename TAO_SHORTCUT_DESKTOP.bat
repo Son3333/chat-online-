@@ -17,3 +17,4 @@ echo [*] Tu nay ban chi can ra ngoai Desktop nhap dup vao bieu tuong la dung duo
 echo     (May chu va Ung dung se tu dong chay ngam, khong can mo VS Code).
 echo.
 ping 127.0.0.1 -n 4 >nul
+

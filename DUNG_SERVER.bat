@@ -24,3 +24,4 @@ echo [OK] DA DUNG TOAN BO MAY CHU THANH CONG!
 echo ===================================================================
 echo.
 ping 127.0.0.1 -n 3 >nul
+
