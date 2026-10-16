@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Pin, Reply, Trash2, Copy, FileText, Download, ExternalLink, Heart, Video, MapPin, Navigation } from 'lucide-react';
+import { Check, Pin, Reply, Trash2, Copy, FileText, Download, ExternalLink, Heart, Video, MapPin, Navigation, FolderArchive } from 'lucide-react';
 import { Message } from '../../types';
 import { formatTime, formatFileSize } from '../../lib/utils';
 import { useChat } from '../../context/ChatContext';
@@ -371,24 +371,35 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
         )}
 
         {/* 4. File / Document Message */}
-        {isFile && !isDeleted && (
-          <div className="my-1 p-2.5 rounded-xl bg-black/5 dark:bg-black/25 flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-lg bg-[#2481cc]/15 text-[#2481cc] flex items-center justify-center">
-              <FileText className="w-5 h-5" />
+        {isFile && !isDeleted && (() => {
+          const isZip = /\.(zip|rar|7z|tar|gz|bz2)$/i.test(message.original_name || '');
+          return (
+            <div className="my-1 p-2.5 rounded-xl bg-black/5 dark:bg-black/25 flex items-center space-x-3">
+              <div
+                className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                  isZip
+                    ? 'bg-amber-500/15 text-amber-500'
+                    : 'bg-[#2481cc]/15 text-[#2481cc]'
+                }`}
+              >
+                {isZip ? <FolderArchive className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="font-semibold text-xs truncate block">{message.original_name || 'Tài liệu'}</span>
+                <span className="text-[10px] opacity-70 block">
+                  {formatFileSize(message.file_size)} {isZip ? '• Tệp nén' : ''}
+                </span>
+              </div>
+              <button
+                onClick={handleDownloadFile}
+                title="Tải về máy"
+                className="p-1.5 rounded-lg bg-[#2481cc] hover:bg-[#1d73b8] text-white transition-colors"
+              >
+                <Download className="w-4 h-4" />
+              </button>
             </div>
-            <div className="flex-1 min-w-0">
-              <span className="font-semibold text-xs truncate block">{message.original_name || 'Tài liệu'}</span>
-              <span className="text-[10px] opacity-70 block">{formatFileSize(message.file_size)}</span>
-            </div>
-            <button
-              onClick={handleDownloadFile}
-              title="Tải về máy"
-              className="p-1.5 rounded-lg bg-[#2481cc] hover:bg-[#1d73b8] text-white transition-colors"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+          );
+        })()}
 
         {/* 5. Text Message Content */}
         {message.content && (!isImage && !isVideo && !isLocation || isDeleted) && (
