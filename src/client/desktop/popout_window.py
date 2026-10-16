@@ -182,3 +182,157 @@ class PopoutChatWindow(ctk.CTkToplevel):
         except Exception:
             pass
 
+
+class PopoutInfoWindow(ctk.CTkToplevel):
+    """Cửa sổ thông tin cuộc hội thoại độc lập (Pop-out Info Window)."""
+    def __init__(self, master, current_user: dict, network_client, conversation_id: int, conv_data: dict, pinned_message=None, subtitle=""):
+        super().__init__(master)
+        self.current_user = current_user
+        self.net = network_client
+        self.conv_id = conversation_id
+        self.conv_data = conv_data or {}
+        self.pinned_message = pinned_message
+        self.subtitle = subtitle
+        self.is_topmost = False
+
+        title = self.conv_data.get("title", f"Hội thoại #{self.conv_id}")
+        self.title(f"ℹ️ Thông tin - {title}")
+        self.geometry("380x640")
+        self.minsize(340, 480)
+
+        self._build_ui()
+        self._load_data()
+
+    def _build_ui(self):
+        # 1. Header Bar
+        header = ctk.CTkFrame(self, height=45, corner_radius=0, fg_color=("white", "#1E293B"))
+        header.pack(fill="x")
+
+        lbl_hdr = ctk.CTkLabel(header, text="Thông tin hội thoại", font=ctk.CTkFont(size=14, weight="bold"))
+        lbl_hdr.pack(side="left", padx=12, pady=10)
+
+        self.btn_pin = ctk.CTkButton(
+            header, text="📌 Ghim", width=70, height=28,
+            font=ctk.CTkFont(size=11),
+            fg_color=("#F1F5F9", "#334155"),
+            text_color=("#0F172A", "#F8FAFC"),
+            command=self._toggle_topmost
+        )
+        self.btn_pin.pack(side="right", padx=10, pady=8)
+
+        # 2. Main Scrollable Container
+        scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        scroll.pack(fill="both", expand=True, padx=12, pady=8)
+
+        conv = self.conv_data
+        title = conv.get("title", "Hội thoại")
+        avatar_col = conv.get("avatar_color", "#2563EB")
+
+        # Avatar circle
+        av_btn = ctk.CTkButton(
+            scroll,
+            text=title[:1].upper(),
+            width=76, height=76,
+            corner_radius=38,
+            fg_color=avatar_col,
+            text_color="white",
+            font=ctk.CTkFont(size=28, weight="bold"),
+            state="disabled"
+        )
+        av_btn.pack(pady=(12, 6))
+
+        ctk.CTkLabel(scroll, text=title, font=ctk.CTkFont(size=16, weight="bold")).pack()
+        if self.subtitle:
+            ctk.CTkLabel(scroll, text=self.subtitle, font=ctk.CTkFont(size=11), text_color="gray60").pack(pady=(2, 10))
+
+        # Tabs for Media, Files & Pinned
+        self.tabs = ctk.CTkTabview(scroll, height=380)
+        self.tabs.pack(fill="both", expand=True, pady=6)
+
+        self.tab_media = self.tabs.add("🖼️ Ảnh")
+        self.tab_files = self.tabs.add("📁 Tệp tin")
+        self.tab_pinned = self.tabs.add("📌 Ghim")
+
+    def _toggle_topmost(self):
+        self.is_topmost = not self.is_topmost
+        self.attributes("-topmost", self.is_topmost)
+        if self.is_topmost:
+            self.btn_pin.configure(fg_color="#3B82F6", text_color="white", text="📌 Đã ghim")
+        else:
+            self.btn_pin.configure(fg_color=("#F1F5F9", "#334155"), text_color=("#0F172A", "#F8FAFC"), text="📌 Ghim")
+
+    def _load_data(self):
+        def _task():
+            res = self.net.get_messages(self.conv_id)
+            if not res or "messages" not in res:
+                return
+            msgs = res["messages"]
+            img_msgs = [m for m in msgs if m.get("message_type") == "image"]
+            file_msgs = [m for m in msgs if m.get("message_type") == "file"]
+
+            def _render():
+                # 1. Render Media
+                if img_msgs:
+                    m_scroll = ctk.CTkScrollableFrame(self.tab_media, fg_color="transparent")
+                    m_scroll.pack(fill="both", expand=True)
+                    for im in reversed(img_msgs):
+                        orig_name = im.get("original_name", "Ảnh")
+                        row = ctk.CTkFrame(m_scroll, fg_color=("#F8FAFC", "#0F172A"), corner_radius=6)
+                        row.pack(fill="x", pady=2, padx=2)
+                        ctk.CTkLabel(row, text="🖼️", font=ctk.CTkFont(size=14)).pack(side="left", padx=6)
+                        ctk.CTkLabel(row, text=orig_name[:20], font=ctk.CTkFont(size=11)).pack(side="left", fill="x", expand=True)
+                        ctk.CTkButton(row, text="Tải", width=40, height=24, font=ctk.CTkFont(size=10),
+                                      command=lambda fid=im.get("file_id"), fn=orig_name: self._download_file(fid, fn)).pack(side="right", padx=4)
+                else:
+                    ctk.CTkLabel(self.tab_media, text="Chưa có hình ảnh nào", font=ctk.CTkFont(size=11), text_color="gray60").pack(pady=20)
+
+                # 2. Render Files
+                if file_msgs:
+                    f_scroll = ctk.CTkScrollableFrame(self.tab_files, fg_color="transparent")
+                    f_scroll.pack(fill="both", expand=True)
+                    for fm in reversed(file_msgs):
+                        orig_name = fm.get("original_name", "Tài liệu")
+                        row = ctk.CTkFrame(f_scroll, fg_color=("#F8FAFC", "#0F172A"), corner_radius=6)
+                        row.pack(fill="x", pady=2, padx=2)
+                        ctk.CTkLabel(row, text="📄", font=ctk.CTkFont(size=14)).pack(side="left", padx=6)
+                        ctk.CTkLabel(row, text=orig_name[:18], font=ctk.CTkFont(size=11)).pack(side="left", fill="x", expand=True)
+                        ctk.CTkButton(row, text="Tải", width=40, height=24, font=ctk.CTkFont(size=10),
+                                      command=lambda fid=fm.get("file_id"), fn=orig_name: self._download_file(fid, fn)).pack(side="right", padx=4)
+                else:
+                    ctk.CTkLabel(self.tab_files, text="Chưa có tệp tin nào", font=ctk.CTkFont(size=11), text_color="gray60").pack(pady=20)
+
+                # 3. Render Pinned
+                if self.pinned_message:
+                    pin_box = ctk.CTkFrame(self.tab_pinned, fg_color=("#F0FDF4", "#064E3B"), corner_radius=8)
+                    pin_box.pack(fill="x", padx=4, pady=8)
+                    ctk.CTkLabel(pin_box, text=f"📌 {self.pinned_message.get('sender_name', 'Người dùng')}:",
+                                 font=ctk.CTkFont(size=11, weight="bold")).pack(anchor="w", padx=8, pady=(6, 2))
+                    ctk.CTkLabel(pin_box, text=self.pinned_message.get("content", ""),
+                                 font=ctk.CTkFont(size=11), wraplength=260, justify="left").pack(anchor="w", padx=8, pady=(0, 6))
+                else:
+                    ctk.CTkLabel(self.tab_pinned, text="Chưa có tin nhắn nào được ghim", font=ctk.CTkFont(size=11), text_color="gray60").pack(pady=20)
+
+            self.after(0, _render)
+        threading.Thread(target=_task, daemon=True).start()
+
+    def _download_file(self, file_id: int, default_name: str):
+        if not file_id:
+            return
+        save_path = filedialog.asksaveasfilename(initialfile=default_name, title="Lưu tệp tin", defaultextension=".*")
+        if not save_path:
+            return
+        def _dl():
+            res = self.net.download_file(file_id)
+            if res and res.get("success"):
+                import base64
+                data = base64.b64decode(res.get("file_data", ""))
+                with open(save_path, "wb") as f:
+                    f.write(data)
+                from tkinter import messagebox
+                self.after(0, lambda: messagebox.showinfo("Thành công", f"Đã lưu tệp tại:\n{save_path}"))
+            else:
+                from tkinter import messagebox
+                self.after(0, lambda: messagebox.showerror("Lỗi", "Không thể tải tệp tin!"))
+        threading.Thread(target=_dl, daemon=True).start()
+
+

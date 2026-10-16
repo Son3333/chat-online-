@@ -12,7 +12,7 @@ from src.client.ui.chat_bubble import ChatBubble
 from src.client.ui.create_group_dialog import CreateGroupDialog
 from src.client.call.call_window import IncomingCallDialog, ActiveCallWindow
 from src.client.desktop.toast import ToastNotification
-from src.client.desktop.popout_window import PopoutChatWindow
+from src.client.desktop.popout_window import PopoutChatWindow, PopoutInfoWindow
 
 class MainWindow(ctk.CTkFrame):
     def __init__(self, master, current_user: dict, network_client, on_logout):
@@ -2474,6 +2474,23 @@ class MainWindow(ctk.CTkFrame):
             self.btn_info.configure(fg_color="#3B82F6", text_color="white")
             self._populate_info_sidebar()
 
+    def popout_info_window(self):
+        """Mở bảng thông tin hội thoại thành một cửa sổ riêng độc lập."""
+        if not self.active_conv_id or not self.active_conv_data:
+            return
+        if self.info_sidebar_open:
+            self.toggle_info_sidebar()
+        st_text = self.lbl_chat_subtitle.cget("text") if hasattr(self, "lbl_chat_subtitle") else ""
+        PopoutInfoWindow(
+            self.master,
+            self.current_user,
+            self.net,
+            self.active_conv_id,
+            self.active_conv_data,
+            pinned_message=self.current_pinned_message,
+            subtitle=st_text
+        )
+
     def _build_info_sidebar(self):
         self.info_sidebar = ctk.CTkFrame(self, width=290, corner_radius=0, fg_color=("white", "#1E293B"))
 
@@ -2490,6 +2507,15 @@ class MainWindow(ctk.CTkFrame):
             command=self.toggle_info_sidebar
         )
         btn_close.pack(side="right")
+
+        btn_pop_info = ctk.CTkButton(
+            sb_header, text="🗗 Hiện riêng", width=78, height=26,
+            font=ctk.CTkFont(size=11),
+            fg_color=("#F1F5F9", "#334155"), text_color=("#0284C7", "#38BDF8"),
+            hover_color=("#E2E8F0", "#475569"),
+            command=self.popout_info_window
+        )
+        btn_pop_info.pack(side="right", padx=(0, 6))
 
         # Scrollable Content
         self.info_scroll = ctk.CTkScrollableFrame(self.info_sidebar, fg_color="transparent")
@@ -2528,8 +2554,15 @@ class MainWindow(ctk.CTkFrame):
         act_row = ctk.CTkFrame(self.info_scroll, fg_color="transparent")
         act_row.pack(fill="x", pady=(0, 10))
 
-        btn_pop = ctk.CTkButton(act_row, text="↗️ Tách cửa sổ", height=30, font=ctk.CTkFont(size=11),
+        btn_pop_info = ctk.CTkButton(act_row, text="🗗 Mở cửa sổ riêng", height=30, font=ctk.CTkFont(size=11, weight="bold"),
+                                     fg_color=("#EFF6FF", "#1E3A8A"), text_color=("#2563EB", "#60A5FA"),
+                                     hover_color=("#DBEAFE", "#1E40AF"),
+                                     command=self.popout_info_window)
+        btn_pop_info.pack(side="left", fill="x", expand=True, padx=2)
+
+        btn_pop = ctk.CTkButton(act_row, text="💬 Tách chat", height=30, font=ctk.CTkFont(size=11),
                                 fg_color=("#F1F5F9", "#334155"), text_color=("#0F172A", "#F8FAFC"),
+                                hover_color=("#E2E8F0", "#475569"),
                                 command=self.popout_current_conversation)
         btn_pop.pack(side="left", fill="x", expand=True, padx=2)
 
