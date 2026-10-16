@@ -1,6 +1,7 @@
 # ĐỒ ÁN CHUYÊN NGÀNH CÔNG NGHỆ PHẦN MỀM
-## ĐỀ TÀI: XÂY DỰNG ỨNG DỤNG NHẮN TIN VÀ TRUYỀN THÔNG TIN
-### Nhóm thực hiện: Nhóm 05 - Lớp: DCCNTT.14.5
+## ĐỀ TÀI: XÂY DỰNG ỨNG DỤNG NHẮN TIN VÀ TRUYỀN THÔNG TIN DESKTOP
+### ỨNG DỤNG: VIBE NGƯỜI TỐT
+**Nhóm thực hiện**: Nhóm 05 - Lớp: DCCNTT.14.5  
 **Trường Đại học Công nghệ Đông Á - Khoa Công nghệ Thông tin**
 
 ---
@@ -14,171 +15,113 @@
 
 ---
 
-[![CI/CD Pipeline](https://github.com/phatdat08/ChatApp_Nhom5/actions/workflows/ci.yml/badge.svg)](https://github.com/phatdat08/ChatApp_Nhom5/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/Pytest-39%20Passed%20(100%25)-brightgreen)
-![Security Audit](https://img.shields.io/badge/Bandit%20Audit-0%20Issues%20(Safe)-blue)
-![Dependencies](https://img.shields.io/badge/pip--audit-0%20Vulnerabilities-success)
-![Linter](https://img.shields.io/badge/Ruff-Passed-informational)
+## 🌟 Giới thiệu sản phẩm: Vibe Người Tốt
+
+**Vibe Người Tốt** là ứng dụng nhắn tin desktop hiện đại, tốc độ cao và bảo mật được xây dựng theo kiến trúc đa nền tảng:
+- **Giao diện Client**: React 18, TypeScript (Strict Mode), Vite, Tailwind CSS, Lucide Icons, chạy trên nền **Electron Desktop**.
+- **Máy chủ Backend**: Python 3.13 TCP Socket đa luồng (Multi-threading), hỗ trợ giao tiếp qua mạng diện rộng **WAN (Internet)** qua đường hầm TCP `bore.pub:38888`.
+- **Cơ sở dữ liệu**: SQLite (`src/server/chat_database.db`), bảo vệ mật khẩu bằng băm PBKDF2-HMAC-SHA256 (100.000 vòng lặp) kèm salt 16 bytes.
+- **Biểu tượng thương hiệu**: Logo chính thức Cậu bé bút chì Shin-chan (`app.ico`, `logo.png`) hiển thị đồng bộ trên Desktop, thanh tiêu đề, màn hình chào mừng và hộp thoại đăng nhập.
 
 ---
 
-## 🌟 Giới thiệu sản phẩm (Desktop Application)
-Ứng dụng nhắn tin và truyền thông tin là một phần mềm Desktop hiện đại xây dựng trên nền tảng **Python + CustomTkinter + TCP Socket thời gian thực + SQLite Database**, được thiết kế theo phong cách giao diện phẳng tối/sáng hiện đại (tương tự Telegram, Discord, Slack), hỗ trợ hoạt động trực tuyến hoàn toàn qua **Mạng diện rộng WAN (Internet)**.
+## 🚀 Hướng dẫn khởi chạy nhanh (1-Click All-In-One)
 
-### Các tính năng chính:
-- **Cơ chế 1-Click Tự động hóa**: Người dùng tải về chỉ cần nhấp đúp file `.bat`, ứng dụng sẽ tự động kiểm tra, cài đặt ngầm các thư viện cần thiết, tự động khởi động máy chủ trực tuyến và mở giao diện ứng dụng.
-- **Tự động mở Server Online WAN**: Sử dụng công nghệ TCP Tunneling không giới hạn, tự động đưa máy chủ lên Internet (`bore.pub:38888`) giúp mọi máy tính ở các mạng WiFi, 4G khác nhau đều kết nối được ngay lập tức.
-- **Xác thực người dùng & Bảo mật**: Đăng ký tài khoản, kiểm tra độ mạnh mật khẩu (chữ hoa, chữ thường, số, ký tự đặc biệt), mật khẩu băm SHA-256 + Salt. Tự động forced logout tài khoản trên thiết bị cũ khi đăng nhập thiết bị mới.
-- **Đàm thoại trực tuyến & Chia sẻ màn hình (Voice / Video Call & Screen Sharing)**:
-  - 📞 **Gọi thoại (Voice Call)** thời gian thực với độ trễ thấp < 120ms.
-  - 📹 **Gọi Video (Video Call)** độ nét cao (20-30 FPS) hiển thị song song PIP hai khung hình camera.
-  - 🖥️ **Chia sẻ màn hình (Screen Sharing)**: Chuyển đổi linh hoạt từ camera sang chia sẻ trực tiếp toàn màn hình máy tính với đối phương.
-- **Nhắn tin thời gian thực & Tương tác chuyên sâu (Interactive Messaging)**:
-  - Nhắn tin cá nhân 1-1 và Nhắn tin nhóm (Group Chat) chống spam, kiểm soát tần suất tạo nhóm.
-  - ↩️ **Trả lời / Trích dẫn tin nhắn (Reply / Quote)**: Hiển thị khung trích dẫn tin nhắn gốc kèm tên người gửi, bấm vào tự cuộn đến tin nhắn cha.
-  - ❤️ **Thả biểu cảm tin nhắn (Message Reactions)**: Thả và gỡ cảm xúc (❤️, 👍, 😂, 😮, 😢, 😡) với huy hiệu đếm số lượng người thả.
-  - 📌 **Ghim tin nhắn quan trọng (Pin Message)**: Ghim tin nhắn lên thanh tiêu đề hội thoại cho tất cả thành viên dễ theo dõi.
-  - ☁️ **Không gian "Cloud của tôi" (Saved Messages)**: Lưu trữ tin nhắn, ghi chú, ảnh và tệp tài liệu cá nhân trên đám mây riêng biệt.
-  - 🗑️ **Thu hồi tin nhắn (Unsend / Recall)**: Thu hồi tin nhắn đã gửi ở cả hai phía người gửi và người nhận.
-  - 🚫 **Chặn người dùng (Block / Unblock)**: Chặn tài khoản gửi tin nhắn hoặc gọi điện làm phiền.
-  - 💬 **Đang soạn tin (Typing indicator)**: Báo trạng thái đối phương đang gõ phím.
-- **Bộ công cụ Desktop Chuyên nghiệp (Native Desktop Integration)**:
-  - 📥 **Khay hệ thống (System Tray)**: Bấm nút [X] ứng dụng thu nhỏ chạy ngầm dưới khay; icon tự động hiện chấm đỏ đếm số tin nhắn chưa đọc kèm tooltip tóm tắt.
-  - 📷 **Công cụ Chụp màn hình tích hợp (`Ctrl + Alt + A`)**: Kính lúp Pixel Loupe phóng đại từng điểm ảnh, thanh công cụ vẽ chú thích (Hình chữ nhật, Mũi tên, Chữ viết, Bộ đếm số bước `1-2-3`, Làm mờ nhạy cảm Mosaic/Blur). Tự lưu clipboard và gửi thẳng vào khung chat.
-  - 🔍 **Thanh tìm kiếm & Lệnh nhanh Quick Switcher (`Ctrl + K`)**: Command Palette tìm kiếm tức thời hội thoại và thực thi lệnh tắt trong tích tắc.
-  - 🔒 **Khóa bảo vệ nhanh Quick Lock (`Ctrl + L`)**: Khóa màn hình tức thời khi rời máy tính, yêu cầu mật khẩu để mở khóa.
-  - 🪟 **Tách cửa sổ chat riêng (Pop-out Window)**: Mở cuộc trò chuyện trong một cửa sổ độc lập để theo dõi song song nhiều việc.
-  - 📌 **Ghim cửa sổ luôn nổi trên cùng (Always on Top)**.
-  - 🖥️ **Tự động xử lý rút màn hình phụ (Off-screen recovery)**: Tự phát hiện và đưa cửa sổ về màn hình chính nếu tọa độ lưu bị văng ra ngoài.
-  - 🔔 **Thông báo Toast góc màn hình**: Pop-up thông báo hiện đại kèm avatar người gửi và tự đóng sau 4 giây.
-- **Truyền tải và chia sẻ tệp tin đa phương tiện**:
-  - Gửi hình ảnh (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`).
-  - Gửi tài liệu và tệp nén (`.pdf`, `.docx`, `.xlsx`, `.zip`, `.txt`...).
-  - Tải về tệp tin trực tiếp về máy tính an toàn kèm định lượng dung lượng (KB/MB).
-- **Giao diện hiện đại**:
-  - Hỗ trợ chuyển đổi mượt mà giữa chế độ Giao diện Tối (Dark Mode) và Giao diện Sáng (Light Mode).
+### 1. Dành cho người dùng & Giảng viên chấm thi:
+Chỉ cần nhấp đúp chuột vào file:
+👉 **`CHAY_UNG_DUNG.bat`**
+
+**Hệ thống sẽ tự động hoàn toàn:**
+1. **Kiểm tra biểu tượng Desktop**: Nếu màn hình Desktop chưa có shortcut **Vibe Người Tốt**, hệ thống sẽ tự động tạo mới; nếu đã có sẵn thì giữ nguyên.
+2. **Tự khởi động cùng Windows (Startup)**: Đăng ký Server WAN vào Windows Startup. Kể từ nay, mỗi khi máy tính bật lên là Server đã tự động chạy ngầm sẵn sàng.
+3. **Kiểm tra máy chủ**: Tự động kích hoạt Server WAN (`127.0.0.1:8888` + `bore.pub:38888`) nếu chưa chạy.
+4. **Mở ứng dụng Desktop**: Khởi chạy ngay cửa sổ ứng dụng **Vibe Người Tốt** trên màn hình.
 
 ---
 
-## 🚀 Hướng dẫn khởi chạy khi tải từ GitHub về
+## ⚡ Các tính năng nổi bật
 
-### 1. Dành cho người dùng (Khởi động 1-Click Online):
-* Sau khi tải mã nguồn từ GitHub về (hoặc giải nén file ZIP), bạn chỉ cần **nhấp đúp chuột vào file**:
-  👉 **`CHAY_UNG_DUNG.bat`**
-* **Hệ thống sẽ tự động hoàn toàn:**
-  1. Kiểm tra môi trường Python.
-  2. Tự động cài đặt ngầm các thư viện cần thiết (`customtkinter`, `pillow`, `pyngrok`).
-  3. Tự động khởi động Chat Server trực tuyến (Online WAN).
-  4. Mở cửa sổ giao diện ứng dụng Desktop lên màn hình chính và kết nối thẳng vào Server Online!
+### 1. Cơ chế Tự động hóa Thông minh (All-in-One Automation)
+- **Tự động hóa Shortcut**: Nhận diện thông minh trên Desktop, không bao giờ tạo trùng lặp.
+- **Server WAN ngầm vĩnh viễn**: Khởi động cùng Windows, không cần bật server thủ công mỗi lần nhắn tin.
+- **Đồng bộ Git 2 giây (Auto-Update Listener)**:
+  - Cứ mỗi 2 giây, ứng dụng tự động kiểm tra xem trên GitHub repository có bản cập nhật mới không.
+  - Khi có cập nhật mới, ứng dụng hiển thị thông báo với 2 lựa chọn:
+    - **`[Để sau]`**: Tiếp tục nhắn tin bình thường, không bao giờ ép buộc cập nhật.
+    - **`[Cập nhật ngay]`**: Tự động pull code mới, biên dịch và khởi động lại phiên bản mới trong tích tắc.
 
----
+### 2. Nhắn tin & Tương tác chuyên sâu (Interactive Messaging)
+- **Nhắn tin văn bản thời gian thực**: Cá nhân 1-1 và Nhóm chat (Group Chat).
+- **Trả lời trích dẫn (Reply / Quote)**: Trích dẫn tin nhắn gốc kèm tên người gửi, bấm vào tự cuộn đến tin nhắn cha.
+- **Thả cảm xúc (Reactions)**: Thả và gỡ cảm xúc (❤️, 👍, 😂, 😮, 😢, 🔥) với bộ đếm số lượng trực tiếp.
+- **Ghim tin nhắn (Pin Message)**: Ghim tin nhắn quan trọng lên đầu cuộc trò chuyện.
+- **Thu hồi tin nhắn (Recall)**: Thu hồi tin nhắn ở cả 2 phía người gửi và người nhận.
+- **Cloud cá nhân (Saved Messages)**: Lưu trữ ghi chú, tài liệu, hình ảnh cá nhân trên đám mây riêng biệt.
+- **Tìm kiếm toàn cục (@username / #ID)**: Tra cứu nhanh mọi tài khoản trong hệ thống và bấm nút nhắn tin ngay.
+- **Danh bạ & Bạn bè**: Gửi lời mời kết bạn, đồng ý/từ chối lời mời, hủy kết bạn và chặn người dùng làm phiền.
+- **Trạng thái đối phương**: Chấm xanh Online và dòng chữ "Đang soạn tin..." (Typing indicator).
 
-### 2. Cách kết nối và chat cùng bạn bè qua Internet:
-* **Máy Chủ (Host)**: Bấm `CHAY_UNG_DUNG.bat` (hoặc `CHAY_SERVER_WAN.bat`). Sau khi đăng nhập, nhấp nút **`🌐 bore.pub:28888 📋`** trên thanh tiêu đề để sao chép địa chỉ gửi cho bạn bè.
-* **Máy Bạn Bè**:
-  - Mở ứng dụng qua file `CHAY_UNG_DUNG.bat`.
-  - Nếu muốn kết nối vào máy chủ riêng của bạn, nhấp vào: **`⚙️ Cài đặt IP Máy chủ (LAN / WAN / Internet)`**.
-  - Nhập địa chỉ bạn gửi (Mặc định đã tự điền sẵn `bore.pub:28888`).
-  - Bấm **Đăng ký** hoặc **Đăng nhập** $\rightarrow$ Có thể chat nhóm, chat riêng và gửi file xuyên Internet!
+### 3. Đàm thoại Trực tuyến (Voice & Video Call Signaling)
+- 📞 Gọi thoại (Voice Call) kết nối nhanh chóng.
+- 📹 Gọi Video (Video Call) với đồng hồ đếm thời gian thực và quản lý trạng thái kết nối.
+
+### 4. Tiện ích Desktop Chuyên nghiệp
+- 🔒 **Khóa màn hình nhanh (`Ctrl + L`)**: Khóa ứng dụng tức thời bảo vệ sự riêng tư khi rời bàn làm việc.
+- 📌 **Ghim cửa sổ luôn nổi (Always on Top)**: Ghim cửa sổ chat trên cùng để làm việc đa nhiệm.
+- 🔄 **Làm mới dữ liệu (`Ctrl + R`)**: Nạp lại dữ liệu cuộc trò chuyện ngay lập tức.
+- 🌓 **Giao diện Tối / Sáng (Dark / Light Mode)**: Chuyển đổi linh hoạt theo sở thích.
 
 ---
 
 ## 📁 Cấu trúc thư mục dự án
 
 ```
-├── .github/workflows/ci.yml  # Pipeline CI/CD tự động (Lint, Test, Package EXE)
-├── pyproject.toml            # Cấu hình chuẩn hóa Ruff Linter và Pytest
-├── tests/                    # Bộ kiểm thử tự động toàn diện (39 test cases, 100% Pass)
-│   ├── test_calling_feature.py # Kiểm thử toàn diện Đàm thoại trực tuyến Voice & Video Call
-│   ├── test_database.py      # Kiểm thử CSDL, mật khẩu, xác thực, danh bạ, tin nhắn
-│   ├── test_network_server.py# Kiểm thử tích hợp Socket TCP, handshake, broadcast
-│   ├── test_desktop_features.py# Kiểm thử Window Manager, phục hồi màn hình, formatters
-│   └── test_ui_smoke.py      # Kiểm thử khói Giao diện, Theme, ô tìm kiếm, nhập liệu
-├── reports/                  # Báo cáo kỹ thuật chi tiết sau kiểm toán
-│   ├── bug-report.md         # Danh sách và giải pháp 10 lỗi phát hiện
-│   ├── test-plan.md          # Kế hoạch và ma trận kiểm thử chi tiết (39 tests)
-│   ├── test-results.md       # Kết quả kiểm thử chi tiết (39 passed, 100%)
-│   ├── security-audit.md     # Báo cáo an ninh Bandit (0 Issues) và pip-audit
-│   └── ci-cd-setup.md        # Hướng dẫn quy trình CI/CD và debug GitHub Actions
+├── app.ico                    # Biểu tượng Windows Icon đa độ phân giải (Shin-chan)
+├── logo.png                   # Logo chính thức của ứng dụng
+├── CHAY_UNG_DUNG.bat          # File khởi chạy trọn gói 1-Click All-in-One
+├── CHAY_SERVER_WAN.bat        # Khởi động Server WAN kèm đường hầm bore.pub:38888
+├── DUNG_SERVER.bat            # Dọn dẹp và tắt toàn bộ tiến trình server và bore
+├── CAP_NHAT.bat               # Đồng bộ mã nguồn thủ công từ GitHub
+├── TAO_SHORTCUT_DESKTOP.bat   # Tạo lại biểu tượng lối tắt ngoài Desktop
 │
-├── CHAY_UNG_DUNG.bat         # File thực thi 1-Click (Tự cài ngầm thư viện + bật Server Online ngầm + mở App)
-├── CHAY_SERVER_WAN.bat       # Khởi động Chat Server mạng diện rộng WAN (Internet)
-├── CHAY_SERVER.bat           # Khởi động Chat Server mạng nội bộ (Port 8888)
-├── bore.exe                  # Tiện ích TCP Tunneling công cộng kết nối Internet không giới hạn
-├── run_server_wan.py         # Mã nguồn khởi động Server Online WAN
-├── run_server.py             # Mã nguồn khởi động Chat Server nội bộ
-├── run_client.py             # Mã nguồn giao diện Desktop Client
-├── launch.pyw                # Trình khởi chạy ngầm tự kết nối Server Online
-├── requirements.txt          # Danh sách thư viện phụ thuộc
-├── .gitignore                # File cấu hình bỏ qua rác khi đẩy lên GitHub
-├── README.md                 # Tài liệu hướng dẫn sử dụng
+├── frontend/                  # Mã nguồn ứng dụng Desktop (React + TypeScript + Electron)
+│   ├── electron/              # Electron Main Process & Preload Bridge
+│   │   ├── main.ts            # Quản lý cửa sổ, IPC, khởi chạy backend
+│   │   ├── preload.ts         # contextBridge an toàn (contextIsolation: true)
+│   │   ├── python_bridge.ts   # Cầu nối TCP Socket 4-byte BE Wire Client
+│   │   └── updater.ts         # Dịch vụ lắng nghe Git 2 giây & tự động cập nhật
+│   ├── src/                   # Giao diện người dùng React 18 + Tailwind CSS
+│   │   ├── app/               # Entry point App.tsx & Router
+│   │   ├── components/        # TitleBar, UpdateModal, Popout, các thành phần dùng chung
+│   │   ├── features/chat/     # Sidebar danh sách hội thoại, ChatArea, Composer, Bubbles
+│   │   ├── features/auth/     # Đăng nhập & Đăng ký tài khoản
+│   │   ├── features/contacts/ # Danh bạ, Lời mời kết bạn, Chặn
+│   │   ├── features/groups/   # Tạo nhóm chat
+│   │   ├── features/calls/    # Giao diện cuộc gọi Voice / Video
+│   │   ├── features/security/ # Màn hình khóa PIN Screen Lock
+│   │   └── services/          # apiService (API Client)
+│   ├── public/                # Logo, favicon và static assets
+│   ├── package.json           # Cấu hình dependency và build script
+│   └── vite.config.ts         # Cấu hình Vite build tool
 │
-├── src/
-│   ├── server/
-│   │   ├── server.py         # Multi-threaded TCP Socket Server (định tuyến packet JSON + framing)
-│   │   ├── database.py       # SQLite Database (Users, Friends, Conversations, Messages, Files)
-│   │   ├── chat_database.db  # CSDL SQLite (tự động khởi tạo bảng dữ liệu)
-│   │   └── uploads/          # Thư mục lưu trữ tệp và ảnh được gửi qua ứng dụng
-│   │
-│   └── client/
-│       ├── client_app.py     # Cửa sổ chính Desktop Client (giao diện Dark/Light Telegram-like)
-│       ├── network.py        # Tầng Socket Client đa luồng gửi/nhận thời gian thực
-│       ├── call/             # Mô-đun Đàm thoại trực tuyến Voice & Video Call
-│       │   └── call_window.py    # Giao diện gọi thoại/video, chia sẻ màn hình, phát chuông, streaming
-│       ├── desktop/          # Bộ mô-đun tích hợp sâu hệ thống Desktop
-│       │   ├── tray.py           # Quản lý System Tray, icon động, badge đếm tin chưa đọc
-│       │   ├── screenshot.py     # Chụp màn hình (Ctrl+Alt+A), Pixel loupe, thanh vẽ chú thích
-│       │   ├── quick_switcher.py # Command Palette tìm nhanh hội thoại & lệnh tắt (Ctrl+K)
-│       │   ├── quick_lock.py     # Khóa màn hình nhanh bảo vệ riêng tư (Ctrl+L)
-│       │   ├── popout_window.py  # Tách khung chat độc lập đa cửa sổ
-│       │   ├── toast.py          # Thông báo Toast hiện đại góc dưới màn hình
-│       │   └── window_manager.py # Quản lý tọa độ, Always on Top, chống văng màn hình phụ
-│       └── ui/
-│           ├── auth_frame.py         # Giao diện Đăng nhập / Đăng ký + Ghi nhớ mật khẩu
-│           ├── main_window.py        # Giao diện chính (Sidebar, Header, Danh sách đoạn chat, Nút sao chép IP)
-│           ├── chat_bubble.py        # Bong bóng chat tin nhắn, reply/quote, reactions, ghim tin nhắn
-│           └── create_group_dialog.py# Hộp thoại tạo nhóm chat mới
+├── src/server/                # Mã nguồn Python Core Backend
+│   ├── server.py              # TCP Socket Server đa luồng (port 8888)
+│   ├── database.py            # SQLite Database Manager
+│   ├── chat_database.db       # Cơ sở dữ liệu SQLite (bảo tồn toàn bộ lịch sử)
+│   └── uploads/               # Thư mục lưu trữ hình ảnh và tệp tin đính kèm
 │
-└── BÁO CÁO CÁC CHƯƠNG ĐỒ ÁN (FILE WORD .DOCX ĐỘC LẬP):
-    ├── BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 1 - NHÓM 5.docx
-    ├── BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 2 - NHÓM 5.docx
-    ├── BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 3 - NHÓM 5.docx
-    ├── BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 4 - NHÓM 5.docx
-    ├── BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 5 - KẾT LUẬN - NHÓM 5.docx
-    └── Nhóm-Lớp-KẾ HOẠCH THỰC HIỆN ĐỒ ÁN.docx
+├── scripts/                   # Kịch bản tự động hóa hệ thống
+│   ├── setup_all_in_one.py    # Kiểm tra desktop shortcut, Windows startup và server
+│   ├── create_shortcut.py     # Tạo lối tắt Windows hỗ trợ Unicode
+│   └── make_logo.py           # Bộ tạo logo và icon đa độ phân giải
+│
+└── docs/                      # Tài liệu và báo cáo kỹ thuật
+    ├── BAO_CAO_HOAN_THANH_DO_AN.md # Báo cáo tổng kết đồ án chuyên ngành chi tiết
+    └── MIGRATION_PLAN.md      # Tài liệu chi tiết kế hoạch và kết quả chuyển đổi kiến trúc
 ```
 
 ---
 
-## 🧪 Kiểm thử tự động & CI/CD Pipeline
-
-Dự án tích hợp đầy đủ bộ công cụ kiểm thử hiện đại và tự động hóa CI/CD:
-
-### 1. Lệnh chạy kiểm thử tự động (Pytest)
-```powershell
-# Chạy toàn bộ 33 test cases kèm thống kê độ bao phủ (Coverage)
-python -m pytest --cov=src --cov-report=term-missing tests/
-```
-
-### 2. Lệnh kiểm tra chất lượng mã nguồn & Linter (Ruff)
-```powershell
-python -m ruff check src
-```
-
-### 3. Lệnh quét an ninh mã nguồn (Bandit)
-```powershell
-python -m bandit -r src -ll
-```
-
-### 4. Lệnh kiểm tra lỗ hổng phụ thuộc (pip-audit)
-```powershell
-python -m pip_audit -r requirements.txt
-```
-
-### 5. Xem các báo cáo kỹ thuật chi tiết
-- 📋 [Báo cáo Kiểm toán và Sửa lỗi](reports/bug-report.md)
-- 📝 [Kế hoạch và Chiến lược Kiểm thử](reports/test-plan.md)
-- 📊 [Kết quả Kiểm thử Tự động Chi tiết](reports/test-results.md)
-- 🛡️ [Đánh giá An ninh & Bảo mật Phần mềm](reports/security-audit.md)
-- 🚀 [Hướng dẫn Thiết lập & Vận hành CI/CD](reports/ci-cd-setup.md)
-
+## 🤝 Bản quyền & Đóng góp
+Dự án được xây dựng và hoàn thiện bởi **Nhóm 05 - DCCNTT.14.5 - Đại học Công nghệ Đông Á**.  
+Mã nguồn lưu trữ tại GitHub: [https://github.com/Son3333/chat-online-](https://github.com/Son3333/chat-online-)
