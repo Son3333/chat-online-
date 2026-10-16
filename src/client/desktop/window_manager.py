@@ -99,3 +99,4 @@ def toggle_always_on_top(window: tk.Toplevel or tk.Tk) -> bool:
         return new_state
     except Exception:
         return False
+

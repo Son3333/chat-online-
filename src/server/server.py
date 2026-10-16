@@ -37,10 +37,10 @@ UPLOADS_DIR = os.path.join(SERVER_DIR, "uploads")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 class ChatServer:
-    def __init__(self, host: str = "0.0.0.0", port: int = 8888):
+    def __init__(self, host: str = "0.0.0.0", port: int = 8888, db: Optional[Database] = None):
         self.host = host
         self.port = port
-        self.db = Database()
+        self.db = db if db is not None else Database()
         self.running = False
         self.server_socket = None
         
@@ -51,12 +51,15 @@ class ChatServer:
         self.lock = threading.RLock()
         self.send_lock = threading.RLock()
 
-    def start(self):
+    def start(self, ready_event: Optional[threading.Event] = None):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_socket.bind((self.host, self.port))
         self.server_socket.listen(50)
+        self.port = self.server_socket.getsockname()[1]
         self.running = True
+        if ready_event:
+            ready_event.set()
         log(f"==================================================")
         log(f"CHAT SERVER DA KHOI CHAY!")
         log(f"   Dia chi may chu: {self.host}:{self.port}")
@@ -83,6 +86,14 @@ class ChatServer:
         if not self.running and not self.server_socket:
             return
         self.running = False
+        with self.lock:
+            for sock in list(self.socket_to_user.keys()):
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+            self.active_clients.clear()
+            self.socket_to_user.clear()
         if self.server_socket:
             try:
                 self.server_socket.close()
@@ -173,7 +184,17 @@ class ChatServer:
                                     self.send_packet(old_sock, kick_packet)
                                     if old_sock in self.socket_to_user:
                                         del self.socket_to_user[old_sock]
-                                    old_sock.close()
+                                    def _graceful_close(s):
+                                        time.sleep(0.1)
+                                        try:
+                                            s.shutdown(socket.SHUT_WR)
+                                        except Exception:
+                                            pass
+                                        try:
+                                            s.close()
+                                        except Exception:
+                                            pass
+                                    threading.Thread(target=_graceful_close, args=(old_sock,), daemon=True).start()
                                     log(f"[!] Tai khoan [ID: {user_id}] dang nhap thiet bi moi -> Da buoc dang xuat thiet bi cu.")
                                 except Exception:
                                     pass
@@ -211,13 +232,16 @@ class ChatServer:
             uid = None
             with self.lock:
                 if client_sock in self.socket_to_user:
-                    uid = self.socket_to_user.pop(client_sock)
+                    uid = self.socket_to_user.pop(client_sock, None)
                     if uid in self.active_clients and self.active_clients[uid] == client_sock:
                         del self.active_clients[uid]
-                    self.db.set_online_status(uid, False)
             if uid:
-                self.notify_status_change(uid, False)
-                log(f"[-] Nguoi dung (ID: {uid}) da ngat ket noi.")
+                try:
+                    self.db.set_online_status(uid, False)
+                    self.notify_status_change(uid, False)
+                    log(f"[-] Nguoi dung (ID: {uid}) da ngat ket noi.")
+                except Exception:
+                    pass
             try:
                 client_sock.close()
             except Exception:

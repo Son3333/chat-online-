@@ -100,3 +100,4 @@ class ToastNotification:
                 self.win.destroy()
         except Exception:
             pass
+

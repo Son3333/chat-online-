@@ -184,3 +184,4 @@ class PopoutChatWindow(ctk.CTkToplevel):
             self.messages_scroll._parent_canvas.yview_moveto(1.0)
         except Exception:
             pass
+

@@ -4,8 +4,13 @@ import threading
 import time
 import base64
 import zlib
-import winsound
 import os
+
+try:
+    import winsound
+    HAS_WINSOUND = True
+except ImportError:
+    HAS_WINSOUND = False
 
 try:
     import cv2
@@ -115,9 +120,10 @@ class IncomingCallDialog(ctk.CTkToplevel):
             start = time.time()
             while not self.answered and time.time() - start < 30:
                 try:
-                    winsound.Beep(587, 250)
-                    time.sleep(0.1)
-                    winsound.Beep(659, 350)
+                    if HAS_WINSOUND:
+                        winsound.Beep(587, 250)
+                        time.sleep(0.1)
+                        winsound.Beep(659, 350)
                     time.sleep(1.2)
                 except Exception:
                     time.sleep(1.5)

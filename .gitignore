@@ -36,5 +36,9 @@ cache/
 src/server/uploads/
 uploads/
 
-
-
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+window_state.json

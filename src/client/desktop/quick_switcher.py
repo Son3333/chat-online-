@@ -184,3 +184,4 @@ class QuickSwitcher:
                 self.win.destroy()
         except Exception:
             pass
+

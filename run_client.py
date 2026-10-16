@@ -2,7 +2,16 @@ import sys
 import io
 import os
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+if sys.stdout is not None:
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+if sys.stderr is not None:
+    try:
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src.client.client_app import run

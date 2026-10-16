@@ -1,2 +1,15 @@
+# Do an chuyen nganh Cong nghe phan mem - Nhom 05
+# Messaging & Media Transfer Application Dependencies
+
 customtkinter>=6.0.0
 pillow>=10.0.0
+pystray>=0.19.5
+mss>=10.0.0
+opencv-python>=4.8.0
+sounddevice>=0.4.6
+numpy>=1.24.0
+keyboard>=0.13.5
+
+# Testing & CI/CD
+pytest>=8.0.0
+pytest-cov>=4.1.0

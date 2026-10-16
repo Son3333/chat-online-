@@ -3,6 +3,7 @@ import os
 import hashlib
 import re
 import random
+from contextlib import contextmanager
 from datetime import datetime
 
 DB_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -32,10 +33,17 @@ class Database:
         self.db_path = db_path
         self.init_tables()
 
+    @contextmanager
     def get_connection(self):
         conn = sqlite3.connect(self.db_path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            yield conn
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     def generate_random_user_id(self, cursor) -> int:
         """Tạo mã ID ngẫu nhiên gồm 10 chữ số (từ 1,000,000,000 đến 9,999,999,999) và không trùng lặp."""

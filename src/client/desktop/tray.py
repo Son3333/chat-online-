@@ -152,3 +152,4 @@ class TrayManager:
                 self.icon.stop()
             except Exception:
                 pass
+

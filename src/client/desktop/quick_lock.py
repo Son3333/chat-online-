@@ -75,3 +75,4 @@ class QuickLockOverlay:
         if self.overlay and self.overlay.winfo_exists():
             self.overlay.destroy()
             self.overlay = None
+

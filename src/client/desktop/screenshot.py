@@ -388,3 +388,4 @@ class CaptureOverlay:
 def time_now():
     import time
     return time.time()
+
