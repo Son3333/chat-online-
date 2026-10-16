@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Pin, X, Download, MessageCircle } from 'lucide-react';
+import { Pin, X, Download, MessageCircle, ShieldAlert, UserPlus, Ban, Check, Clock } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { apiService } from '../../services/api';
 import APP_LOGO from '../../assets/logo';
@@ -8,7 +8,17 @@ import { ChatBubble } from './ChatBubble';
 import { ChatComposer } from './ChatComposer';
 
 export const ChatArea: React.FC = () => {
-  const { activeConv, messages, currentUser, pinnedMessage } = useChat();
+  const {
+    activeConv,
+    messages,
+    currentUser,
+    pinnedMessage,
+    friends,
+    pendingFriends,
+    sentFriendRequestIds,
+    refreshFriends,
+    refreshConversations,
+  } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [previewImage, setPreviewImage] = useState<{ fileId: string; name: string; url?: string } | null>(null);
   const [logoError, setLogoError] = useState(false);
@@ -44,12 +54,125 @@ export const ChatArea: React.FC = () => {
     );
   }
 
+  const isDirect = activeConv.type === 'direct';
+  const partnerId =
+    activeConv.partner_id ||
+    (typeof activeConv.id === 'string' && activeConv.id.startsWith('direct_')
+      ? Number(activeConv.id.replace('direct_', ''))
+      : undefined);
+
+  const isFriend = Boolean(partnerId && friends.some((f) => f.id === partnerId));
+  const isSent = Boolean(partnerId && sentFriendRequestIds.includes(partnerId));
+  const isIncoming = Boolean(partnerId && pendingFriends.some((p) => p.id === partnerId));
+  const showStrangerBanner = Boolean(isDirect && partnerId && !isFriend);
+
+  const handleAddFriend = async () => {
+    if (!currentUser || !partnerId) return;
+    const res = await apiService.sendFriendRequest(currentUser.id, partnerId);
+    if (res && res.success) {
+      await refreshFriends();
+    }
+  };
+
+  const handleAcceptRequest = async () => {
+    if (!currentUser || !partnerId) return;
+    const res = await apiService.acceptFriendRequest(currentUser.id, partnerId);
+    if (res && res.success) {
+      await refreshFriends();
+      await refreshConversations();
+    }
+  };
+
+  const handleRejectRequest = async () => {
+    if (!currentUser || !partnerId) return;
+    const res = await apiService.rejectFriendRequest(currentUser.id, partnerId);
+    if (res && res.success) {
+      await refreshFriends();
+    }
+  };
+
+  const handleBlockUser = async () => {
+    if (!currentUser || !partnerId) return;
+    if (!confirm(`Bạn có chắc chắn muốn chặn ${activeConv.title}? Họ sẽ không thể nhắn tin cho bạn.`)) return;
+    const res = await apiService.blockUser(currentUser.id, partnerId);
+    if (res && res.success) {
+      await refreshFriends();
+      await refreshConversations();
+    }
+  };
+
   return (
     <div className="flex-1 h-full flex flex-col bg-slate-50 dark:bg-[#0e1621] relative overflow-hidden">
       {/* 1. Header */}
       <ChatHeader />
 
-      {/* 2. Pinned Message Banner */}
+      {/* 2. Stranger Warning & Friend Request Banner */}
+      {showStrangerBanner && (
+        <div className="px-4 py-2 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent border-b border-amber-500/25 dark:border-amber-500/30 flex items-center justify-between text-xs animate-in slide-in-from-top-1 duration-150 select-none">
+          <div className="flex items-center space-x-2 mr-3 truncate">
+            <ShieldAlert className="w-4 h-4 text-amber-500 flex-shrink-0" />
+            <span className="text-slate-700 dark:text-slate-200 truncate">
+              {isIncoming ? (
+                <>
+                  <strong className="font-semibold text-slate-800 dark:text-slate-100">{activeConv.title}</strong> đã gửi lời mời kết bạn cho bạn.
+                </>
+              ) : isSent ? (
+                <>
+                  Đã gửi lời mời kết bạn tới <strong className="font-semibold text-slate-800 dark:text-slate-100">{activeConv.title}</strong> (Đang chờ đồng ý).
+                </>
+              ) : (
+                <>
+                  <strong className="font-semibold text-slate-800 dark:text-slate-100">{activeConv.title}</strong> chưa có trong danh bạ bạn bè.
+                </>
+              )}
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-1.5 flex-shrink-0">
+            {isIncoming ? (
+              <>
+                <button
+                  onClick={handleAcceptRequest}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-medium flex items-center space-x-1 shadow-sm transition-colors cursor-pointer"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Đồng ý</span>
+                </button>
+                <button
+                  onClick={handleRejectRequest}
+                  className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-medium transition-colors cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Từ chối</span>
+                </button>
+              </>
+            ) : isSent ? (
+              <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium flex items-center space-x-1">
+                <Clock className="w-3.5 h-3.5" />
+                <span>Chờ duyệt</span>
+              </span>
+            ) : (
+              <button
+                onClick={handleAddFriend}
+                className="px-2.5 py-1 rounded-lg bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-medium flex items-center space-x-1 shadow-sm transition-colors cursor-pointer"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Kết bạn</span>
+              </button>
+            )}
+
+            <button
+              onClick={handleBlockUser}
+              className="px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-600 hover:text-white border border-rose-500/20 font-medium flex items-center space-x-1 transition-colors cursor-pointer"
+            >
+              <Ban className="w-3.5 h-3.5" />
+              <span>Chặn</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Pinned Message Banner */}
       {pinnedMessage && (
         <div className="h-10 px-4 bg-slate-100 dark:bg-[#1a2530] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs animate-in slide-in-from-top-1 duration-150 select-none">
           <div className="flex items-center space-x-2 truncate">
@@ -62,7 +185,7 @@ export const ChatArea: React.FC = () => {
         </div>
       )}
 
-      {/* 3. Messages List */}
+      {/* 4. Messages List */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col space-y-1">
         {messages.map((msg) => {
           const isSelf = msg.sender_id === currentUser?.id;
