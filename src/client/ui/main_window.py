@@ -48,8 +48,8 @@ class MainWindow(ctk.CTkFrame):
         self.reply_target_message = None
         self.current_pinned_message = None
 
-        # Grid layout: Sidebar rộng 400px, Nội dung chính chiếm phần còn lại
-        self.grid_columnconfigure(0, weight=0, minsize=400) # Sidebar rộng chuẩn 400px
+        # Grid layout: Sidebar rộng 340px, Nội dung chính chiếm phần còn lại
+        self.grid_columnconfigure(0, weight=0, minsize=340) # Sidebar rộng tối ưu 340px
         self.grid_columnconfigure(1, weight=1)              # Chat Area
         self.grid_rowconfigure(0, weight=0)                 # Top Bar
         self.grid_rowconfigure(1, weight=1)                 # Main Content
@@ -460,9 +460,9 @@ class MainWindow(ctk.CTkFrame):
             ctk.set_appearance_mode("Light")
             self.theme_switch.configure(text="Giao diện Sáng")
 
-    # --- SIDEBAR (400px, XANH ĐEN #10192C) ---
+    # --- SIDEBAR (340px, XANH ĐEN #10192C) ---
     def _build_sidebar(self):
-        self.sidebar = ctk.CTkFrame(self, width=400, corner_radius=0, fg_color=("#F8FAFC", "#10192C"))
+        self.sidebar = ctk.CTkFrame(self, width=340, corner_radius=0, fg_color=("#F8FAFC", "#10192C"))
         self.sidebar.grid(row=1, column=0, sticky="nsew")
         self.sidebar.grid_propagate(False)
         self.sidebar.grid_columnconfigure(0, weight=1)
@@ -642,9 +642,9 @@ class MainWindow(ctk.CTkFrame):
             width=36,
             height=32,
             font=ctk.CTkFont(size=15),
-            fg_color=("#F1F5F9", "#334155"),
-            text_color=("#0284C7", "#38BDF8"),
-            hover_color=("#E2E8F0", "#475569"),
+            fg_color=("#EFF6FF", "#1E293B"),
+            text_color=("#2563EB", "#60A5FA"),
+            hover_color=("#DBEAFE", "#2563EB"),
             corner_radius=6,
             command=lambda: self.start_call("voice")
         )
@@ -656,9 +656,9 @@ class MainWindow(ctk.CTkFrame):
             width=36,
             height=32,
             font=ctk.CTkFont(size=15),
-            fg_color=("#F1F5F9", "#334155"),
-            text_color=("#10B981", "#34D399"),
-            hover_color=("#E2E8F0", "#475569"),
+            fg_color=("#ECFDF5", "#064E3B"),
+            text_color=("#059669", "#34D399"),
+            hover_color=("#D1FAE5", "#059669"),
             corner_radius=6,
             command=lambda: self.start_call("video")
         )
@@ -741,7 +741,7 @@ class MainWindow(ctk.CTkFrame):
         self.messages_scroll.grid_columnconfigure(0, weight=1)
 
         # 3. Bottom Input Bar (Row 3) (Xanh đen #10192C)
-        self.input_bar = ctk.CTkFrame(self.chat_active_frame, height=68, corner_radius=0, fg_color=("#FFFFFF", "#10192C"))
+        self.input_bar = ctk.CTkFrame(self.chat_active_frame, height=56, corner_radius=0, fg_color=("#FFFFFF", "#10192C"))
         self.input_bar.grid(row=3, column=0, sticky="ew")
 
         # Khung hiển thị Trả lời (Reply Bar - ẩn mặc định)
@@ -770,47 +770,6 @@ class MainWindow(ctk.CTkFrame):
             command=self._cancel_reply
         ).pack(side="right")
 
-        # Emoji bar buttons + Nút mở bảng Emoji đầy đủ (😊+)
-        self.emoji_bar = ctk.CTkFrame(self.input_bar, fg_color="transparent")
-        self.emoji_bar.pack(fill="x", padx=14, pady=(6, 2))
-
-        # Nút mở bảng chọn tất cả Emoji (Picker Popup phong cách Telegram)
-        self.btn_all_emojis = ctk.CTkButton(
-            self.emoji_bar,
-            text="😃 Bảng Emoji",
-            width=92,
-            height=26,
-            font=ctk.CTkFont(size=11, weight="bold"),
-            fg_color=("#E0E7FF", "#1E293B"),
-            text_color=("#4338CA", "#818CF8"),
-            hover_color=("#C7D2FE", "#334155"),
-            corner_radius=6,
-            command=self.toggle_emoji_picker
-        )
-        self.btn_all_emojis.pack(side="left", padx=(0, 6))
-
-        # Dải Emoji nhanh phong phú (Cảm xúc, Hành động, Biểu tượng)
-        quick_emojis = [
-            "😀", "😂", "🥰", "😎", "🥳", "🤔", "😭", "😡",
-            "👍", "👎", "👏", "🙏", "❤️", "🔥", "🎉", "✨",
-            "🚀", "💯", "🤝", "💪", "⭐", "☕", "🍕", "🎯"
-        ]
-        for em in quick_emojis:
-            b = ctk.CTkButton(
-                self.emoji_bar,
-                text=em,
-                width=26,
-                height=24,
-                font=ctk.CTkFont(size=13),
-                fg_color="transparent",
-                hover_color=("gray85", "#334155"),
-                command=lambda e=em: self.insert_emoji(e)
-            )
-            b.pack(side="left", padx=1)
-
-        # Popup Frame Bảng Emoji Đầy Đủ (Ẩn mặc định, hiển thị nổi khi bấm 😃 Bảng Emoji)
-        self.emoji_picker_popup = None
-
         # Toast banner màu cam nhấp nháy/hiển thị nhẹ nhàng khi mạng chập chờn (không bật popup cản trở)
         self.toast_banner = ctk.CTkFrame(self.input_bar, fg_color=("#FEF3C7", "#78350F"), corner_radius=6)
         self.toast_label = ctk.CTkLabel(
@@ -821,46 +780,64 @@ class MainWindow(ctk.CTkFrame):
         )
         self.toast_label.pack(side="left", padx=10, pady=3)
 
+        # Popup Frame Bảng Emoji Đầy Đủ (Ẩn mặc định, hiển thị nổi khi bấm 😃)
+        self.emoji_picker_popup = None
+
         # Input row
         self.input_row = ctk.CTkFrame(self.input_bar, fg_color="transparent")
-        self.input_row.pack(fill="x", padx=14, pady=(0, 8))
+        self.input_row.pack(fill="x", padx=14, pady=(8, 10))
         input_row = self.input_row
 
         # Nút Đính kèm tệp / ảnh
         self.btn_attach = ctk.CTkButton(
             input_row,
-            text="📎 Đính Kèm",
-            width=90,
+            text="📎",
+            width=38,
             height=38,
-            font=ctk.CTkFont(size=12, weight="bold"),
-            fg_color=("gray80", "#334155"),
-            hover_color=("gray70", "#475569"),
+            font=ctk.CTkFont(size=16),
+            fg_color=("gray85", "#1E293B"),
+            hover_color=("gray75", "#334155"),
             text_color=("black", "white"),
+            corner_radius=8,
             command=self.pick_and_send_file
         )
-        self.btn_attach.pack(side="left", padx=(0, 8))
+        self.btn_attach.pack(side="left", padx=(0, 6))
 
         # Entry soạn tin nhắn
         self.msg_entry = ctk.CTkEntry(
             input_row,
             placeholder_text="Nhập tin nhắn... (Nhấn Enter để gửi)",
-            height=40,
+            height=38,
             corner_radius=8,
             fg_color=("#F8FAFC", "#1E293B"),
             text_color=("black", "white"),
             font=ctk.CTkFont(family="Segoe UI", size=13)
         )
-        self.msg_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.msg_entry.pack(side="left", fill="x", expand=True, padx=(0, 6))
         self.msg_entry.bind("<Return>", lambda e: self.send_text_message())
         self.msg_entry.bind("<Key>", self._on_key_typing)
         self.msg_entry.bind("<Up>", self._on_msg_entry_up_arrow)
+
+        # Nút mở bảng Emoji (😃) phong cách Telegram/Zalo
+        self.btn_all_emojis = ctk.CTkButton(
+            input_row,
+            text="😃",
+            width=38,
+            height=38,
+            font=ctk.CTkFont(size=17),
+            fg_color=("gray85", "#1E293B"),
+            hover_color=("gray75", "#334155"),
+            corner_radius=8,
+            command=self.toggle_emoji_picker
+        )
+        self.btn_all_emojis.pack(side="left", padx=(0, 6))
 
         # Nút Gửi màu xanh dương (#2563EB)
         self.btn_send = ctk.CTkButton(
             input_row,
             text="Gửi ➤",
-            width=84,
-            height=40,
+            width=76,
+            height=38,
             font=ctk.CTkFont(family="Segoe UI", size=13, weight="bold"),
             fg_color="#2563EB",
             hover_color="#1D4ED8",
@@ -884,8 +861,8 @@ class MainWindow(ctk.CTkFrame):
 
         # Đặt vị trí gần góc dưới phải màn hình
         try:
-            x = self.btn_all_emojis.winfo_rootx()
-            y = self.btn_all_emojis.winfo_rooty() - 370
+            x = max(10, self.btn_all_emojis.winfo_rootx() - 260)
+            y = max(10, self.btn_all_emojis.winfo_rooty() - 370)
             self.emoji_picker_popup.geometry(f"+{x}+{y}")
         except Exception:
             pass
@@ -966,7 +943,7 @@ class MainWindow(ctk.CTkFrame):
             widget.destroy()
         self.conv_widgets.clear()
 
-        convs_to_show = list(self.conversations) if self.conversations else []
+        convs_to_show = [c for c in self.conversations if c.get("type") != "saved"] if self.conversations else []
         if not convs_to_show:
             # Hai cuộc hội thoại mẫu chuẩn theo thiết kế giao diện
             sample_name = self.current_user.get("full_name") or "Vũ Duy Thái Sơn"

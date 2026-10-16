@@ -191,11 +191,10 @@ class ChatBubble(ctk.CTkFrame):
 
         # 2. Tin nhắn Hình ảnh (Hỗ trợ Inline Image Preview trực tiếp)
         elif msg_type == "image":
-            orig_name = self.message.get("original_name", "Hình ảnh")
             self.img_container = ctk.CTkFrame(bubble_card, fg_color="transparent")
-            self.img_container.pack(padx=8, pady=8)
+            self.img_container.pack(padx=6, pady=(6, 2))
 
-            # Label hiển thị trạng thái đang tải hoặc xem trước
+            # Label hiển thị trạng thái đang tải hoặc xem trước (nhấp chuột trực tiếp để mở)
             self.preview_label = ctk.CTkLabel(
                 self.img_container,
                 text="🖼️ Đang tải ảnh xem trước...",
@@ -203,37 +202,11 @@ class ChatBubble(ctk.CTkFrame):
                 text_color=text_color,
                 cursor="hand2"
             )
-            self.preview_label.pack(padx=4, pady=4)
+            self.preview_label.pack(padx=2, pady=2)
             self.preview_label.bind("<Button-1>", lambda e: self.open_or_download_image())
 
             # Bắt đầu luồng tải thumbnail và hiển thị ảnh trực tiếp
             threading.Thread(target=self._load_and_display_thumbnail, daemon=True).start()
-
-            # Dòng nút hành động tải về máy bên dưới ảnh
-            action_bar = ctk.CTkFrame(self.img_container, fg_color="transparent")
-            action_bar.pack(fill="x", padx=2, pady=(4, 0))
-
-            btn_dl = ctk.CTkButton(
-                action_bar,
-                text="💾 Lưu ảnh",
-                height=26,
-                font=ctk.CTkFont(size=11, weight="bold"),
-                fg_color=("#3B82F6", "#1D4ED8") if not self.is_self else ("#1D4ED8", "#1E40AF"),
-                command=self.download_and_save_file
-            )
-            btn_dl.pack(side="left", padx=(0, 4))
-
-            btn_open = ctk.CTkButton(
-                action_bar,
-                text="🔍 Phóng to",
-                height=26,
-                font=ctk.CTkFont(size=11),
-                fg_color="transparent",
-                hover_color=("gray85", "#334155"),
-                text_color=text_color,
-                command=self.open_or_download_image
-            )
-            btn_open.pack(side="left")
 
         # 3. Tin nhắn Tệp tin (Document, PDF, ZIP, ...)
         elif msg_type == "file":
@@ -319,6 +292,21 @@ class ChatBubble(ctk.CTkFrame):
         )
         time_label.pack(side="right")
 
+        if msg_type == "image":
+            btn_save_img = ctk.CTkButton(
+                meta_row,
+                text="💾",
+                width=24,
+                height=18,
+                corner_radius=4,
+                font=ctk.CTkFont(size=11),
+                fg_color="transparent",
+                text_color=("white" if self.is_self else ("#64748B", "#94A3B8")),
+                hover_color=("#1D4ED8" if self.is_self else ("gray85", "#334155")),
+                command=self.download_and_save_file
+            )
+            btn_save_img.pack(side="right", padx=(0, 4))
+
         # Thẻ biểu cảm cảm xúc (Reaction Badges)
         if not is_deleted and self.message.get("reactions"):
             reactions = self.message.get("reactions", [])
@@ -376,6 +364,7 @@ class ChatBubble(ctk.CTkFrame):
             )
             content = self.message.get("content", "")
             is_deleted = self.message.get("is_deleted", 0)
+            msg_type = self.message.get("msg_type", "text")
 
             if not is_deleted:
                 # 1. Menu thả cảm xúc
@@ -390,6 +379,16 @@ class ChatBubble(ctk.CTkFrame):
 
                 # 3. Ghim tin nhắn
                 menu.add_command(label="📌 Ghim tin nhắn này", command=self._trigger_pin)
+                menu.add_separator()
+
+            if not is_deleted and msg_type == "image":
+                menu.add_command(label="🔍 Phóng to / Xem ảnh", command=self.open_or_download_image)
+                menu.add_command(label="💾 Lưu ảnh về máy...", command=self.download_and_save_file)
+                menu.add_separator()
+            elif not is_deleted and msg_type == "file":
+                menu.add_command(label="▶ Mở file", command=self.open_file)
+                menu.add_command(label="📂 Mở thư mục chứa file", command=self.reveal_in_folder)
+                menu.add_command(label="💾 Lưu file về máy...", command=self.download_and_save_file)
                 menu.add_separator()
 
             if not is_deleted and content:
