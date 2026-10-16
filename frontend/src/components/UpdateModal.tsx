@@ -49,7 +49,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ updateInfo, onDismiss 
                 Có Bản Cập Nhật Mới!
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Phát hiện mã nguồn mới trên GitHub repository
+                Phiên bản mới đã sẵn sàng để nâng cấp
               </p>
             </div>
           </div>
@@ -63,29 +63,24 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ updateInfo, onDismiss 
           )}
         </div>
 
-        {/* Update Details Box */}
-        <div className="p-3.5 bg-slate-50 dark:bg-[#17212b] border border-slate-200/70 dark:border-slate-800 rounded-xl space-y-2 text-xs">
-          <div className="flex items-start space-x-2">
-            <ArrowUpCircle className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <span className="font-semibold text-slate-700 dark:text-slate-200">
-                Nội dung cập nhật:
-              </span>
-              <p className="mt-0.5 text-slate-600 dark:text-slate-300 italic font-mono bg-white dark:bg-[#202b36] p-2 rounded border border-slate-200 dark:border-slate-700/60 break-words">
-                "{updateInfo.message}"
-              </p>
-            </div>
+        {/* Version Info Box */}
+        <div className="p-3.5 bg-slate-50 dark:bg-[#17212b] border border-slate-200/70 dark:border-slate-800 rounded-xl flex items-center justify-between text-xs">
+          <div className="flex items-center space-x-2">
+            <ArrowUpCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+            <span className="text-slate-600 dark:text-slate-400">
+              Bản hiện tại: <strong className="font-semibold text-slate-700 dark:text-slate-200">v1.0.{updateInfo.localHash.slice(0, 7)}</strong>
+            </span>
           </div>
-
-          <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>Bản hiện tại: <code className="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded">{updateInfo.localHash.slice(0, 7)}</code></span>
-            <span>➜</span>
-            <span>Bản mới: <code className="bg-blue-100 dark:bg-blue-900/40 text-[#2481cc] px-1 py-0.5 rounded font-bold">{updateInfo.remoteHash.slice(0, 7)}</code></span>
+          <span className="text-slate-400">➜</span>
+          <div>
+            <span className="text-slate-600 dark:text-slate-400">
+              Bản mới: <strong className="font-bold text-[#2481cc] px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30">v1.0.{updateInfo.remoteHash.slice(0, 7)}</strong>
+            </span>
           </div>
         </div>
 
         <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-          Bạn có quyền quyết định: Bấm <strong>"Cập nhật ngay"</strong> để tự động đồng bộ và tải tính năng mới nhất, hoặc bấm <strong>"Để sau"</strong> để tiếp tục sử dụng ứng dụng bình thường mà không bị gián đoạn.
+          Bấm <strong>"Cập nhật ngay"</strong> để nâng cấp lên phiên bản mới nhất giúp hệ thống hoạt động ổn định và tối ưu hơn, hoặc bấm <strong>"Để sau"</strong> để tiếp tục sử dụng.
         </p>
 
         {error && (
