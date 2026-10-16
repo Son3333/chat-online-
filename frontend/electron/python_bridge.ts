@@ -126,13 +126,27 @@ export class PythonBridge {
 
     // 1. Precise match by file_id for file downloads (prevents concurrent download race conditions)
     if (packet.file_id !== undefined) {
-      const fileKey = `download_file_${packet.file_id}`;
-      if (this.pendingRequests.has(fileKey)) {
-        const req = this.pendingRequests.get(fileKey)!;
+      const keyStr = `download_file_${String(packet.file_id)}`;
+      const keyNum = `download_file_${Number(packet.file_id)}`;
+      const matchedKey = this.pendingRequests.has(keyStr) ? keyStr : (this.pendingRequests.has(keyNum) ? keyNum : null);
+      if (matchedKey) {
+        const req = this.pendingRequests.get(matchedKey)!;
         clearTimeout(req.timeoutId);
-        this.pendingRequests.delete(fileKey);
+        this.pendingRequests.delete(matchedKey);
         req.resolve(packet);
         return;
+      }
+    }
+
+    // Fallback: match any pending download_file request if action is download_response
+    if (action === 'download_response' || action === 'download_file_response') {
+      for (const [key, req] of this.pendingRequests.entries()) {
+        if (key.startsWith('download_file_')) {
+          clearTimeout(req.timeoutId);
+          this.pendingRequests.delete(key);
+          req.resolve(packet);
+          return;
+        }
       }
     }
 

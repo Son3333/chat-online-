@@ -22,10 +22,16 @@ const ImageBubbleContent: React.FC<{
 
   const fetchImage = () => {
     setLoading(true);
-    apiService.getImageUrl(fileId).then((url) => {
-      setDataUrl(url);
-      setLoading(false);
-    });
+    apiService.getImageUrl(fileId)
+      .then((url) => {
+        setDataUrl(url);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.warn('Image fetch error:', err);
+        setDataUrl(null);
+        setLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -94,10 +100,11 @@ const VideoBubbleContent: React.FC<{
   const [hasError, setHasError] = useState(false);
   const blobUrlRef = React.useRef<string | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    apiService.downloadFile(fileId).then((res) => {
-      if (mounted) {
+  const fetchVideo = () => {
+    setLoading(true);
+    setHasError(false);
+    apiService.downloadFile(fileId)
+      .then((res) => {
         if (res && res.file_data) {
           let mime = res.file_type || 'video/mp4';
           if (!mime.startsWith('video/')) {
@@ -121,13 +128,21 @@ const VideoBubbleContent: React.FC<{
           } catch {
             setVideoSrc(`data:${mime};base64,${res.file_data}`);
           }
+        } else {
+          setHasError(true);
         }
         setLoading(false);
-      }
-    });
+      })
+      .catch((err) => {
+        console.warn('Video download error:', err);
+        setHasError(true);
+        setLoading(false);
+      });
+  };
 
+  useEffect(() => {
+    fetchVideo();
     return () => {
-      mounted = false;
       if (blobUrlRef.current) {
         URL.revokeObjectURL(blobUrlRef.current);
       }
@@ -162,7 +177,7 @@ const VideoBubbleContent: React.FC<{
           </div>
         </div>
       ) : (
-        <div className="p-4 flex flex-col space-y-2">
+        <div className="p-4 flex flex-col space-y-2.5">
           <div className="flex items-center space-x-2.5">
             <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
               <Video className="w-5 h-5" />
@@ -172,17 +187,25 @@ const VideoBubbleContent: React.FC<{
                 {originalName || 'Video clip'}
               </span>
               <span className="text-[10px] text-slate-400 block">
-                {hasError ? 'Định dạng đặc biệt • Tải về để phát' : 'Video tệp đính kèm'}
+                {hasError ? 'Tải tệp video bị gián đoạn' : 'Tệp video đính kèm'}
               </span>
             </div>
           </div>
-          <button
-            onClick={onDownload}
-            className="w-full py-1.5 px-3 rounded-lg bg-[#2481cc] hover:bg-[#1d6fa5] text-white text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Tải video về máy</span>
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={fetchVideo}
+              className="flex-1 py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+            >
+              <span>Tải lại video</span>
+            </button>
+            <button
+              onClick={onDownload}
+              className="flex-1 py-1.5 px-3 rounded-lg bg-[#2481cc] hover:bg-[#1d6fa5] text-white text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Lưu về máy</span>
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -227,14 +250,24 @@ const LinkifiedText: React.FC<{ text: string }> = ({ text }) => {
 
       {/* Embedded YouTube preview if message has a YouTube URL */}
       {ytVideoId && (
-        <div className="mt-2 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 aspect-video w-full max-w-sm shadow-md">
-          <iframe
-            src={`https://www.youtube.com/embed/${ytVideoId}`}
-            title="YouTube video player"
-            className="w-full h-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
+        <div className="mt-2 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 w-full max-w-sm shadow-md bg-black">
+          <div className="aspect-video w-full relative">
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${ytVideoId}?origin=http://localhost&enablejsapi=1&rel=0`}
+              title="YouTube video player"
+              className="w-full h-full"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+          <button
+            onClick={() => apiService.openExternal(`https://www.youtube.com/watch?v=${ytVideoId}`)}
+            className="w-full py-1.5 px-3 bg-red-600/90 hover:bg-red-600 text-white text-[11px] font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+          >
+            <span>Mở xem trên YouTube (Trình duyệt)</span>
+            <ExternalLink className="w-3 h-3" />
+          </button>
         </div>
       )}
     </div>

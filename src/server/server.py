@@ -48,7 +48,14 @@ class ChatServer:
         # Mapping: client_socket -> user_id
         self.socket_to_user = {}
         self.lock = threading.RLock()
-        self.send_lock = threading.RLock()
+        self.sock_locks = {}
+        self.sock_locks_guard = threading.Lock()
+
+    def _get_sock_lock(self, sock: socket.socket):
+        with self.sock_locks_guard:
+            if sock not in self.sock_locks:
+                self.sock_locks[sock] = threading.Lock()
+            return self.sock_locks[sock]
 
     def start(self, ready_event: Optional[threading.Event] = None):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -106,15 +113,15 @@ class ChatServer:
         log("May chu da dung.")
 
     def send_packet(self, sock: socket.socket, payload: dict):
-        """Gửi packet JSON có tiền tố độ dài 4-byte (Big-Endian)."""
-        with self.send_lock:
+        """Gửi packet JSON có tiền tố độ dài 4-byte (Big-Endian) với lock riêng cho từng socket."""
+        sock_lock = self._get_sock_lock(sock)
+        with sock_lock:
             try:
                 data = json.dumps(payload, ensure_ascii=False).encode('utf-8')
                 header = struct.pack("!I", len(data))
                 sock.sendall(header + data)
                 return True
             except Exception:
-                # print(f"Lỗi gửi packet: {e}")
                 return False
 
     def _recv_exact(self, sock: socket.socket, num_bytes: int) -> Optional[bytes]:
@@ -499,16 +506,19 @@ class ChatServer:
             file_id = packet.get("file_id")
             file_rec = self.db.get_file_record(file_id)
             if not file_rec:
-                return {"action": "download_response", "success": False, "message": "Không tìm thấy tệp!"}
+                log(f"[-] download_file: Khong tim thay file_id={file_id}")
+                return {"action": "download_response", "success": False, "file_id": file_id, "message": "Không tìm thấy tệp!"}
 
             file_path = os.path.join(UPLOADS_DIR, file_rec["stored_path"])
             if not os.path.exists(file_path):
-                return {"action": "download_response", "success": False, "message": "Tệp tin đã bị xóa trên máy chủ!"}
+                log(f"[-] download_file: File khong ton tai tren disk: {file_path}")
+                return {"action": "download_response", "success": False, "file_id": file_id, "message": "Tệp tin đã bị xóa trên máy chủ!"}
 
             with open(file_path, "rb") as f:
                 data = f.read()
                 b64 = base64.b64encode(data).decode('utf-8')
 
+            log(f"[+] download_file: gui tep '{file_rec['original_name']}' (size: {len(data)} bytes) cho client")
             return {
                 "action": "download_response",
                 "success": True,
