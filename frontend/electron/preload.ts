@@ -10,6 +10,9 @@ export interface ElectronAPI {
   isAlwaysOnTop: () => Promise<boolean>;
   selectLocalFile: () => Promise<{ canceled: boolean; fileName?: string; fileData?: string; fileSize?: number }>;
   saveDownloadedFile: (fileName: string, base64Data: string) => Promise<{ success: boolean; path?: string }>;
+  onUpdateAvailable: (callback: (updateInfo: { remoteHash: string; localHash: string; message: string }) => void) => () => void;
+  applyUpdate: () => Promise<{ success: boolean; error?: string }>;
+  checkUpdateNow: () => Promise<any>;
 }
 
 const api: ElectronAPI = {
@@ -23,6 +26,15 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener('server:event', handler);
     };
   },
+  onUpdateAvailable: (callback) => {
+    const handler = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('app:update_available', handler);
+    return () => {
+      ipcRenderer.removeListener('app:update_available', handler);
+    };
+  },
+  applyUpdate: () => ipcRenderer.invoke('app:apply_update'),
+  checkUpdateNow: () => ipcRenderer.invoke('app:check_update'),
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
   maximizeWindow: () => ipcRenderer.send('window:maximize'),
   closeWindow: () => ipcRenderer.send('window:close'),

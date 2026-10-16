@@ -4,10 +4,12 @@ import * as fs from 'fs';
 import * as net from 'net';
 import { spawn, ChildProcess } from 'child_process';
 import { PythonBridge } from './python_bridge';
+import { GitUpdater, registerUpdaterIpc } from './updater';
 
 let mainWindow: BrowserWindow | null = null;
 let pythonProcess: ChildProcess | null = null;
 let pythonBridge: PythonBridge | null = null;
+let gitUpdater: GitUpdater | null = null;
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const PORT = 8888;
@@ -112,6 +114,10 @@ async function createWindow() {
     });
   }
 
+  if (gitUpdater) {
+    gitUpdater.setWindow(mainWindow);
+  }
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -203,6 +209,13 @@ ipcMain.handle('dialog:save-file', async (_event, { fileName, base64Data }) => {
 
 app.whenReady().then(async () => {
   await startPythonBackendIfNeeded();
+
+  // Setup 2-second Git update listener
+  const rootDir = path.resolve(__dirname, '../../');
+  gitUpdater = new GitUpdater(rootDir);
+  registerUpdaterIpc(gitUpdater);
+  gitUpdater.startListening(2000);
+
   await createWindow();
 
   app.on('activate', () => {
@@ -219,6 +232,9 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  if (gitUpdater) {
+    gitUpdater.stopListening();
+  }
   if (pythonBridge) {
     pythonBridge.disconnect();
   }

@@ -7,12 +7,36 @@ import { CreateGroupModal } from '../features/groups/CreateGroupModal';
 import { ContactsModal } from '../features/contacts/ContactsModal';
 import { CallModal } from '../features/calls/CallModal';
 import { LockScreen } from '../features/security/LockScreen';
+import { UpdateModal, UpdateInfo } from '../components/UpdateModal';
 import { useChat } from '../context/ChatContext';
+import { apiService } from '../services/api';
 
 export const App: React.FC = () => {
   const { currentUser, isLocked, setIsLocked, refreshConversations } = useChat();
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [isUpdateDismissed, setIsUpdateDismissed] = useState(false);
+  const [snoozedHash, setSnoozedHash] = useState<string | null>(null);
+
+  // Listen to 2-second Git updates
+  useEffect(() => {
+    const unsub = apiService.onUpdateAvailable((info) => {
+      setUpdateInfo(info);
+      // Auto show modal if not snoozed
+      if (snoozedHash !== info.remoteHash) {
+        setIsUpdateDismissed(false);
+      }
+    });
+    return () => unsub();
+  }, [snoozedHash]);
+
+  const handleDismissUpdate = () => {
+    if (updateInfo) {
+      setSnoozedHash(updateInfo.remoteHash);
+    }
+    setIsUpdateDismissed(true);
+  };
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -33,7 +57,10 @@ export const App: React.FC = () => {
   return (
     <div className="h-screen w-screen flex flex-col bg-slate-100 dark:bg-[#0e1621] overflow-hidden select-none">
       {/* 1. Custom Frameless Titlebar */}
-      <TitleBar />
+      <TitleBar
+        hasUpdateAvailable={Boolean(updateInfo)}
+        onOpenUpdateModal={() => setIsUpdateDismissed(false)}
+      />
 
       {/* 2. Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -55,6 +82,14 @@ export const App: React.FC = () => {
 
       {showContacts && (
         <ContactsModal onClose={() => setShowContacts(false)} />
+      )}
+
+      {/* 4. Git Auto-Update Modal */}
+      {updateInfo && !isUpdateDismissed && (
+        <UpdateModal
+          updateInfo={updateInfo}
+          onDismiss={handleDismissUpdate}
+        />
       )}
     </div>
   );

@@ -15,3 +15,4 @@ if (Test-Path $ico) {
 $sc.WindowStyle = 1
 $sc.Save()
 Write-Host "[OK] Da tao shortcut thanh cong tai: $shortcutPath"
+

@@ -12,6 +12,9 @@ declare global {
       isAlwaysOnTop: () => Promise<boolean>;
       selectLocalFile: () => Promise<{ canceled: boolean; fileName?: string; fileData?: string; fileSize?: number }>;
       saveDownloadedFile: (fileName: string, base64Data: string) => Promise<{ success: boolean; path?: string }>;
+      onUpdateAvailable: (callback: (updateInfo: { remoteHash: string; localHash: string; message: string }) => void) => () => void;
+      applyUpdate: () => Promise<{ success: boolean; error?: string }>;
+      checkUpdateNow: () => Promise<any>;
     };
   }
 }
@@ -202,6 +205,27 @@ export const apiService = {
       return await window.api.saveDownloadedFile(fileName, base64Data);
     }
     return { success: false };
+  },
+
+  // Git Auto-Updater
+  onUpdateAvailable(callback: (info: { remoteHash: string; localHash: string; message: string }) => void): () => void {
+    if (window.api?.onUpdateAvailable) {
+      return window.api.onUpdateAvailable(callback);
+    }
+    return () => {};
+  },
+
+  async applyUpdate(): Promise<{ success: boolean; error?: string }> {
+    if (window.api?.applyUpdate) {
+      return await window.api.applyUpdate();
+    }
+    return { success: false, error: 'Chức năng cập nhật chỉ hỗ trợ khi chạy ứng dụng Desktop!' };
+  },
+
+  async checkUpdateNow() {
+    if (window.api?.checkUpdateNow) {
+      return await window.api.checkUpdateNow();
+    }
   },
 };
 

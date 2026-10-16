@@ -50,3 +50,4 @@ if __name__ == "__main__":
         print("[OK] Da tao thanh cong loi tat ngoai Desktop: Vibe Nguoi Tot.lnk")
     else:
         print("[-] Khong the tao loi tat ngoai Desktop.")
+

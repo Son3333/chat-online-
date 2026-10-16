@@ -16,12 +16,12 @@ set "PY_CMD="
 python --version >nul 2>&1
 if %errorlevel% equ 0 (
     set "PY_CMD=python"
-    goto :shortcut_check
+    goto :run_initializer
 )
 py --version >nul 2>&1
 if %errorlevel% equ 0 (
     set "PY_CMD=py"
-    goto :shortcut_check
+    goto :run_initializer
 )
 for %%D in (
     "%LOCALAPPDATA%\Programs\Python\Python314\python.exe"
@@ -42,34 +42,22 @@ for %%D in (
 ) do (
     if exist %%D (
         set "PY_CMD=%%~fD"
-        goto :shortcut_check
+        goto :run_initializer
     )
 )
 set "PY_CMD=python"
 
-:shortcut_check
-:: 1. Tu dong kiem tra va tao loi tat (Shortcut) ngoai Desktop neu chua co
-if not exist "%USERPROFILE%\Desktop\Vibe Người Tốt.lnk" (
-    if exist "%~dp0scripts\create_shortcut.py" (
-        "%PY_CMD%" "%~dp0scripts\create_shortcut.py" >nul 2>&1
-    )
+:run_initializer
+:: 1. Chay khoi tao he thong All-in-one:
+::    - Kiem tra Desktop shortcut (tao neu chua co, co roi thi bo qua)
+::    - Dang ky Windows Startup cho Server WAN (may tinh bat la server chay ngam)
+::    - Dam bao Server WAN dang hoat dong tren cong 8888
+if exist "%~dp0scripts\setup_all_in_one.py" (
+    "%PY_CMD%" "%~dp0scripts\setup_all_in_one.py"
 )
-
-:check_server
-:: 2. Kiem tra va khoi dong Server neu chua chay
-netstat -ano | findstr :8888 | findstr LISTENING >nul 2>&1
-if %errorlevel% equ 0 goto :launch_app
-
-echo [*] Dang khoi dong Chat Server (WAN + Local)...
-if exist "%~dp0run_server_wan.py" (
-    start "CHAT SERVER - VIBE NGUOI TOT" "%PY_CMD%" "%~dp0run_server_wan.py"
-) else (
-    start "CHAT SERVER - VIBE NGUOI TOT" "%PY_CMD%" "%~dp0run_server.py"
-)
-ping 127.0.0.1 -n 3 >nul
 
 :launch_app
-:: 3. Khoi chay ung dung Desktop Vibe Nguoi Tot
+:: 2. Khoi chay ung dung Desktop Vibe Nguoi Tot
 echo [*] Dang mo Ung Dung Vibe Nguoi Tot...
 
 if exist "%~dp0frontend\node_modules\electron\dist\electron.exe" (

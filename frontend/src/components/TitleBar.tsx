@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Minus, Square, X, Pin, Lock, Sun, Moon, RefreshCw, Radio } from 'lucide-react';
+import { Minus, Square, X, Pin, Lock, Sun, Moon, RefreshCw, Radio, Sparkles } from 'lucide-react';
 import { useChat } from '../context/ChatContext';
 import { apiService } from '../services/api';
 
-export const TitleBar: React.FC = () => {
+interface TitleBarProps {
+  hasUpdateAvailable?: boolean;
+  onOpenUpdateModal?: () => void;
+}
+
+export const TitleBar: React.FC<TitleBarProps> = ({ hasUpdateAvailable, onOpenUpdateModal }) => {
   const { currentUser, isLocked, setIsLocked, theme, setTheme, refreshConversations } = useChat();
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -26,7 +31,7 @@ export const TitleBar: React.FC = () => {
 
   return (
     <div className="h-9 w-full bg-slate-100 dark:bg-[#17212b] border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between select-none app-drag-region px-3 z-50">
-      {/* Left: App Title and Connection info */}
+      {/* Left: App Title, Connection info, and Update notification */}
       <div className="flex items-center space-x-2.5">
         <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white text-xs font-extrabold shadow-sm">
           V
@@ -38,6 +43,17 @@ export const TitleBar: React.FC = () => {
           <Radio className="w-2.5 h-2.5 animate-pulse" />
           <span>127.0.0.1:8888</span>
         </div>
+
+        {hasUpdateAvailable && (
+          <button
+            onClick={onOpenUpdateModal}
+            title="Nhấn để xem hoặc cập nhật phiên bản mới"
+            className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-blue-500/15 text-[#2481cc] hover:bg-blue-500/25 text-[10px] font-bold animate-pulse transition-all app-no-drag cursor-pointer"
+          >
+            <Sparkles className="w-2.5 h-2.5 text-[#2481cc]" />
+            <span>Có bản mới</span>
+          </button>
+        )}
       </div>
 
       {/* Right: Quick actions and window controls */}

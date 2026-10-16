@@ -11,3 +11,4 @@ echo.
 
 python "%~dp0run_server_wan.py"
 pause
+
