@@ -12,9 +12,15 @@ export const TitleBar: React.FC<TitleBarProps> = ({ hasUpdateAvailable, onOpenUp
   const { currentUser, isLocked, setIsLocked, theme, setTheme, refreshConversations } = useChat();
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [serverAddress, setServerAddress] = useState<string>('127.0.0.1:8888');
+  const [isWan, setIsWan] = useState<boolean>(false);
 
   useEffect(() => {
     apiService.isAlwaysOnTop().then(setIsAlwaysOnTop);
+    apiService.getServerInfo().then((info) => {
+      setServerAddress(info.address);
+      setIsWan(info.isWan);
+    });
   }, []);
 
   const toggleAlwaysOnTop = async () => {
@@ -41,9 +47,12 @@ export const TitleBar: React.FC<TitleBarProps> = ({ hasUpdateAvailable, onOpenUp
         <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 tracking-wide">
           Vibe Người Tốt
         </span>
-        <div className="hidden sm:flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium">
+        <div
+          title={isWan ? `Máy chủ WAN Internet: ${serverAddress}` : `Máy chủ Cục bộ: ${serverAddress}`}
+          className="hidden sm:flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium"
+        >
           <Radio className="w-2.5 h-2.5 animate-pulse" />
-          <span>127.0.0.1:8888</span>
+          <span>{isWan ? `WAN: ${serverAddress}` : serverAddress}</span>
         </div>
 
         {hasUpdateAvailable && (

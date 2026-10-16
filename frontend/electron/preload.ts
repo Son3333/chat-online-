@@ -13,6 +13,7 @@ export interface ElectronAPI {
   onUpdateAvailable: (callback: (updateInfo: { remoteHash: string; localHash: string; message: string }) => void) => () => void;
   applyUpdate: () => Promise<{ success: boolean; error?: string }>;
   checkUpdateNow: () => Promise<any>;
+  getServerInfo: () => Promise<{ isWan: boolean; address: string }>;
 }
 
 const api: ElectronAPI = {
@@ -35,6 +36,7 @@ const api: ElectronAPI = {
   },
   applyUpdate: () => ipcRenderer.invoke('app:apply_update'),
   checkUpdateNow: () => ipcRenderer.invoke('app:check_update'),
+  getServerInfo: () => ipcRenderer.invoke('app:get-server-info'),
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
   maximizeWindow: () => ipcRenderer.send('window:maximize'),
   closeWindow: () => ipcRenderer.send('window:close'),

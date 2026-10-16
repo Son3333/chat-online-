@@ -60,13 +60,15 @@ if exist "%~dp0scripts\setup_all_in_one.py" (
 :: 2. Khoi chay ung dung Desktop Vibe Nguoi Tot
 echo [*] Dang mo Ung Dung Vibe Nguoi Tot...
 
+set "ELECTRON_RUN_AS_NODE="
+
 if exist "%~dp0frontend\node_modules\electron\dist\electron.exe" (
-    start "" /d "%~dp0frontend" "%~dp0frontend\node_modules\electron\dist\electron.exe" .
+    start "" /d "%~dp0frontend" "%~dp0frontend\node_modules\electron\dist\electron.exe" "%~dp0frontend"
     exit /b 0
 )
 
 if exist "%~dp0frontend\node_modules\.bin\electron.cmd" (
-    start "" /d "%~dp0frontend" .\node_modules\.bin\electron.cmd .
+    start "" /d "%~dp0frontend" .\node_modules\.bin\electron.cmd "%~dp0frontend"
     exit /b 0
 )
 

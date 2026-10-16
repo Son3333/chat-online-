@@ -38,7 +38,7 @@ const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('telegram_user');
+    const saved = localStorage.getItem('vibe_user') || localStorage.getItem('telegram_user');
     return saved ? JSON.parse(saved) : null;
   });
 
@@ -66,8 +66,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // Persist session
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('telegram_user', JSON.stringify(currentUser));
+      localStorage.setItem('vibe_user', JSON.stringify(currentUser));
     } else {
+      localStorage.removeItem('vibe_user');
       localStorage.removeItem('telegram_user');
     }
   }, [currentUser]);
@@ -230,6 +231,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setMessages([]);
     setConversations([]);
     setFriends([]);
+    localStorage.removeItem('vibe_user');
     localStorage.removeItem('telegram_user');
   };
 

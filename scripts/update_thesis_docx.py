@@ -405,3 +405,4 @@ if __name__ == "__main__":
     update_chapter_4()
     update_chapter_5()
     generate_master_thesis()
+

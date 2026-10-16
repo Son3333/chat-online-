@@ -11,7 +11,7 @@ let pythonProcess: ChildProcess | null = null;
 let pythonBridge: PythonBridge | null = null;
 let gitUpdater: GitUpdater | null = null;
 
-const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+const isDev = process.env.NODE_ENV === 'development' || (typeof app !== 'undefined' && app ? !app.isPackaged : false);
 const PORT = 8888;
 const HOST = '127.0.0.1';
 
@@ -208,6 +208,23 @@ ipcMain.handle('dialog:save-file', async (_event, { fileName, base64Data }) => {
   } catch (err: any) {
     return { success: false, error: err.message };
   }
+});
+
+ipcMain.handle('app:get-server-info', () => {
+  const rootDir = path.resolve(__dirname, '../../');
+  const wanInfoPath = path.join(rootDir, 'wan_server_info.txt');
+  if (fs.existsSync(wanInfoPath)) {
+    try {
+      const content = fs.readFileSync(wanInfoPath, 'utf-8');
+      const match = content.match(/FULL=(.+)/);
+      if (match && match[1]) {
+        return { isWan: true, address: match[1].trim() };
+      }
+    } catch {
+      // fallback
+    }
+  }
+  return { isWan: false, address: `${HOST}:${PORT}` };
 });
 
 app.whenReady().then(async () => {

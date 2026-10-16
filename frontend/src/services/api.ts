@@ -15,6 +15,7 @@ declare global {
       onUpdateAvailable: (callback: (updateInfo: { remoteHash: string; localHash: string; message: string }) => void) => () => void;
       applyUpdate: () => Promise<{ success: boolean; error?: string }>;
       checkUpdateNow: () => Promise<any>;
+      getServerInfo?: () => Promise<{ isWan: boolean; address: string }>;
     };
   }
 }
@@ -226,6 +227,13 @@ export const apiService = {
     if (window.api?.checkUpdateNow) {
       return await window.api.checkUpdateNow();
     }
+  },
+
+  async getServerInfo(): Promise<{ isWan: boolean; address: string }> {
+    if (window.api?.getServerInfo) {
+      return await window.api.getServerInfo();
+    }
+    return { isWan: false, address: '127.0.0.1:8888' };
   },
 };
 

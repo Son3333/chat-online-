@@ -1,8 +1,8 @@
 {
-  "name": "telegram-desktop-react",
+  "name": "vibe-nguoi-tot",
   "version": "1.0.0",
   "private": true,
-  "description": "Telegram-Style Modern Desktop Messenger powered by React, TypeScript, Electron and Python Backend",
+  "description": "Vibe Người Tốt - Ứng dụng nhắn tin và truyền thông tin bảo mật",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -40,7 +40,7 @@
     "vitest": "^2.1.4"
   },
   "build": {
-    "appId": "com.messenger.telegram.desktop",
+    "appId": "com.vibe.nguoitot.desktop",
     "productName": "Vibe Người Tốt",
     "directories": {
       "output": "dist-package"
