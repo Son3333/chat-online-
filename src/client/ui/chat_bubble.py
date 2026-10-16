@@ -486,6 +486,15 @@ class ChatBubble(ctk.CTkFrame):
                         if self.winfo_exists() and self.preview_label.winfo_exists():
                             self.img_ref = ctk_thumb  # Lưu ref
                             self.preview_label.configure(image=ctk_thumb, text="")
+                            # Tự động cập nhật cuộn nếu tin nhắn ở cuối để hiển thị trọn vẹn ảnh
+                            try:
+                                parent = self.master
+                                while parent and not hasattr(parent, "_scroll_to_bottom"):
+                                    parent = getattr(parent, "master", None)
+                                if parent and hasattr(parent, "_scroll_to_bottom"):
+                                    parent._scroll_to_bottom()
+                            except Exception:
+                                pass
                     except Exception:
                         pass
                 self.master.after(0, _apply)

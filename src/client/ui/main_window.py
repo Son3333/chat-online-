@@ -576,7 +576,7 @@ class MainWindow(ctk.CTkFrame):
         self.chat_container = ctk.CTkFrame(self, corner_radius=0, fg_color=("#F1F5F9", "#0B1020"))
         self.chat_container.grid(row=1, column=1, sticky="nsew")
         self.chat_container.grid_columnconfigure(0, weight=1)
-        self.chat_container.grid_rowconfigure(1, weight=1)
+        self.chat_container.grid_rowconfigure(0, weight=1)
 
         # Empty state (khi chưa chọn cuộc hội thoại)
         self.empty_state = ctk.CTkFrame(self.chat_container, fg_color="transparent")
@@ -604,7 +604,10 @@ class MainWindow(ctk.CTkFrame):
         # Chat Active Views (sẽ hiển thị khi chọn hội thoại)
         self.chat_active_frame = ctk.CTkFrame(self.chat_container, fg_color="transparent")
         self.chat_active_frame.grid_columnconfigure(0, weight=1)
-        self.chat_active_frame.grid_rowconfigure(1, weight=1)
+        self.chat_active_frame.grid_rowconfigure(0, weight=0)  # Chat Header (cố định)
+        self.chat_active_frame.grid_rowconfigure(1, weight=0)  # Pinned banner (chỉ hiện khi có tin ghim, không chiếm khoảng trống)
+        self.chat_active_frame.grid_rowconfigure(2, weight=1)  # Messages Scroll (chiếm toàn bộ chiều cao)
+        self.chat_active_frame.grid_rowconfigure(3, weight=0)  # Input Bar (cố định)
 
         # 1. Chat Header (Xanh navy #1D293D)
         self.chat_header = ctk.CTkFrame(self.chat_active_frame, height=58, corner_radius=0, fg_color=("#FFFFFF", "#1D293D"))
@@ -733,7 +736,6 @@ class MainWindow(ctk.CTkFrame):
         self.btn_unpin.pack(side="right")
 
         # 2. Scrollable Messages View (Row 2)
-        self.chat_active_frame.grid_rowconfigure(2, weight=1)
         self.messages_scroll = ctk.CTkScrollableFrame(self.chat_active_frame, fg_color="transparent")
         self.messages_scroll.grid(row=2, column=0, sticky="nsew", padx=12, pady=6)
         self.messages_scroll.grid_columnconfigure(0, weight=1)
@@ -1098,7 +1100,7 @@ class MainWindow(ctk.CTkFrame):
 
         # Ẩn empty state, hiện chat active frame
         self.empty_state.place_forget()
-        self.chat_active_frame.grid(row=0, column=0, rowspan=2, sticky="nsew")
+        self.chat_active_frame.grid(row=0, column=0, sticky="nsew")
 
         # Cập nhật Header
         self.lbl_chat_title.configure(text=conv["title"])
