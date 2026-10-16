@@ -9,6 +9,7 @@ interface ChatContextType {
   activeConv: Conversation | null;
   messages: Message[];
   friends: Friend[];
+  pendingFriends: User[];
   isLocked: boolean;
   setIsLocked: (locked: boolean) => void;
   theme: 'dark' | 'light';
@@ -46,6 +47,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
+  const [pendingFriends, setPendingFriends] = useState<User[]>([]);
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [typingUser, setTypingUser] = useState<string | null>(null);
@@ -86,8 +88,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const refreshFriends = useCallback(async () => {
     if (!currentUser) return;
     const res = await apiService.getFriends(currentUser.id);
-    if (res && res.friends) {
-      setFriends(res.friends);
+    if (res) {
+      if (res.friends) setFriends(res.friends);
+      if (res.pending_requests) setPendingFriends(res.pending_requests);
     }
   }, [currentUser]);
 
@@ -300,7 +303,15 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           break;
 
         case 'user_status_changed':
+          if (event.user_id && activeConv && activeConv.type === 'direct' && activeConv.partner_id === event.user_id) {
+            setActiveConv((prev) => prev ? { ...prev, is_online: Boolean(event.is_online) } : null);
+          }
           refreshConversations();
+          refreshFriends();
+          break;
+
+        case 'new_friend_request':
+        case 'refresh_friends':
           refreshFriends();
           break;
 
@@ -332,6 +343,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         activeConv,
         messages,
         friends,
+        pendingFriends,
         isLocked,
         setIsLocked,
         theme,

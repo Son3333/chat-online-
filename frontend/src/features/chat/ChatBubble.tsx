@@ -84,6 +84,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
   const [showReactionPicker, setShowReactionPicker] = useState(false);
 
+  const [copied, setCopied] = useState(false);
+
   const isDeleted = Boolean(message.is_deleted);
   const isImage = message.msg_type === 'image';
   const isFile = message.msg_type === 'file';
@@ -103,7 +105,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(message.content);
+    navigator.clipboard.writeText(message.content || '');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
     setShowMenu(false);
   };
 
@@ -211,32 +215,68 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
         </div>
       )}
 
-      {/* Hover Quick Action Button (Reply / React) */}
+      {/* Hover Quick Action Toolbar (Thả cảm xúc, Trả lời, Sao chép, Ghim, Thu hồi) */}
       <div
-        className={`absolute top-1 ${
-          isSelf ? '-left-8' : '-right-8'
-        } hidden group-hover:flex items-center space-x-1 bg-white dark:bg-[#1e2c3a] border border-slate-200 dark:border-slate-700 rounded-full shadow-md p-0.5 z-20`}
+        className={`absolute -top-3.5 ${
+          isSelf ? 'right-2' : 'left-2'
+        } hidden group-hover:flex items-center space-x-0.5 bg-white dark:bg-[#1e2c3a] border border-slate-200 dark:border-slate-700/80 rounded-full shadow-lg px-1.5 py-0.5 z-20 animate-in fade-in zoom-in-95 duration-100`}
       >
+        {/* 1. Thả cảm xúc */}
         <button
           onClick={() => setShowReactionPicker(!showReactionPicker)}
-          title="Thả cảm xúc"
+          title="Thả biểu cảm"
           className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-amber-500 transition-colors"
         >
           <Heart className="w-3.5 h-3.5" />
         </button>
+
+        {/* 2. Trả lời */}
         <button
           onClick={() => setReplyTo(message)}
-          title="Trả lời"
+          title="Trả lời tin nhắn"
           className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-[#2481cc] transition-colors"
         >
           <Reply className="w-3.5 h-3.5" />
         </button>
+
+        {/* 3. Sao chép nội dung */}
+        <button
+          onClick={handleCopy}
+          title={copied ? 'Đã sao chép!' : 'Sao chép tin nhắn'}
+          className={`p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors ${
+            copied ? 'text-emerald-500' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+          }`}
+        >
+          {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+        </button>
+
+        {/* 4. Ghim tin nhắn */}
+        <button
+          onClick={() => pinMessage(message.id)}
+          title={message.is_pinned ? 'Bỏ ghim' : 'Ghim tin nhắn'}
+          className={`p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors ${
+            message.is_pinned ? 'text-[#2481cc]' : 'text-slate-400 hover:text-[#2481cc]'
+          }`}
+        >
+          <Pin className="w-3.5 h-3.5" />
+        </button>
+
+        {/* 5. Thu hồi tin nhắn (chỉ với tin của mình và chưa thu hồi) */}
+        {isSelf && !isDeleted && (
+          <button
+            onClick={() => recallMessage(message.id)}
+            title="Thu hồi tin nhắn"
+            className="p-1 rounded-full hover:bg-red-50 dark:hover:bg-red-500/10 text-slate-400 hover:text-red-500 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Quick Reaction Popup */}
       {showReactionPicker && (
         <div
-          className={`absolute -top-9 ${
+          className={`absolute -top-11 ${
             isSelf ? 'right-0' : 'left-0'
           } bg-white dark:bg-[#1e2c3a] border border-slate-200 dark:border-slate-700 rounded-full shadow-lg p-1 flex space-x-1 z-30 animate-in fade-in zoom-in-95 duration-100`}
         >

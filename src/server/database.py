@@ -254,6 +254,12 @@ class Database:
                 return {"success": True, "user": dict(row)}
             return {"success": False, "message": "Sai tên đăng nhập hoặc mật khẩu!"}
 
+    def reset_all_online_status(self):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET is_online = 0")
+            conn.commit()
+
     def set_online_status(self, user_id, is_online: bool):
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -270,10 +276,12 @@ class Database:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def search_users(self, keyword, current_user_id):
-        keyword = keyword.strip()
+    def search_users(self, keyword, current_user_id=None):
+        keyword = (keyword or "").strip()
         if not keyword:
             return []  # Bảo mật: Không bao giờ trả về danh sách nếu để trống từ khóa!
+
+        curr_id = current_user_id if current_user_id is not None else 0
 
         # Tự động loại bỏ ký tự @ hoặc # ở đầu (hỗ trợ người dùng gõ @username hoặc #id)
         clean_keyword = keyword.lstrip("@#").strip()
@@ -300,7 +308,7 @@ class Database:
                     SELECT id, username, full_name, avatar_color, is_online
                     FROM users
                     WHERE (id = ? OR CAST(id AS TEXT) LIKE ?) AND id != ?
-                """, (int(id_query), f"{id_query}%", current_user_id))
+                """, (int(id_query), f"{id_query}%", curr_id))
                 res = [dict(r) for r in cursor.fetchall()]
                 if res:
                     return res
@@ -310,7 +318,7 @@ class Database:
                 SELECT id, username, full_name, avatar_color, is_online
                 FROM users
                 WHERE id != ?
-            """, (current_user_id,))
+            """, (curr_id,))
             all_users = [dict(r) for r in cursor.fetchall()]
 
             matched = []

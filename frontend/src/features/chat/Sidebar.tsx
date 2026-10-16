@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, Plus, Cloud, Users, User as UserIcon, LogOut, Shield, MessageCircle } from 'lucide-react';
+import { Search, Plus, Cloud, Users, User as UserIcon, LogOut, Shield, MessageCircle, Pin, Archive, Ban, Trash2 } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { getInitials, formatDate } from '../../lib/utils';
 import { apiService } from '../../services/api';
-import { User } from '../../types';
+import { User, Conversation } from '../../types';
 
 interface SidebarProps {
   onOpenCreateGroup: () => void;
@@ -11,12 +11,95 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenContacts }) => {
-  const { currentUser, conversations, activeConv, selectConversation, openSavedMessages, logout, setIsLocked, refreshConversations } = useChat();
+  const {
+    currentUser,
+    conversations,
+    activeConv,
+    selectConversation,
+    openSavedMessages,
+    logout,
+    setIsLocked,
+    refreshConversations,
+    pendingFriends,
+    refreshFriends,
+  } = useChat();
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'direct' | 'group'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'direct' | 'group' | 'archived'>('all');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [globalUsers, setGlobalUsers] = useState<User[]>([]);
   const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+
+  // Pinned & Archived conversations from localStorage
+  const [pinnedConvIds, setPinnedConvIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('vibe_pinned_conversations');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [archivedConvIds, setArchivedConvIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('vibe_archived_conversations');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Context Menu state
+  const [convContextMenu, setConvContextMenu] = useState<{ x: number; y: number; conv: Conversation } | null>(null);
+
+  const savePinned = (ids: string[]) => {
+    setPinnedConvIds(ids);
+    localStorage.setItem('vibe_pinned_conversations', JSON.stringify(ids));
+  };
+
+  const saveArchived = (ids: string[]) => {
+    setArchivedConvIds(ids);
+    localStorage.setItem('vibe_archived_conversations', JSON.stringify(ids));
+  };
+
+  const handleTogglePin = (convId: string | number) => {
+    const sId = String(convId);
+    if (pinnedConvIds.includes(sId)) {
+      savePinned(pinnedConvIds.filter((id) => id !== sId));
+    } else {
+      savePinned([...pinnedConvIds, sId]);
+    }
+    setConvContextMenu(null);
+  };
+
+  const handleToggleArchive = (convId: string | number) => {
+    const sId = String(convId);
+    if (archivedConvIds.includes(sId)) {
+      saveArchived(archivedConvIds.filter((id) => id !== sId));
+    } else {
+      saveArchived([...archivedConvIds, sId]);
+    }
+    setConvContextMenu(null);
+  };
+
+  const handleBlockUser = async (partnerId?: number | null) => {
+    if (!currentUser || !partnerId) return;
+    if (confirm('Bạn có chắc chắn muốn chặn người dùng này?')) {
+      await apiService.blockUser(currentUser.id, partnerId);
+      await refreshFriends();
+      await refreshConversations();
+    }
+    setConvContextMenu(null);
+  };
+
+  const handleDeleteConversation = async (convId: string | number) => {
+    if (!currentUser) return;
+    if (confirm('Bạn có chắc chắn muốn xóa cuộc trò chuyện này? Toàn bộ tin nhắn sẽ bị xóa.')) {
+      await apiService.deleteConversation(convId, currentUser.id);
+      await refreshConversations();
+    }
+    setConvContextMenu(null);
+  };
 
   // Debounced global user search
   useEffect(() => {
@@ -28,7 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
     const timer = setTimeout(async () => {
       setIsSearchingUsers(true);
       try {
-        const res = await apiService.searchUsers(trimmed);
+        const res = await apiService.searchUsers(trimmed, currentUser?.id);
         if (res && res.success && res.users) {
           setGlobalUsers(res.users.filter((u) => u.id !== currentUser?.id));
         } else {
@@ -65,10 +148,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
 
   // Filter conversations
   const filteredConversations = useMemo(() => {
-    return conversations.filter((c) => {
-      // Tab filter
-      if (activeTab === 'direct' && c.type !== 'direct') return false;
-      if (activeTab === 'group' && c.type !== 'group') return false;
+    let list = conversations.filter((c) => {
+      const isArchived = archivedConvIds.includes(String(c.id));
+
+      if (activeTab === 'archived') {
+        if (!isArchived) return false;
+      } else {
+        if (isArchived) return false;
+        if (activeTab === 'direct' && c.type !== 'direct') return false;
+        if (activeTab === 'group' && c.type !== 'group') return false;
+      }
 
       // Search filter
       if (searchQuery.trim()) {
@@ -79,7 +168,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
       }
       return true;
     });
-  }, [conversations, activeTab, searchQuery]);
+
+    // Sort pinned conversations to the top
+    if (activeTab !== 'archived') {
+      list = [...list].sort((a, b) => {
+        const aPinned = pinnedConvIds.includes(String(a.id));
+        const bPinned = pinnedConvIds.includes(String(b.id));
+        if (aPinned && !bPinned) return -1;
+        if (!aPinned && bPinned) return 1;
+        return 0;
+      });
+    }
+
+    return list;
+  }, [conversations, activeTab, searchQuery, pinnedConvIds, archivedConvIds]);
 
   return (
     <aside className="w-[320px] h-full flex flex-col bg-white dark:bg-[#17212b] border-r border-slate-200 dark:border-slate-800/80 flex-shrink-0 select-none">
@@ -123,10 +225,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
                   setShowUserMenu(false);
                   onOpenContacts();
                 }}
-                className="w-full px-3 py-2 text-left text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 flex items-center space-x-2"
+                className="w-full px-3 py-2 text-left text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 flex items-center justify-between"
               >
-                <Users className="w-4 h-4 text-[#2481cc]" />
-                <span>Danh bạ & Bạn bè</span>
+                <div className="flex items-center space-x-2">
+                  <Users className="w-4 h-4 text-[#2481cc]" />
+                  <span>Danh bạ & Bạn bè</span>
+                </div>
+                {pendingFriends.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-red-500 text-white">
+                    {pendingFriends.length}
+                  </span>
+                )}
               </button>
 
               <button
@@ -182,22 +291,38 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
         </div>
       </div>
 
-      {/* Action shortcuts: New Group & Saved Cloud */}
+      {/* Action shortcuts: New Group, Contacts & Saved Cloud */}
       <div className="px-3 py-1 flex space-x-1.5">
         <button
           onClick={onOpenCreateGroup}
-          className="flex-1 py-1.5 px-2 rounded-lg bg-[#2481cc]/10 dark:bg-[#2481cc]/15 text-[#2481cc] hover:bg-[#2481cc]/20 text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+          title="Tạo nhóm trò chuyện mới"
+          className="flex-1 py-1.5 px-1.5 rounded-lg bg-[#2481cc]/10 dark:bg-[#2481cc]/15 text-[#2481cc] hover:bg-[#2481cc]/20 text-[11px] font-semibold flex items-center justify-center space-x-1 transition-colors"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Tạo Nhóm</span>
         </button>
 
         <button
+          onClick={onOpenContacts}
+          title="Danh bạ & Lời mời kết bạn"
+          className="flex-1 py-1.5 px-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-[11px] font-semibold flex items-center justify-center space-x-1 transition-colors relative"
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>Danh Bạ</span>
+          {pendingFriends.length > 0 && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center animate-pulse">
+              {pendingFriends.length}
+            </span>
+          )}
+        </button>
+
+        <button
           onClick={openSavedMessages}
-          className="flex-1 py-1.5 px-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+          title="Cloud lưu trữ tin nhắn cá nhân"
+          className="flex-1 py-1.5 px-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-[11px] font-semibold flex items-center justify-center space-x-1 transition-colors"
         >
           <Cloud className="w-3.5 h-3.5" />
-          <span>Cloud Cá Nhân</span>
+          <span>Cloud</span>
         </button>
       </div>
 
@@ -233,6 +358,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
         >
           Nhóm
         </button>
+        {archivedConvIds.length > 0 && (
+          <button
+            onClick={() => setActiveTab('archived')}
+            className={`pb-1.5 px-1 border-b-2 text-center transition-colors flex items-center space-x-1 ${
+              activeTab === 'archived'
+                ? 'border-amber-500 text-amber-500 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            }`}
+          >
+            <Archive className="w-3 h-3" />
+            <span>({archivedConvIds.length})</span>
+          </button>
+        )}
       </div>
 
       {/* Conversations Scroll List */}
@@ -240,18 +378,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
         {filteredConversations.length === 0 && globalUsers.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-center text-slate-400 text-xs px-4">
             <UserIcon className="w-8 h-8 mb-2 opacity-40" />
-            <span>Không tìm thấy cuộc trò chuyện nào</span>
+            <span>
+              {activeTab === 'archived'
+                ? 'Không có cuộc trò chuyện nào trong kho lưu trữ'
+                : 'Không tìm thấy cuộc trò chuyện nào'}
+            </span>
           </div>
         ) : (
           filteredConversations.map((conv) => {
             const isSelected = activeConv?.id === conv.id;
             const isOnline = Boolean(conv.is_online);
             const isGroup = conv.type === 'group';
+            const isPinned = pinnedConvIds.includes(String(conv.id));
 
             return (
               <div
                 key={conv.id}
                 onClick={() => selectConversation(conv)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setConvContextMenu({ x: e.clientX, y: e.clientY, conv });
+                }}
                 className={`p-2.5 rounded-xl flex items-center space-x-3 cursor-pointer transition-all ${
                   isSelected
                     ? 'bg-[#2481cc] text-white'
@@ -278,9 +425,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
                 {/* Info Text */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-xs truncate leading-tight">
-                      {conv.title}
-                    </span>
+                    <div className="flex items-center space-x-1.5 truncate">
+                      <span className="font-semibold text-xs truncate leading-tight">
+                        {conv.title}
+                      </span>
+                      {isPinned && (
+                        <Pin className={`w-3 h-3 flex-shrink-0 ${isSelected ? 'text-white' : 'text-amber-500'}`} />
+                      )}
+                    </div>
                     {conv.last_message?.created_at && (
                       <span
                         className={`text-[10px] ${
@@ -357,6 +509,66 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
           </div>
         )}
       </div>
+
+      {/* Right-click Conversation Context Menu */}
+      {convContextMenu && (
+        <>
+          <div className="fixed inset-0 z-50" onClick={() => setConvContextMenu(null)} />
+          <div
+            style={{
+              top: `${Math.min(convContextMenu.y, window.innerHeight - 220)}px`,
+              left: `${Math.min(convContextMenu.x, window.innerWidth - 200)}px`,
+            }}
+            className="fixed w-48 bg-white dark:bg-[#1e2c3a] border border-slate-200 dark:border-slate-700/80 rounded-xl shadow-2xl py-1 z-50 text-xs text-slate-700 dark:text-slate-200 animate-in fade-in zoom-in-95 duration-100"
+          >
+            {/* Ghim / Bỏ ghim */}
+            <button
+              onClick={() => handleTogglePin(convContextMenu.conv.id)}
+              className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700/60 flex items-center space-x-2"
+            >
+              <Pin className="w-3.5 h-3.5 text-amber-500" />
+              <span>
+                {pinnedConvIds.includes(String(convContextMenu.conv.id)) ? 'Bỏ ghim hội thoại' : 'Ghim lên đầu'}
+              </span>
+            </button>
+
+            {/* Lưu trữ / Bỏ lưu trữ */}
+            <button
+              onClick={() => handleToggleArchive(convContextMenu.conv.id)}
+              className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700/60 flex items-center space-x-2"
+            >
+              <Archive className="w-3.5 h-3.5 text-blue-500" />
+              <span>
+                {archivedConvIds.includes(String(convContextMenu.conv.id))
+                  ? 'Bỏ khỏi kho lưu trữ'
+                  : 'Ẩn vào kho lưu trữ'}
+              </span>
+            </button>
+
+            {/* Chặn người dùng nếu là chat cá nhân 1-1 */}
+            {convContextMenu.conv.type === 'direct' && convContextMenu.conv.partner_id && (
+              <button
+                onClick={() => handleBlockUser(convContextMenu.conv.partner_id)}
+                className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700/60 flex items-center space-x-2 text-amber-600 dark:text-amber-400"
+              >
+                <Ban className="w-3.5 h-3.5" />
+                <span>Chặn người dùng này</span>
+              </button>
+            )}
+
+            <div className="w-full h-px bg-slate-200 dark:bg-slate-700/60 my-1" />
+
+            {/* Xóa cuộc trò chuyện */}
+            <button
+              onClick={() => handleDeleteConversation(convContextMenu.conv.id)}
+              className="w-full px-3 py-2 text-left text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center space-x-2"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Xóa cuộc trò chuyện</span>
+            </button>
+          </div>
+        </>
+      )}
     </aside>
   );
 };

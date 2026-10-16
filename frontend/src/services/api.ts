@@ -171,12 +171,24 @@ export const apiService = {
     };
   },
 
-  async getFriends(userId: number): Promise<{ success: boolean; friends: Friend[] }> {
+  async getFriends(userId: number): Promise<{ success: boolean; friends: Friend[]; pending_requests?: User[] }> {
     return await this.sendRequest('get_friends', { user_id: userId });
   },
 
-  async sendFriendRequest(senderId: number, targetId: number): Promise<{ success: boolean; error?: string }> {
-    return await this.sendRequest('send_friend_request', { sender_id: senderId, target_id: targetId });
+  async sendFriendRequest(senderId: number, targetId: number): Promise<{ success: boolean; message?: string; error?: string }> {
+    return await this.sendRequest('add_friend', { user_id: senderId, friend_id: targetId, sender_id: senderId, target_id: targetId });
+  },
+
+  async acceptFriendRequest(userId: number, requesterId: number): Promise<{ success: boolean; message?: string; error?: string }> {
+    return await this.sendRequest('accept_friend', { user_id: userId, requester_id: requesterId });
+  },
+
+  async rejectFriendRequest(userId: number, requesterId: number): Promise<{ success: boolean; message?: string; error?: string }> {
+    return await this.sendRequest('reject_friend', { user_id: userId, requester_id: requesterId });
+  },
+
+  async removeFriend(userId: number, friendId: number): Promise<{ success: boolean; message?: string }> {
+    return await this.sendRequest('remove_friend', { user_id: userId, friend_id: friendId });
   },
 
   async blockUser(userId: number, targetId: number): Promise<{ success: boolean }> {
@@ -185,6 +197,10 @@ export const apiService = {
 
   async unblockUser(userId: number, targetId: number): Promise<{ success: boolean }> {
     return await this.sendRequest('unblock_user', { user_id: userId, target_id: targetId });
+  },
+
+  async deleteConversation(convId: string | number, userId: number): Promise<{ success: boolean; message?: string }> {
+    return await this.sendRequest('delete_conversation', { conversation_id: convId, user_id: userId });
   },
 
   // Groups

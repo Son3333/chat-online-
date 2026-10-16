@@ -10,3 +10,4 @@ def generate_logo_ts():
 
 if __name__ == '__main__':
     generate_logo_ts()
+

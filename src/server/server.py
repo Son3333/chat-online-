@@ -57,6 +57,10 @@ class ChatServer:
         self.server_socket.listen(50)
         self.port = self.server_socket.getsockname()[1]
         self.running = True
+        try:
+            self.db.reset_all_online_status()
+        except Exception:
+            pass
         if ready_event:
             ready_event.set()
         log("==================================================")
@@ -296,6 +300,12 @@ class ChatServer:
         elif action == "get_conversations":
             user_id = packet.get("user_id")
             convs = self.db.get_user_conversations(user_id)
+            with self.lock:
+                for conv in convs:
+                    if conv.get("type") == "direct" and conv.get("partner_id"):
+                        conv["is_online"] = 1 if (conv["partner_id"] in self.active_clients) else 0
+                    elif conv.get("type") == "saved":
+                        conv["is_online"] = 1
             return {"action": "conversations_list", "success": True, "conversations": convs}
 
         # 4. Lấy lịch sử tin nhắn
@@ -436,6 +446,9 @@ class ChatServer:
             keyword = packet.get("keyword") or packet.get("query", "")
             current_user_id = packet.get("user_id")
             results = self.db.search_users(keyword, current_user_id)
+            with self.lock:
+                for u in results:
+                    u["is_online"] = 1 if (u["id"] in self.active_clients) else 0
             return {"action": "search_results", "success": True, "users": results}
 
         # 9. Bắt đầu chat 1-1
@@ -528,6 +541,9 @@ class ChatServer:
             user_id = packet.get("user_id")
             friends = self.db.get_friends(user_id)
             pending_reqs = self.db.get_pending_requests(user_id)
+            with self.lock:
+                for f in friends:
+                    f["is_online"] = 1 if (f["id"] in self.active_clients) else 0
             return {
                 "action": "get_friends_response",
                 "success": True,
@@ -535,9 +551,9 @@ class ChatServer:
                 "pending_requests": pending_reqs
             }
 
-        elif action == "add_friend":
-            user_id = packet.get("user_id")
-            friend_id = packet.get("friend_id")
+        elif action in ("add_friend", "send_friend_request"):
+            user_id = packet.get("user_id") or packet.get("sender_id")
+            friend_id = packet.get("friend_id") or packet.get("target_id")
             res = self.db.send_friend_request(user_id, friend_id)
             # Thông báo tức thời cho bên nhận nếu đang online
             if res.get("success"):
