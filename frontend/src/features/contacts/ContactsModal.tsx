@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Search, UserPlus, MessageCircle, Ban, Check, Users, UserMinus, UserCheck, Bell } from 'lucide-react';
+import { X, Search, UserPlus, MessageCircle, Ban, Check, Users, UserMinus, UserCheck, Bell, Clock, Info } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { apiService } from '../../services/api';
 import { User, Friend } from '../../types';
@@ -10,7 +10,7 @@ interface ContactsModalProps {
 }
 
 export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
-  const { friends, pendingFriends, currentUser, refreshFriends, selectConversation, conversations, refreshConversations } = useChat();
+  const { friends, pendingFriends, sentFriendRequestIds, currentUser, refreshFriends, selectConversation, conversations, refreshConversations } = useChat();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -355,6 +355,14 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
               </button>
             </div>
 
+            {/* Explanatory Notice */}
+            <div className="mb-2 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/40 text-[11px] text-blue-700 dark:text-blue-300 flex items-start space-x-2">
+              <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-500" />
+              <span>
+                <strong>Quy trình kết bạn 2 chiều:</strong> Tìm thấy người dùng <strong>KHÔNG</strong> tự động kết bạn. Bạn cần bấm <strong>"Kết bạn"</strong> (gửi lời mời) và người nhận phải bấm <strong>"Đồng ý"</strong> thì hai bên mới chính thức là bạn bè.
+              </span>
+            </div>
+
             <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
               {searchResults.length === 0 ? (
                 <p className="text-xs text-slate-400 text-center py-10">
@@ -363,7 +371,8 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
               ) : (
                 searchResults.map((user) => {
                   const isFriend = friends.some((f) => f.id === user.id);
-                  const isPending = pendingFriends.some((p) => p.id === user.id);
+                  const isIncoming = pendingFriends.some((p) => p.id === user.id);
+                  const isSent = sentFriendRequestIds.includes(user.id);
 
                   return (
                     <div
@@ -405,15 +414,35 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
                             >
                               Nhắn tin
                             </button>
+                            <button
+                              onClick={() => handleRemoveFriend(user.id)}
+                              title="Hủy kết bạn"
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10"
+                            >
+                              <UserMinus className="w-3.5 h-3.5" />
+                            </button>
                           </div>
-                        ) : isPending ? (
-                          <button
-                            onClick={() => handleAcceptRequest(user.id)}
-                            className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 flex items-center space-x-1"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>Đồng ý kết bạn</span>
-                          </button>
+                        ) : isIncoming ? (
+                          <div className="flex items-center space-x-1">
+                            <button
+                              onClick={() => handleAcceptRequest(user.id)}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 flex items-center space-x-1"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Đồng ý</span>
+                            </button>
+                            <button
+                              onClick={() => handleRejectRequest(user.id)}
+                              className="px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold hover:text-red-600 flex items-center space-x-1"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : isSent ? (
+                          <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold flex items-center space-x-1 cursor-default">
+                            <Clock className="w-3.5 h-3.5 animate-pulse" />
+                            <span>Đã gửi lời mời (Chờ duyệt)</span>
+                          </span>
                         ) : (
                           <button
                             onClick={() => handleSendFriendRequest(user.id)}

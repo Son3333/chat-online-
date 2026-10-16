@@ -544,6 +544,7 @@ class ChatServer:
             user_id = packet.get("user_id")
             friends = self.db.get_friends(user_id)
             pending_reqs = self.db.get_pending_requests(user_id)
+            sent_req_ids = self.db.get_sent_requests(user_id)
             with self.lock:
                 for f in friends:
                     f["is_online"] = 1 if (f["id"] in self.active_clients) else 0
@@ -551,7 +552,8 @@ class ChatServer:
                 "action": "get_friends_response",
                 "success": True,
                 "friends": friends,
-                "pending_requests": pending_reqs
+                "pending_requests": pending_reqs,
+                "sent_request_ids": sent_req_ids
             }
 
         elif action in ("add_friend", "send_friend_request"):

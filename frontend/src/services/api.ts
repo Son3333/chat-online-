@@ -185,7 +185,7 @@ export const apiService = {
     };
   },
 
-  async getFriends(userId: number): Promise<{ success: boolean; friends: Friend[]; pending_requests?: User[] }> {
+  async getFriends(userId: number): Promise<{ success: boolean; friends: Friend[]; pending_requests?: User[]; sent_request_ids?: number[] }> {
     return await this.sendRequest('get_friends', { user_id: userId });
   },
 

@@ -10,6 +10,7 @@ interface ChatContextType {
   messages: Message[];
   friends: Friend[];
   pendingFriends: User[];
+  sentFriendRequestIds: number[];
   isLocked: boolean;
   setIsLocked: (locked: boolean) => void;
   theme: 'dark' | 'light';
@@ -48,6 +49,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [messages, setMessages] = useState<Message[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [pendingFriends, setPendingFriends] = useState<User[]>([]);
+  const [sentFriendRequestIds, setSentFriendRequestIds] = useState<number[]>([]);
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [typingUser, setTypingUser] = useState<string | null>(null);
@@ -91,6 +93,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (res) {
       if (res.friends) setFriends(res.friends);
       if (res.pending_requests) setPendingFriends(res.pending_requests);
+      if (res.sent_request_ids) setSentFriendRequestIds(res.sent_request_ids);
     }
   }, [currentUser]);
 
@@ -344,6 +347,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         messages,
         friends,
         pendingFriends,
+        sentFriendRequestIds,
         isLocked,
         setIsLocked,
         theme,

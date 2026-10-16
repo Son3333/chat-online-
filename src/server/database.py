@@ -513,6 +513,17 @@ class Database:
             """, (user_id,))
             return [dict(r) for r in cursor.fetchall()]
 
+    def get_sent_requests(self, user_id):
+        """Lấy danh sách ID người dùng mà user này đã gửi lời mời kết bạn đi và đang chờ duyệt."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT f.friend_id as id
+                FROM friends f
+                WHERE f.user_id = ? AND f.status = 'pending'
+            """, (user_id,))
+            return [r["id"] for r in cursor.fetchall()]
+
     # --- Conversations APIs ---
     def get_direct_conversation(self, user1_id, user2_id):
         """Lấy hoặc tạo cuộc trò chuyện 1-1 giữa 2 người dùng."""
