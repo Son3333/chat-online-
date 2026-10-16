@@ -61,3 +61,4 @@ jobs:
           name: Telegram-Style-Messenger-Windows-x64
           path: frontend/dist-package/*.exe
           if-no-files-found: error
+

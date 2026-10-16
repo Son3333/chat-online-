@@ -145,5 +145,31 @@
 
 ---
 
+### Bug #11: Lỗi winCodeSign Symlink Privilege trên Windows khi đóng gói Electron Builder
+- **Tập tin**: `frontend/package.json` (Cấu hình `build.win`)
+- **Mức độ**: 🟡 **Medium (Packaging blocker)**
+- **Hiện tượng**:
+  - Khi chạy `electron-builder --win`, công cụ tự động tải `winCodeSign-2.6.0.7z` và cố gắng trích xuất symlink macOS (`libcrypto.dylib`, `libssl.dylib`).
+  - Trên Windows không bật Developer Mode / không chạy quyền Administrator, hệ điều hành trả về lỗi: `ERROR: Cannot create symbolic link : A required privilege is not held by the client`.
+- **Cách khắc phục**:
+  - Cấu hình `"win": { "sign": null, "signAndEditExecutable": false, "target": ["portable", "dir"] }` trong `frontend/package.json`.
+  - Bỏ qua bước trích xuất winCodeSign khi không cần ký số thương mại nội bộ, giúp đóng gói thành công file `.exe` portable 75.6 MB.
+- **Trạng thái**: ✅ **ĐÃ KHẮC PHỤC & VERIFIED**.
+
+---
+
+### Bug #12: Xung đột cú pháp ES Module trong PostCSS/Tailwind Config của Electron
+- **Tập tin**: `frontend/postcss.config.cjs`, `frontend/tailwind.config.cjs`
+- **Mức độ**: 🟡 **Medium (Build Tooling)**
+- **Hiện tượng**:
+  - File cấu hình ban đầu dùng cú pháp `export default` nhưng `frontend/package.json` không bật `"type": "module"`.
+  - Vite báo lỗi `[SyntaxError] Unexpected token 'export'` khi biên dịch CSS.
+- **Cách khắc phục**:
+  - Chuyển đổi tên file sang phần mở rộng `.cjs` (`postcss.config.cjs`, `tailwind.config.cjs`) và sử dụng cú pháp CommonJS chuẩn `module.exports = { ... }`.
+- **Trạng thái**: ✅ **ĐÃ KHẮC PHỤC & VERIFIED**.
+
+---
+
 ## 3. KẾT LUẬN
-Toàn bộ mã nguồn đã được rà soát tỉ mỉ. Các lỗi nghiêm trọng về Exception Handling, Calling Media Relay, UI Logic Binding, Toàn vẹn cơ sở dữ liệu và An toàn kết nối đều đã được giải quyết triệt để. Hệ thống hiện hoạt động ổn định, mượt mà và an toàn 100%.
+Toàn bộ mã nguồn đã được rà soát tỉ mỉ. Các lỗi nghiêm trọng về Exception Handling, Calling Media Relay, UI Logic Binding, Toàn vẹn cơ sở dữ liệu, Đóng gói Desktop và An toàn kết nối đều đã được giải quyết triệt để. Hệ thống hiện hoạt động ổn định, mượt mà và an toàn 100%.
+

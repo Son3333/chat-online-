@@ -83,3 +83,4 @@ flowchart LR
 
 ## 4. KẾT LUẬN
 Ứng dụng đã hoàn thành quá trình migration từ Python GUI cũ sang React + TypeScript + Electron với 100% tính năng nghiệp vụ được bảo toàn, hiệu năng tải nhanh hơn và giao diện Telegram Desktop chuẩn xác, chuyên nghiệp.
+

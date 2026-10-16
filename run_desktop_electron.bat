@@ -15,3 +15,4 @@ if exist "frontend\dist-package\win-unpacked\Telegram Style Messenger.exe" (
 echo [INFO] Dang khoi chay Electron tu source code...
 cd frontend
 call npx electron .
+
