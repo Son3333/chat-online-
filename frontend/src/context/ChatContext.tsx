@@ -279,10 +279,10 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.removeItem('telegram_user');
   };
 
-  // Polling heartbeat while call is active (both ringing & connected)
-  // Guarantees both sides synchronize connection and disconnection within 1s
+  // Polling heartbeat while call is active
+  // Connects caller when receiver accepts, and disconnects when partner hangs up
   useEffect(() => {
-    if (!activeCall) return;
+    if (!activeCall || !activeCall.channelId) return;
 
     const interval = setInterval(async () => {
       try {
@@ -298,7 +298,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               prev ? { ...prev, isConnected: true, channelId: res.channel_id || prev.channelId } : null
             );
           }
-        } else if (res && (!res.success || res.status === 'ended')) {
+        } else if (activeCall.isConnected && res && res.status === 'ended') {
+          // Partner ended the call
           setActiveCall(null);
           setIncomingCall(null);
         }
@@ -308,7 +309,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [activeCall, currentUser?.id]);
+  }, [activeCall?.channelId, activeCall?.isConnected, activeCall?.partnerId, currentUser?.id]);
 
   // Listen to real-time events from Python Server
   useEffect(() => {
