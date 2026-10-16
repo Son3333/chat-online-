@@ -425,6 +425,13 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
           break;
 
+        case 'connection_status':
+          if (event.connected) {
+            refreshConversations();
+            refreshFriends();
+          }
+          break;
+
         case 'refresh_conversations':
           refreshConversations();
           break;
@@ -441,6 +448,11 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (currentUser) {
       refreshConversations();
       refreshFriends();
+      const t = setTimeout(() => {
+        refreshConversations();
+        refreshFriends();
+      }, 1200);
+      return () => clearTimeout(t);
     }
   }, [currentUser, refreshConversations, refreshFriends]);
 

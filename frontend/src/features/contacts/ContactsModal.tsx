@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Search, UserPlus, MessageCircle, Ban, Check, Users, UserMinus, UserCheck, Bell, Clock } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { apiService } from '../../services/api';
@@ -16,6 +16,10 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
   const [isSearching, setIsSearching] = useState(false);
   const [activeTab, setActiveTab] = useState<'friends' | 'requests' | 'search'>('friends');
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  useEffect(() => {
+    refreshFriends();
+  }, [refreshFriends]);
 
   const handleSearch = async () => {
     if (!searchQuery.trim() || !currentUser) return;

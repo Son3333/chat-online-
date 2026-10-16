@@ -138,5 +138,6 @@ export interface ServerEvent {
   duration?: string;
   target_id?: number;
   user?: User;
+  connected?: boolean;
 }
 

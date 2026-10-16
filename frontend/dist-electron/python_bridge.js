@@ -171,6 +171,12 @@ class PythonBridge {
             call_accept: ['call_accept_response', 'call_accept'],
             call_end: ['call_end_response', 'call_end'],
             call_reject: ['call_reject_response', 'call_reject'],
+            get_friends: ['get_friends_response', 'get_friends'],
+            add_friend: ['add_friend_response', 'add_friend'],
+            accept_friend: ['accept_friend_response', 'accept_friend'],
+            reject_friend: ['reject_friend_response', 'reject_friend'],
+            remove_friend: ['remove_friend_response', 'remove_friend'],
+            check_friend: ['check_friend_response', 'check_friend'],
         };
         // Check if there is an in-flight request waiting for this action response directly
         if (action && this.pendingRequests.has(action)) {

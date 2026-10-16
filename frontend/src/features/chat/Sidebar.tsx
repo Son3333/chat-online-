@@ -15,6 +15,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
   const {
     currentUser,
     conversations,
+    friends,
     activeConv,
     selectConversation,
     openSavedMessages,
@@ -26,7 +27,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
   } = useChat();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'direct' | 'group' | 'archived'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'friends' | 'direct' | 'group' | 'archived'>('all');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [globalUsers, setGlobalUsers] = useState<User[]>([]);
@@ -188,6 +189,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
 
     return list;
   }, [conversations, activeTab, searchQuery, pinnedConvIds, archivedConvIds]);
+
+  // Filter friends list for the "Bạn bè" tab
+  const filteredFriends = useMemo(() => {
+    if (!searchQuery.trim()) return friends;
+    const q = searchQuery.toLowerCase();
+    return friends.filter((f) =>
+      (f.full_name && f.full_name.toLowerCase().includes(q)) ||
+      (f.username && f.username.toLowerCase().includes(q)) ||
+      (f.phone_number && f.phone_number.includes(q))
+    );
+  }, [friends, searchQuery]);
+
+  const handleStartChatWithFriend = async (friend: any) => {
+    const existing = conversations.find((c) => c.partner_id === friend.id && c.type === 'direct');
+    if (existing) {
+      selectConversation(existing);
+    } else {
+      await handleStartChatWithUser(friend as User);
+    }
+  };
 
   return (
     <aside className="w-[320px] h-full flex flex-col bg-white dark:bg-[#17212b] border-r border-slate-200 dark:border-slate-800/80 flex-shrink-0 select-none">
@@ -364,6 +385,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
           Tất cả
         </button>
         <button
+          onClick={() => setActiveTab('friends')}
+          className={`flex-1 pb-1.5 border-b-2 text-center transition-colors flex items-center justify-center space-x-1 ${
+            activeTab === 'friends'
+              ? 'border-[#2481cc] text-[#2481cc] font-semibold'
+              : 'border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+          }`}
+        >
+          <span>Bạn bè</span>
+          {friends.length > 0 && (
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+              activeTab === 'friends' ? 'bg-[#2481cc]/20 text-[#2481cc]' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+            }`}>
+              {friends.length}
+            </span>
+          )}
+        </button>
+        <button
           onClick={() => setActiveTab('direct')}
           className={`flex-1 pb-1.5 border-b-2 text-center transition-colors ${
             activeTab === 'direct'
@@ -400,7 +438,77 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
 
       {/* Conversations Scroll List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {filteredConversations.length === 0 && globalUsers.length === 0 ? (
+        {activeTab === 'friends' ? (
+          filteredFriends.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-56 text-center text-slate-400 text-xs px-4">
+              <Users className="w-10 h-10 mb-2 opacity-30 text-[#2481cc]" />
+              <span className="font-medium text-slate-600 dark:text-slate-300">
+                {searchQuery.trim() ? 'Không tìm thấy bạn bè nào khớp' : 'Chưa có bạn bè nào trong danh bạ'}
+              </span>
+              <p className="text-[11px] text-slate-400 mt-1 mb-3">Kết nối với người dùng khác qua tên hoặc ID</p>
+              <button
+                onClick={onOpenContacts}
+                className="px-3.5 py-1.5 rounded-lg bg-[#2481cc] hover:bg-[#1d6fa5] text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                Mở Danh Bạ & Kết Bạn
+              </button>
+            </div>
+          ) : (
+            filteredFriends.map((friend) => (
+              <div
+                key={friend.id}
+                onClick={() => handleStartChatWithFriend(friend)}
+                className="p-2.5 rounded-xl flex items-center justify-between cursor-pointer transition-all hover:bg-slate-100 dark:hover:bg-[#202b36] text-slate-800 dark:text-slate-200 group"
+              >
+                <div className="flex items-center space-x-3 overflow-hidden">
+                  <div className="relative flex-shrink-0">
+                    <div
+                      className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm text-white shadow-sm overflow-hidden"
+                      style={{ backgroundColor: friend.avatar_color || '#2563eb' }}
+                    >
+                      {friend.avatar_url ? (
+                        <img src={friend.avatar_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        getInitials(friend.full_name)
+                      )}
+                    </div>
+                    {Boolean(friend.is_online) && (
+                      <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white dark:border-[#17212b] bg-emerald-500" />
+                    )}
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-semibold text-xs truncate text-slate-800 dark:text-slate-100">
+                      {friend.full_name}
+                    </span>
+                    <span className="text-[11px] truncate mt-0.5">
+                      {friend.is_online ? (
+                        <span className="text-emerald-500 font-medium">Trực tuyến</span>
+                      ) : (
+                        <span className="text-slate-400">@{friend.username}</span>
+                      )}
+                      {friend.phone_number && (
+                        <span className="text-slate-400 ml-1.5">• {friend.phone_number}</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-1 flex-shrink-0">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStartChatWithFriend(friend);
+                    }}
+                    title="Nhắn tin"
+                    className="p-2 rounded-lg bg-[#2481cc]/10 dark:bg-[#2481cc]/15 text-[#2481cc] hover:bg-[#2481cc] hover:text-white transition-colors"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))
+          )
+        ) : filteredConversations.length === 0 && globalUsers.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-center text-slate-400 text-xs px-4">
             <UserIcon className="w-8 h-8 mb-2 opacity-40" />
             <span>

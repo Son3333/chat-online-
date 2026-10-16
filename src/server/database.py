@@ -657,6 +657,10 @@ class Database:
 
     def get_friends(self, user_id):
         """Lấy danh sách bạn bè chính thức (status = 'accepted') hai chiều."""
+        try:
+            user_id = int(user_id)
+        except Exception:
+            pass
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -674,6 +678,10 @@ class Database:
 
     def get_pending_requests(self, user_id):
         """Lấy danh sách các lời mời kết bạn mà người khác gửi đến cho user này chờ duyệt."""
+        try:
+            user_id = int(user_id)
+        except Exception:
+            pass
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -687,6 +695,10 @@ class Database:
 
     def get_sent_requests(self, user_id):
         """Lấy danh sách ID người dùng mà user này đã gửi lời mời kết bạn đi và đang chờ duyệt."""
+        try:
+            user_id = int(user_id)
+        except Exception:
+            pass
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
