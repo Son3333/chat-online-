@@ -55,7 +55,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     refreshConversations,
   } = useChat();
 
-  const [activeSubView, setActiveSubView] = useState<'main' | 'edit_profile' | 'change_password'>('main');
+  const [activeSubView, setActiveSubView] = useState<'main' | 'edit_profile' | 'change_password' | 'pin_code'>('main');
 
   // Edit profile state
   const [fullName, setFullName] = useState(currentUser?.full_name || '');
@@ -67,6 +67,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   // Change password state
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Lock screen PIN state
+  const [pinCode, setPinCode] = useState('');
+  const [confirmPinCode, setConfirmPinCode] = useState('');
 
   // Notifications toggle (saved in localStorage)
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
@@ -145,6 +149,62 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     }
   };
 
+  const handleSavePin = async (remove = false) => {
+    setIsSaving(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      if (remove) {
+        const res = await apiService.updateProfile(currentUser.id, { pin_code: '' });
+        if (res && res.success && res.user) {
+          setCurrentUser(res.user);
+          localStorage.setItem('vibe_user', JSON.stringify(res.user));
+          localStorage.removeItem(`vibe_pin_${currentUser.id}`);
+          setSuccessMsg('Đã tắt mã PIN khóa màn hình!');
+          setPinCode('');
+          setConfirmPinCode('');
+          setTimeout(() => {
+            setSuccessMsg(null);
+            setActiveSubView('main');
+          }, 800);
+        } else {
+          setErrorMsg(res.error || 'Không thể tắt mã PIN!');
+        }
+        return;
+      }
+
+      const cleanPin = pinCode.trim();
+      if (!cleanPin || cleanPin.length !== 4 || !/^\d{4}$/.test(cleanPin)) {
+        setErrorMsg('Mã PIN bắt buộc phải đúng 4 chữ số (0-9)!');
+        return;
+      }
+      if (cleanPin !== confirmPinCode.trim()) {
+        setErrorMsg('Mã PIN xác nhận không trùng khớp!');
+        return;
+      }
+
+      const res = await apiService.updateProfile(currentUser.id, { pin_code: cleanPin });
+      if (res && res.success && res.user) {
+        setCurrentUser(res.user);
+        localStorage.setItem('vibe_user', JSON.stringify(res.user));
+        localStorage.setItem(`vibe_pin_${currentUser.id}`, cleanPin);
+        setSuccessMsg('Đã thiết lập mã PIN 4 số thành công!');
+        setPinCode('');
+        setConfirmPinCode('');
+        setTimeout(() => {
+          setSuccessMsg(null);
+          setActiveSubView('main');
+        }, 800);
+      } else {
+        setErrorMsg(res.error || 'Lỗi khi cài đặt mã PIN!');
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Lỗi kết nối máy chủ!');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div
       onClick={onClose}
@@ -174,7 +234,9 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 ? 'Cài đặt'
                 : activeSubView === 'edit_profile'
                 ? 'Chỉnh sửa hồ sơ'
-                : 'Đổi mật khẩu'}
+                : activeSubView === 'change_password'
+                ? 'Đổi mật khẩu'
+                : 'Cài đặt mã PIN'}
             </h3>
           </div>
           <button
@@ -345,7 +407,40 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   <ChevronRight className="w-4 h-4 text-slate-400" />
                 </button>
 
-                {/* 7. App Screen Lock */}
+                {/* 7. Set PIN Code */}
+                <button
+                  onClick={() => {
+                    setErrorMsg(null);
+                    setSuccessMsg(null);
+                    setPinCode('');
+                    setConfirmPinCode('');
+                    setActiveSubView('pin_code');
+                  }}
+                  className="w-full px-3.5 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 flex items-center justify-between text-xs transition-colors"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-500 flex items-center justify-center">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                      Mã PIN khóa màn hình
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-1.5">
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        currentUser.pin_code
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                      }`}
+                    >
+                      {currentUser.pin_code ? 'Đã cài đặt' : 'Chưa thiết lập'}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </div>
+                </button>
+
+                {/* 8. App Screen Lock */}
                 <button
                   onClick={() => {
                     onClose();
@@ -447,7 +542,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 {isSaving ? 'Đang lưu...' : 'Lưu Thay Đổi'}
               </button>
             </div>
-          ) : (
+          ) : activeSubView === 'change_password' ? (
             /* Sub-view: Change Password */
             <div className="p-5 flex flex-col space-y-4 text-xs">
               <div>
@@ -496,6 +591,83 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               >
                 {isSaving ? 'Đang cập nhật...' : 'Cập Nhật Mật Khẩu'}
               </button>
+            </div>
+          ) : (
+            /* Sub-view: PIN Code Setup */
+            <div className="p-5 flex flex-col space-y-4 text-xs">
+              <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-slate-700 dark:text-slate-200 space-y-1">
+                <div className="flex items-center space-x-2 font-bold text-emerald-600 dark:text-emerald-400">
+                  <Shield className="w-4 h-4" />
+                  <span>Mã PIN bảo mật ứng dụng</span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  {currentUser.pin_code
+                    ? 'Bạn đã cài mã PIN 4 số riêng. Khi khóa màn hình (Ctrl+L), chỉ bạn mới có thể mở khóa bằng mã này.'
+                    : 'Thiết lập mã PIN 4 chữ số cá nhân để khóa bảo vệ ứng dụng khi bạn tạm rời máy tính.'}
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  {currentUser.pin_code ? 'Nhập mã PIN 4 số mới:' : 'Nhập mã PIN 4 chữ số:'}
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={pinCode}
+                  onChange={(e) => setPinCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  placeholder="••••"
+                  className="w-full h-11 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-center text-xl tracking-[0.6em] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 border border-transparent dark:border-slate-700/60"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  Xác nhận lại mã PIN 4 số:
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={confirmPinCode}
+                  onChange={(e) => setConfirmPinCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  placeholder="••••"
+                  className="w-full h-11 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-center text-xl tracking-[0.6em] font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 border border-transparent dark:border-slate-700/60"
+                />
+              </div>
+
+              {errorMsg && (
+                <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs">
+                  {errorMsg}
+                </div>
+              )}
+
+              {successMsg && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-1.5">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{successMsg}</span>
+                </div>
+              )}
+
+              <button
+                disabled={isSaving || pinCode.length !== 4 || confirmPinCode.length !== 4}
+                onClick={() => handleSavePin(false)}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-emerald-500/20 cursor-pointer"
+              >
+                {isSaving ? 'Đang lưu...' : (currentUser.pin_code ? 'Cập Nhật Mã PIN Mới' : 'Lưu Mã PIN Khóa')}
+              </button>
+
+              {currentUser.pin_code && (
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => handleSavePin(true)}
+                  className="w-full py-2 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs transition-all active:scale-95 cursor-pointer"
+                >
+                  Tắt / Xóa Mã PIN Này
+                </button>
+              )}
             </div>
           )}
         </div>

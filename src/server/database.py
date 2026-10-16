@@ -193,6 +193,13 @@ class Database:
             """)
             conn.commit()
 
+            # Migration: Add pin_code to users table if not exists
+            try:
+                cursor.execute("ALTER TABLE users ADD COLUMN pin_code TEXT")
+                conn.commit()
+            except Exception:
+                pass
+
     # --- User APIs ---
     def register_user(self, username, password, full_name):
         username = username.strip().lower().lstrip("@")
@@ -245,7 +252,7 @@ class Database:
             cursor = conn.cursor()
             pwd_hash = hash_password(password)
             cursor.execute("""
-                SELECT id, username, full_name, avatar_color, is_online
+                SELECT id, username, full_name, avatar_color, is_online, pin_code
                 FROM users
                 WHERE username = ? AND password_hash = ?
             """, (username, pwd_hash))
@@ -272,12 +279,12 @@ class Database:
     def get_user_by_id(self, user_id):
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, username, full_name, avatar_color, is_online, last_seen FROM users WHERE id = ?", (user_id,))
+            cursor.execute("SELECT id, username, full_name, avatar_color, is_online, last_seen, pin_code FROM users WHERE id = ?", (user_id,))
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def update_user_profile(self, user_id, full_name=None, avatar_color=None, new_password=None):
-        """Cập nhật thông tin hồ sơ cá nhân."""
+    def update_user_profile(self, user_id, full_name=None, avatar_color=None, new_password=None, pin_code=None):
+        """Cập nhật thông tin hồ sơ cá nhân và mã PIN."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             updates = []
@@ -296,6 +303,15 @@ class Database:
                 pw_hash = bcrypt.hashpw(new_password.encode('utf-8'), salt).decode('utf-8')
                 updates.append("password_hash = ?")
                 params.append(pw_hash)
+            if pin_code is not None:
+                pin_str = str(pin_code).strip()
+                if pin_str:
+                    if not pin_str.isdigit() or len(pin_str) != 4:
+                        return {"success": False, "error": "Mã PIN phải bao gồm đúng 4 chữ số (0-9)!"}
+                    updates.append("pin_code = ?")
+                    params.append(pin_str)
+                else:
+                    updates.append("pin_code = NULL")
 
             if not updates:
                 return {"success": False, "error": "Không có thông tin thay đổi!"}

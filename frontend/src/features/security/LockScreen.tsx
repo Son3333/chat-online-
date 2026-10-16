@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
-import { Lock, Delete } from 'lucide-react';
+import { Lock, Delete, LogOut } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 
 export const LockScreen: React.FC = () => {
-  const { isLocked, setIsLocked, currentUser } = useChat();
+  const { isLocked, setIsLocked, currentUser, logout } = useChat();
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
 
   if (!isLocked) return null;
+
+  // Lấy mã PIN đã cài đặt trong hồ sơ (từ DB hoặc localStorage)
+  const configuredPin = currentUser?.pin_code || (currentUser?.id ? localStorage.getItem(`vibe_pin_${currentUser.id}`) : null);
 
   const handleKeyPress = (num: string) => {
     if (pin.length < 4) {
@@ -16,8 +19,11 @@ export const LockScreen: React.FC = () => {
       setError(false);
 
       if (nextPin.length === 4) {
-        // Default PIN is 1234 or any 4 digit matching
-        if (nextPin === '1234' || nextPin === '0000') {
+        // Nếu người dùng đã cài mã PIN trong hồ sơ -> so khớp đúng mã PIN đó
+        // Nếu chưa cài mã PIN nào -> bất kỳ mã 4 số (hoặc 1234/0000) đều mở được
+        const isCorrect = configuredPin ? nextPin === configuredPin : true;
+
+        if (isCorrect) {
           setTimeout(() => {
             setIsLocked(false);
             setPin('');
@@ -46,7 +52,7 @@ export const LockScreen: React.FC = () => {
 
         <h2 className="text-lg font-bold mb-1">Ứng dụng đã bị khóa</h2>
         <p className="text-xs text-slate-400 mb-6 text-center">
-          Chào {currentUser?.full_name || 'bạn'}, nhập mã PIN (Mặc định: 1234) để mở khóa
+          Chào {currentUser?.full_name || 'bạn'}, nhập mã PIN 4 số để mở khóa
         </p>
 
         {/* 4 dots */}
@@ -67,7 +73,7 @@ export const LockScreen: React.FC = () => {
 
         {error && (
           <p className="text-xs text-red-400 font-semibold mb-4 animate-shake">
-            Sai mã PIN! Thử lại với 1234
+            Mã PIN không chính xác! Vui lòng thử lại.
           </p>
         )}
 
@@ -96,7 +102,22 @@ export const LockScreen: React.FC = () => {
             <Delete className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Option to logout if forgot PIN */}
+        <div className="mt-8 flex items-center justify-center">
+          <button
+            onClick={() => {
+              setIsLocked(false);
+              logout();
+            }}
+            className="text-xs text-slate-400 hover:text-red-400 transition-colors flex items-center space-x-1.5 py-1 px-3 rounded-lg hover:bg-slate-800/40"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Quên mã PIN? Đăng xuất</span>
+          </button>
+        </div>
       </div>
     </div>
   );
 };
+

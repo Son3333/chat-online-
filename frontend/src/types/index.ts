@@ -4,6 +4,7 @@ export interface User {
   full_name: string;
   avatar_color?: string;
   status?: string;
+  pin_code?: string;
   is_online?: number | boolean;
   created_at?: string;
 }
