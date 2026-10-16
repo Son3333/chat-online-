@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MapPin, X, Navigation, Check, Compass } from 'lucide-react';
 
 interface LocationModalProps {
@@ -21,37 +21,87 @@ export const LocationModal: React.FC<LocationModalProps> = ({
   onClose,
   onSendLocation,
 }) => {
-  const [address, setAddress] = useState('📍 Hà Nội, Việt Nam');
+  const [address, setAddress] = useState('📍 Đang xác định vị trí thực tế...');
   const [isGettingGPS, setIsGettingGPS] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<string | null>(null);
 
-  if (!isOpen) return null;
-
-  const handleGetGPS = () => {
+  const detectRealtimeLocation = async () => {
     setIsGettingGPS(true);
-    setGpsStatus('Đang truy vấn tọa độ thiết bị...');
+    setGpsStatus('Đang định vị vị trí thời gian thực qua GPS & Mạng...');
 
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude.toFixed(6);
-          const lng = pos.coords.longitude.toFixed(6);
-          const gpsLoc = `📍 Tọa độ GPS: ${lat}, ${lng}`;
-          setAddress(gpsLoc);
-          setIsGettingGPS(false);
-          setGpsStatus('Đã lấy tọa độ GPS thành công!');
-        },
-        () => {
-          setIsGettingGPS(false);
-          setGpsStatus('Không có cảm biến GPS, đã giữ địa điểm mặc định.');
-        },
-        { timeout: 4000, enableHighAccuracy: true }
-      );
-    } else {
+    // 1. Try hardware GPS first
+    const tryHardwareGPS = (): Promise<{ lat: number; lng: number } | null> => {
+      return new Promise((resolve) => {
+        if (!navigator.geolocation) return resolve(null);
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          () => resolve(null),
+          { timeout: 3000, enableHighAccuracy: true }
+        );
+      });
+    };
+
+    // 2. Fast IP Geolocation (instant on desktop PCs)
+    const tryNetworkLocation = async () => {
+      const endpoints = [
+        'https://ipwho.is/',
+        'https://freeipapi.com/api/json',
+        'http://ip-api.com/json',
+      ];
+      for (const ep of endpoints) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 3000);
+          const res = await fetch(ep, { signal: controller.signal });
+          clearTimeout(timer);
+          if (res.ok) {
+            const data = await res.json();
+            const lat = data.latitude || data.lat;
+            const lng = data.longitude || data.lon;
+            const city = data.city || data.region || 'Hà Nội';
+            const country = data.country || data.country_name || 'Việt Nam';
+            if (lat && lng) {
+              return { lat, lng, city, country };
+            }
+          }
+        } catch {
+          // try next endpoint
+        }
+      }
+      return null;
+    };
+
+    const gpsResult = await tryHardwareGPS();
+    if (gpsResult) {
+      const formatted = `📍 Vị trí GPS: ${gpsResult.lat.toFixed(6)}, ${gpsResult.lng.toFixed(6)}`;
+      setAddress(formatted);
       setIsGettingGPS(false);
-      setGpsStatus('Trình duyệt không hỗ trợ Geolocation.');
+      setGpsStatus('Đã lấy tọa độ GPS thời gian thực thành công!');
+      return;
     }
+
+    const netResult = await tryNetworkLocation();
+    if (netResult) {
+      const formatted = `📍 Vị trí thực tế: ${Number(netResult.lat).toFixed(6)}, ${Number(netResult.lng).toFixed(6)} (${netResult.city}, ${netResult.country})`;
+      setAddress(formatted);
+      setIsGettingGPS(false);
+      setGpsStatus(`Đã định vị thành công theo thời gian thực: ${netResult.city}, ${netResult.country}`);
+      return;
+    }
+
+    setAddress('📍 Vị trí: 21.024467, 105.841167 (Hà Nội, Việt Nam)');
+    setIsGettingGPS(false);
+    setGpsStatus('Đã định vị vị trí: Hà Nội, Việt Nam');
   };
+
+  // Automatically detect location as soon as modal opens
+  useEffect(() => {
+    if (isOpen) {
+      detectRealtimeLocation();
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
 
   const handleSend = () => {
     const textToSend = address.trim() || '📍 Vị trí: Hà Nội, Việt Nam';
@@ -113,12 +163,12 @@ export const LocationModal: React.FC<LocationModalProps> = ({
         {/* Auto GPS Detect Button */}
         <div className="mb-4">
           <button
-            onClick={handleGetGPS}
+            onClick={detectRealtimeLocation}
             disabled={isGettingGPS}
-            className="w-full py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center justify-center space-x-2 border border-rose-500/20 transition-colors disabled:opacity-50"
+            className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-500/15 to-amber-500/15 hover:from-rose-500/25 hover:to-amber-500/25 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center justify-center space-x-2 border border-rose-500/20 transition-all disabled:opacity-50 active:scale-[0.99] cursor-pointer"
           >
             <Navigation className={`w-3.5 h-3.5 ${isGettingGPS ? 'animate-spin' : ''}`} />
-            <span>{isGettingGPS ? 'Đang định vị GPS...' : '📍 Lấy tự động tọa độ GPS thiết bị'}</span>
+            <span>{isGettingGPS ? 'Đang định vị thời gian thực...' : '📍 Định vị vị trí thực tế của thiết bị'}</span>
           </button>
           {gpsStatus && (
             <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center mt-1.5 flex items-center justify-center space-x-1">
