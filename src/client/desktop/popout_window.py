@@ -6,11 +6,8 @@ Module Cửa Sổ Chat Độc Lập (Pop-out Chat Window)
 
 import customtkinter as ctk
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 import threading
-import time
-import os
-from typing import Optional
 
 from src.client.ui.chat_bubble import ChatBubble
 
@@ -65,8 +62,8 @@ class PopoutChatWindow(ctk.CTkToplevel):
         self.reply_bar = ctk.CTkFrame(self, height=36, corner_radius=0, fg_color=("#E0E7FF", "#1E293B"))
         self.lbl_reply_info = ctk.CTkLabel(self.reply_bar, text="", font=ctk.CTkFont(size=11))
         self.lbl_reply_info.pack(side="left", padx=10)
-        btn_cancel_reply = ctk.CTkButton(self.reply_bar, text="✕", width=24, height=24, 
-                                         fg_color="transparent", text_color="#EF4444", 
+        btn_cancel_reply = ctk.CTkButton(self.reply_bar, text="✕", width=24, height=24,
+                                         fg_color="transparent", text_color="#EF4444",
                                          command=self._cancel_reply)
         btn_cancel_reply.pack(side="right", padx=8)
 

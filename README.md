@@ -14,6 +14,14 @@
 
 ---
 
+[![CI/CD Pipeline](https://github.com/phatdat08/ChatApp_Nhom5/actions/workflows/ci.yml/badge.svg)](https://github.com/phatdat08/ChatApp_Nhom5/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/Pytest-33%20Passed%20(100%25)-brightgreen)
+![Security Audit](https://img.shields.io/badge/Bandit%20Audit-0%20Issues%20(Safe)-blue)
+![Dependencies](https://img.shields.io/badge/pip--audit-0%20Vulnerabilities-success)
+![Linter](https://img.shields.io/badge/Ruff-Passed-informational)
+
+---
+
 ## 🌟 Giới thiệu sản phẩm (Desktop Application)
 Ứng dụng nhắn tin và truyền thông tin là một phần mềm Desktop hiện đại xây dựng trên nền tảng **Python + CustomTkinter + TCP Socket thời gian thực + SQLite Database**, được thiết kế theo phong cách giao diện phẳng tối/sáng hiện đại (tương tự Telegram, Discord, Slack), hỗ trợ hoạt động trực tuyến hoàn toàn qua **Mạng diện rộng WAN (Internet)**.
 
@@ -78,6 +86,20 @@
 ## 📁 Cấu trúc thư mục dự án
 
 ```
+├── .github/workflows/ci.yml  # Pipeline CI/CD tự động (Lint, Test, Package EXE)
+├── pyproject.toml            # Cấu hình chuẩn hóa Ruff Linter và Pytest
+├── tests/                    # Bộ kiểm thử tự động toàn diện (33 test cases, 100% Pass)
+│   ├── test_database.py      # Kiểm thử CSDL, mật khẩu, xác thực, danh bạ, tin nhắn
+│   ├── test_network_server.py# Kiểm thử tích hợp Socket TCP, handshake, broadcast
+│   ├── test_desktop_features.py# Kiểm thử Window Manager, phục hồi màn hình, formatters
+│   └── test_ui_smoke.py      # Kiểm thử khói Giao diện, Theme, ô tìm kiếm, nhập liệu
+├── reports/                  # Báo cáo kỹ thuật chi tiết sau kiểm toán
+│   ├── bug-report.md         # Danh sách và giải pháp 9 lỗi phát hiện
+│   ├── test-plan.md          # Kế hoạch và ma trận kiểm thử chi tiết
+│   ├── test-results.md       # Kết quả kiểm thử (33 passed, 1.50s, 52% coverage)
+│   ├── security-audit.md     # Báo cáo an ninh Bandit (0 Issues) và pip-audit
+│   └── ci-cd-setup.md        # Hướng dẫn quy trình CI/CD và debug GitHub Actions
+│
 ├── CHAY_UNG_DUNG.bat         # File thực thi 1-Click (Tự cài ngầm thư viện + bật Server Online ngầm + mở App)
 ├── CHAY_SERVER_WAN.bat       # Khởi động Chat Server mạng diện rộng WAN (Internet)
 ├── CHAY_SERVER.bat           # Khởi động Chat Server mạng nội bộ (Port 8888)
@@ -124,3 +146,38 @@
     ├── BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 5 - KẾT LUẬN - NHÓM 5.docx
     └── Nhóm-Lớp-KẾ HOẠCH THỰC HIỆN ĐỒ ÁN.docx
 ```
+
+---
+
+## 🧪 Kiểm thử tự động & CI/CD Pipeline
+
+Dự án tích hợp đầy đủ bộ công cụ kiểm thử hiện đại và tự động hóa CI/CD:
+
+### 1. Lệnh chạy kiểm thử tự động (Pytest)
+```powershell
+# Chạy toàn bộ 33 test cases kèm thống kê độ bao phủ (Coverage)
+python -m pytest --cov=src --cov-report=term-missing tests/
+```
+
+### 2. Lệnh kiểm tra chất lượng mã nguồn & Linter (Ruff)
+```powershell
+python -m ruff check src
+```
+
+### 3. Lệnh quét an ninh mã nguồn (Bandit)
+```powershell
+python -m bandit -r src -ll
+```
+
+### 4. Lệnh kiểm tra lỗ hổng phụ thuộc (pip-audit)
+```powershell
+python -m pip_audit -r requirements.txt
+```
+
+### 5. Xem các báo cáo kỹ thuật chi tiết
+- 📋 [Báo cáo Kiểm toán và Sửa lỗi](reports/bug-report.md)
+- 📝 [Kế hoạch và Chiến lược Kiểm thử](reports/test-plan.md)
+- 📊 [Kết quả Kiểm thử Tự động Chi tiết](reports/test-results.md)
+- 🛡️ [Đánh giá An ninh & Bảo mật Phần mềm](reports/security-audit.md)
+- 🚀 [Hướng dẫn Thiết lập & Vận hành CI/CD](reports/ci-cd-setup.md)
+

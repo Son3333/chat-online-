@@ -17,8 +17,7 @@ import os
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from typing import Optional, Callable
-from PIL import Image, ImageGrab, ImageTk, ImageDraw, ImageFilter
-import numpy as np
+from PIL import Image, ImageGrab, ImageTk, ImageDraw
 
 class ScreenCaptureTool:
     def __init__(self, parent: tk.Tk, on_send_image: Optional[Callable[[str], None]] = None):
@@ -194,9 +193,9 @@ class CaptureOverlay:
 
             # Hiển thị text nhỏ gần chuột
             self.canvas.delete("loupe_text")
-            self.canvas.create_text(x + 15, y + 25, 
-                                   text=f"{x}, {y} | {hex_color}", 
-                                   fill="#38BDF8", font=("Consolas", 10, "bold"), 
+            self.canvas.create_text(x + 15, y + 25,
+                                   text=f"{x}, {y} | {hex_color}",
+                                   fill="#38BDF8", font=("Consolas", 10, "bold"),
                                    tag="loupe_text", anchor="w")
 
     def _draw_temp_annotation(self, x1, y1, x2, y2):
@@ -253,7 +252,7 @@ class CaptureOverlay:
         if tb_y + 45 > self.height:
             tb_y = y1 - 50
 
-        self.toolbar_frame = tk.Frame(self.canvas, bg="#0F172A", padx=8, pady=6, 
+        self.toolbar_frame = tk.Frame(self.canvas, bg="#0F172A", padx=8, pady=6,
                                       highlightthickness=1, highlightbackground="#38BDF8")
         self.canvas.create_window(tb_x, tb_y, anchor="nw", window=self.toolbar_frame)
 
@@ -268,7 +267,7 @@ class CaptureOverlay:
         ]
 
         for text, tool_name in tools:
-            btn = tk.Button(self.toolbar_frame, text=text, font=("Segoe UI", 9), 
+            btn = tk.Button(self.toolbar_frame, text=text, font=("Segoe UI", 9),
                             bg="#1E293B", fg="#F8FAFC", relief=tk.FLAT, padx=6, pady=2,
                             command=lambda t=tool_name: self._set_tool(t))
             btn.pack(side=tk.LEFT, padx=3)
@@ -364,7 +363,7 @@ class CaptureOverlay:
 
     def _save_to_file(self):
         final_img = self._render_final_crop()
-        path = filedialog.asksaveasfilename(defaultextension=".png", 
+        path = filedialog.asksaveasfilename(defaultextension=".png",
                                             filetypes=[("PNG Image", "*.png"), ("JPEG Image", "*.jpg")])
         if path:
             final_img.save(path)

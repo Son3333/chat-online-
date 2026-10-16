@@ -10,7 +10,7 @@ from typing import Optional, Callable
 class ToastNotification:
     _active_toasts = []
 
-    def __init__(self, parent: tk.Tk, title: str, message: str, avatar_color="#2563EB", 
+    def __init__(self, parent: tk.Tk, title: str, message: str, avatar_color="#2563EB",
                  on_click: Optional[Callable] = None, duration_ms=4500):
         self.parent = parent
         self.title = title
@@ -56,8 +56,8 @@ class ToastNotification:
             card.bind("<Button-1>", _handle_click)
 
             # Cột trái: Avatar tròn nhỏ
-            avatar_lbl = tk.Label(card, text=self.title[:1].upper() if self.title else "💬", 
-                                  font=("Segoe UI", 12, "bold"), fg="white", bg=self.avatar_color, 
+            avatar_lbl = tk.Label(card, text=self.title[:1].upper() if self.title else "💬",
+                                  font=("Segoe UI", 12, "bold"), fg="white", bg=self.avatar_color,
                                   width=3, height=1)
             avatar_lbl.pack(side=tk.LEFT, padx=(12, 10), pady=12)
             avatar_lbl.bind("<Button-1>", _handle_click)
@@ -67,7 +67,7 @@ class ToastNotification:
             text_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, pady=10)
             text_frame.bind("<Button-1>", _handle_click)
 
-            title_lbl = tk.Label(text_frame, text=self.title, font=("Segoe UI", 10, "bold"), 
+            title_lbl = tk.Label(text_frame, text=self.title, font=("Segoe UI", 10, "bold"),
                                  fg="#F8FAFC", bg="#1E293B", anchor="w")
             title_lbl.pack(fill=tk.X)
             title_lbl.bind("<Button-1>", _handle_click)
@@ -75,7 +75,7 @@ class ToastNotification:
             preview = self.message.replace("\n", " ")
             if len(preview) > 42:
                 preview = preview[:40] + "..."
-            msg_lbl = tk.Label(text_frame, text=preview, font=("Segoe UI", 9), 
+            msg_lbl = tk.Label(text_frame, text=preview, font=("Segoe UI", 9),
                                fg="#94A3B8", bg="#1E293B", anchor="w")
             msg_lbl.pack(fill=tk.X, pady=(2, 0))
             msg_lbl.bind("<Button-1>", _handle_click)

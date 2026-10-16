@@ -2,10 +2,9 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import base64
 import os
-import io
 import re
 import threading
-from typing import Optional, Callable, Dict, List, Any
+from typing import Optional
 from PIL import Image
 
 # Thư mục lưu đệm ảnh thu nhỏ để xem trực tiếp
@@ -60,10 +59,9 @@ def format_time(ts_str: str) -> str:
     except Exception:
         return ts_str
 
-import tkinter as tk
 
 class ChatBubble(ctk.CTkFrame):
-    def __init__(self, master, message: dict, current_user_id: int, network_client, 
+    def __init__(self, master, message: dict, current_user_id: int, network_client,
                  on_recall_callback=None, on_reply_callback=None, on_reaction_callback=None, on_pin_callback=None):
         super().__init__(master, fg_color="transparent")
         self.message = message
@@ -75,16 +73,16 @@ class ChatBubble(ctk.CTkFrame):
         self.on_pin_callback = on_pin_callback
         self.is_self = (message.get("sender_id") == current_user_id)
         self.img_ref = None  # Giữ tham chiếu ảnh CTkImage tránh bị garbage collect
-        
+
         self.grid_columnconfigure(0, weight=1)
         self._build_bubble()
 
     def _build_bubble(self):
         bubble_align = "e" if self.is_self else "w"
-        
+
         bubble_wrapper = ctk.CTkFrame(self, fg_color="transparent")
         bubble_wrapper.pack(anchor=bubble_align, padx=12, pady=4)
-        
+
         msg_type = self.message.get("message_type", "text")
         content = self.message.get("content", "")
         file_id = self.message.get("file_id")
@@ -97,8 +95,8 @@ class ChatBubble(ctk.CTkFrame):
         if not self.is_self:
             sender_name = self.message.get("sender_name", "Thành viên")
             name_label = ctk.CTkLabel(
-                bubble_wrapper, 
-                text=sender_name, 
+                bubble_wrapper,
+                text=sender_name,
                 font=ctk.CTkFont(size=11, weight="bold"),
                 text_color=("#475569", "#94A3B8")
             )
@@ -114,10 +112,10 @@ class ChatBubble(ctk.CTkFrame):
         else:
             bg_color = "#2563EB" if self.is_self else ("#E2E8F0", "#334155")
             text_color = "white" if self.is_self else ("#0F172A", "#F8FAFC")
-        
+
         bubble_card = ctk.CTkFrame(
-            bubble_wrapper, 
-            fg_color=bg_color, 
+            bubble_wrapper,
+            fg_color=bg_color,
             corner_radius=14 if not pure_emoji else 0
         )
         bubble_card.pack(anchor=bubble_align)
@@ -173,8 +171,8 @@ class ChatBubble(ctk.CTkFrame):
                 # Emoji to kiểu Facebook Messenger
                 emoji_font_size = 42 if len(content.strip()) <= 2 else 32
                 msg_label = ctk.CTkLabel(
-                    bubble_card, 
-                    text=content, 
+                    bubble_card,
+                    text=content,
                     font=ctk.CTkFont(size=emoji_font_size),
                     wraplength=450,
                     justify="left"
@@ -182,8 +180,8 @@ class ChatBubble(ctk.CTkFrame):
                 msg_label.pack(padx=6, pady=2, anchor=bubble_align)
             else:
                 msg_label = ctk.CTkLabel(
-                    bubble_card, 
-                    text=content, 
+                    bubble_card,
+                    text=content,
                     font=ctk.CTkFont(size=13),
                     text_color=text_color,
                     wraplength=450,
@@ -241,33 +239,33 @@ class ChatBubble(ctk.CTkFrame):
         elif msg_type == "file":
             orig_name = self.message.get("original_name", "Tài liệu đính kèm")
             f_size = format_file_size(self.message.get("file_size", 0))
-            
+
             file_box = ctk.CTkFrame(bubble_card, fg_color=("gray85", "#1E293B"), corner_radius=10)
             file_box.pack(padx=8, pady=8)
-            
+
             row_file = ctk.CTkFrame(file_box, fg_color="transparent")
             row_file.pack(padx=10, pady=8)
-            
+
             ctk.CTkLabel(row_file, text="📄", font=ctk.CTkFont(size=26)).pack(side="left", padx=(0, 10))
-            
+
             info_col = ctk.CTkFrame(row_file, fg_color="transparent")
             info_col.pack(side="left", fill="x", expand=True)
-            
+
             ctk.CTkLabel(
-                info_col, 
-                text=orig_name, 
+                info_col,
+                text=orig_name,
                 font=ctk.CTkFont(size=13, weight="bold"),
                 wraplength=300,
                 justify="left"
             ).pack(anchor="w")
-            
+
             ctk.CTkLabel(
-                info_col, 
-                text=f"Dung lượng: {f_size}", 
+                info_col,
+                text=f"Dung lượng: {f_size}",
                 font=ctk.CTkFont(size=11),
                 text_color=("gray40", "gray60")
             ).pack(anchor="w")
-            
+
             btn_row = ctk.CTkFrame(file_box, fg_color="transparent")
             btn_row.pack(fill="x", padx=10, pady=(0, 8))
 
@@ -297,9 +295,9 @@ class ChatBubble(ctk.CTkFrame):
             btn_folder.pack(side="left", padx=(0, 4))
 
             btn_dl = ctk.CTkButton(
-                btn_row, 
-                text="💾 Lưu...", 
-                height=28, 
+                btn_row,
+                text="💾 Lưu...",
+                height=28,
                 width=70,
                 font=ctk.CTkFont(size=11),
                 fg_color="#10B981",
@@ -311,11 +309,11 @@ class ChatBubble(ctk.CTkFrame):
         # Dòng thời gian và trạng thái gửi
         meta_row = ctk.CTkFrame(bubble_card, fg_color="transparent")
         meta_row.pack(anchor="e", padx=10 if not pure_emoji else 2, pady=(0, 5))
-        
+
         t_str = format_time(self.message.get("created_at", ""))
         time_label = ctk.CTkLabel(
-            meta_row, 
-            text=t_str + ("  ✓" if self.is_self else ""), 
+            meta_row,
+            text=t_str + ("  ✓" if self.is_self else ""),
             font=ctk.CTkFont(size=10),
             text_color=("white" if self.is_self else ("#64748B", "#94A3B8")) if not pure_emoji else ("#64748B", "#94A3B8")
         )
@@ -523,7 +521,7 @@ class ChatBubble(ctk.CTkFrame):
         if not file_id:
             messagebox.showwarning("Thông báo", "Tệp tin không tồn tại!")
             return
-        
+
         save_path = filedialog.asksaveasfilename(
             initialfile=orig_name,
             title="Lưu tệp tin",
@@ -531,7 +529,7 @@ class ChatBubble(ctk.CTkFrame):
         )
         if not save_path:
             return
-        
+
         # Nếu đã có trong cache thì copy nhanh
         cache_path = self._get_cache_path()
         if os.path.exists(cache_path):
@@ -587,7 +585,8 @@ class ChatBubble(ctk.CTkFrame):
                 try:
                     os.startfile(cache_path)
                 except Exception as e:
-                    self.after(0, lambda: messagebox.showerror("Lỗi mở file", f"Không thể mở tệp: {e}"))
+                    err_text = str(e)
+                    self.after(0, lambda: messagebox.showerror("Lỗi mở file", f"Không thể mở tệp: {err_text}"))
             else:
                 self.after(0, lambda: messagebox.showerror("Lỗi", "Không thể tải tệp để mở!"))
         threading.Thread(target=_task, daemon=True).start()
@@ -601,7 +600,8 @@ class ChatBubble(ctk.CTkFrame):
                     import subprocess
                     subprocess.run(["explorer", f"/select,{os.path.normpath(cache_path)}"])
                 except Exception as e:
-                    self.after(0, lambda: messagebox.showerror("Lỗi", f"Không thể mở thư mục: {e}"))
+                    err_text = str(e)
+                    self.after(0, lambda: messagebox.showerror("Lỗi", f"Không thể mở thư mục: {err_text}"))
             else:
                 self.after(0, lambda: messagebox.showerror("Lỗi", "Không thể tải tệp để định vị!"))
         threading.Thread(target=_task, daemon=True).start()

@@ -1,0 +1,22 @@
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "C4", "B"]
+ignore = [
+    "E501",  # Line length handled by formatter
+    "B008",  # Do not perform function call in argument defaults
+    "B904",  # Within an except clause, raise exceptions with raise ... from err
+    "E402",  # Module level import not at top of file (used in GUI conditional imports)
+    "E722",  # Do not use bare except
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --strict-markers"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning"
+]

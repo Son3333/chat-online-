@@ -8,10 +8,10 @@ Module Quản lý Khay Hệ thống (System Tray Integration)
 
 import threading
 from typing import Callable, Optional
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 class TrayManager:
-    def __init__(self, 
+    def __init__(self,
                  app_title="ChatApp Desktop",
                  on_restore: Optional[Callable] = None,
                  on_screenshot: Optional[Callable] = None,

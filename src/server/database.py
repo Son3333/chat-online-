@@ -4,7 +4,6 @@ import hashlib
 import re
 import random
 from contextlib import contextmanager
-from datetime import datetime
 
 DB_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(DB_DIR, "chat_database.db")
@@ -56,7 +55,7 @@ class Database:
     def init_tables(self):
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            
+
             # 1. Bảng Người dùng (ID là dãy số ngẫu nhiên gồm 10 chữ số bảo mật)
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -200,7 +199,7 @@ class Database:
         full_name = full_name.strip()
         if not username or not password or not full_name:
             return {"success": False, "message": "Vui lòng nhập đầy đủ thông tin!"}
-        
+
         # Kiểm tra tính hợp lệ của username (chuẩn như Telegram: a-z, 0-9, dấu gạch dưới, dài từ 3 - 20 ký tự)
         if len(username) < 3 or len(username) > 20:
             return {"success": False, "message": "Username phải có độ dài từ 3 đến 20 ký tự!"}
@@ -210,24 +209,24 @@ class Database:
         ok, msg = validate_password_strength(password)
         if not ok:
             return {"success": False, "message": msg}
-        
+
         colors = ["#2563EB", "#7C3AED", "#059669", "#D97706", "#DC2626", "#0891B2", "#4F46E5"]
         avatar_color = colors[len(username) % len(colors)]
-        
+
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
             if cursor.fetchone():
                 return {"success": False, "message": f"Username @{username} đã có người sử dụng! Vui lòng chọn username khác."}
-            
+
             pwd_hash = hash_password(password)
             new_id = self.generate_random_user_id(cursor)
-            
+
             cursor.execute("""
                 INSERT INTO users (id, username, password_hash, full_name, avatar_color)
                 VALUES (?, ?, ?, ?, ?)
             """, (new_id, username, pwd_hash, full_name, avatar_color))
-            
+
             # Tự động thêm vào nhóm chat chung nếu có
             cursor.execute("SELECT id FROM conversations WHERE name = 'Nhóm 05 - Đồ Án CNPM'")
             grp = cursor.fetchone()
@@ -236,7 +235,7 @@ class Database:
                     INSERT OR IGNORE INTO conversation_members (conversation_id, user_id, role)
                     VALUES (?, ?, 'member')
                 """, (grp["id"], new_id))
-            
+
             conn.commit()
             return {"success": True, "user": {"id": new_id, "username": username, "full_name": full_name, "avatar_color": avatar_color}}
 
@@ -275,7 +274,7 @@ class Database:
         keyword = keyword.strip()
         if not keyword:
             return []  # Bảo mật: Không bao giờ trả về danh sách nếu để trống từ khóa!
-            
+
         # Tự động loại bỏ ký tự @ hoặc # ở đầu (hỗ trợ người dùng gõ @username hoặc #id)
         clean_keyword = keyword.lstrip("@#").strip()
         if not clean_keyword:
@@ -293,7 +292,7 @@ class Database:
 
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            
+
             # 1. Tìm theo ID cụ thể nếu là số (ví dụ: "2844831592", "#2844831592", "id:2844831592")
             id_query = clean_keyword.replace("id:", "").strip()
             if id_query.isdigit():
@@ -305,7 +304,7 @@ class Database:
                 res = [dict(r) for r in cursor.fetchall()]
                 if res:
                     return res
-            
+
             # 2. Tìm kiếm thông minh hỗ trợ cả tiếng Việt có dấu, không dấu, username và họ tên
             cursor.execute("""
                 SELECT id, username, full_name, avatar_color, is_online
@@ -326,9 +325,9 @@ class Database:
                 # - ID chứa từ khóa
                 # - Username khớp hoàn toàn hoặc chứa từ khóa (cả có dấu và không dấu)
                 # - Họ tên chứa từ khóa (cả có dấu và không dấu)
-                if (search_lower == uname or 
-                    search_normalized in uname_norm or 
-                    search_lower in fname or 
+                if (search_lower == uname or
+                    search_normalized in uname_norm or
+                    search_lower in fname or
                     search_normalized in fname_norm or
                     search_lower in uid_str):
                     matched.append(u)
@@ -384,9 +383,9 @@ class Database:
                 """, (user_id, friend_id))
                 conn.commit()
                 return {
-                    "success": True, 
-                    "accepted": True, 
-                    "message": f"Đã chấp nhận lời mời từ @{target['username']}! Hai bạn đã trở thành bạn bè.", 
+                    "success": True,
+                    "accepted": True,
+                    "message": f"Đã chấp nhận lời mời từ @{target['username']}! Hai bạn đã trở thành bạn bè.",
                     "friend": dict(target)
                 }
 
@@ -398,8 +397,8 @@ class Database:
             """, (user_id, friend_id))
             conn.commit()
             return {
-                "success": True, 
-                "accepted": False, 
+                "success": True,
+                "accepted": False,
                 "message": f"Đã gửi lời mời kết bạn tới @{target['username']}! Đang chờ đối phương đồng ý.",
                 "target": dict(target)
             }
@@ -419,7 +418,7 @@ class Database:
                 VALUES (?, ?, 'accepted')
                 ON CONFLICT(user_id, friend_id) DO UPDATE SET status = 'accepted'
             """, (requester_id, user_id))
-            
+
             cursor.execute("""
                 INSERT INTO friends (user_id, friend_id, status)
                 VALUES (?, ?, 'accepted')
@@ -440,7 +439,7 @@ class Database:
         """Hủy kết bạn (xóa cả 2 chiều)."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)", 
+            cursor.execute("DELETE FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)",
                            (user_id, friend_id, friend_id, user_id))
             conn.commit()
             return {"success": True, "message": "Đã xóa người này khỏi Danh bạ bạn bè."}
@@ -520,7 +519,7 @@ class Database:
             row = cursor.fetchone()
             if row:
                 return row["id"]
-            
+
             # Tạo mới
             cursor.execute("""
                 INSERT INTO conversations (type, created_by) VALUES ('direct', ?)
@@ -539,7 +538,7 @@ class Database:
                 VALUES ('group', ?, ?)
             """, (name, creator_id))
             conv_id = cursor.lastrowid
-            
+
             all_members = set([creator_id] + member_ids)
             for uid in all_members:
                 role = 'admin' if uid == creator_id else 'member'
@@ -562,7 +561,7 @@ class Database:
                 ORDER BY c.created_at DESC
             """, (user_id,))
             conversations = [dict(r) for r in cursor.fetchall()]
-            
+
             result = []
             for conv in conversations:
                 conv_id = conv["id"]
@@ -576,7 +575,7 @@ class Database:
                 """, (conv_id,))
                 last_msg = cursor.fetchone()
                 conv["last_message"] = dict(last_msg) if last_msg else None
-                
+
                 if conv["type"] == 'saved':
                     conv["title"] = "Cloud của tôi (Saved Messages)"
                     conv["avatar_color"] = "#8B5CF6"
@@ -606,7 +605,7 @@ class Database:
                     # Đếm số thành viên
                     cursor.execute("SELECT COUNT(*) as count FROM conversation_members WHERE conversation_id = ?", (conv_id,))
                     conv["member_count"] = cursor.fetchone()["count"]
-                
+
                 result.append(conv)
             return result
 
@@ -631,10 +630,10 @@ class Database:
             """, (conversation_id, sender_id, message_type, content, file_id, reply_to_id))
             msg_id = cursor.lastrowid
             conn.commit()
-            
+
             # Lấy thông tin tin nhắn vừa lưu kèm thông tin người gửi & thông tin trích dẫn reply
             cursor.execute("""
-                SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content, 
+                SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content,
                        m.file_id, m.is_deleted, m.created_at, m.reply_to_id,
                        u.full_name as sender_name, u.avatar_color,
                        f.original_name, f.file_size, f.file_type,
@@ -657,7 +656,7 @@ class Database:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT * FROM (
-                    SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content, 
+                    SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content,
                            m.file_id, m.is_deleted, m.created_at, m.reply_to_id,
                            u.full_name as sender_name, u.avatar_color,
                            f.original_name, f.file_size, f.file_type,
@@ -679,12 +678,13 @@ class Database:
             if messages:
                 msg_ids = [m["id"] for m in messages]
                 placeholders = ",".join("?" * len(msg_ids))
-                cursor.execute(f"""
-                    SELECT mr.message_id, mr.reaction, mr.user_id, u.full_name
-                    FROM message_reactions mr
-                    JOIN users u ON mr.user_id = u.id
-                    WHERE mr.message_id IN ({placeholders})
-                """, msg_ids)
+                sql = (
+                    "SELECT mr.message_id, mr.reaction, mr.user_id, u.full_name "
+                    "FROM message_reactions mr "
+                    "JOIN users u ON mr.user_id = u.id "
+                    "WHERE mr.message_id IN (" + placeholders + ")"  # nosec B608
+                )
+                cursor.execute(sql, msg_ids)
                 all_rx = cursor.fetchall()
                 rx_map = {}
                 for r in all_rx:
@@ -712,9 +712,9 @@ class Database:
                 return False, "Tin nhắn không tồn tại!", None
             if row["sender_id"] != user_id:
                 return False, "Bạn chỉ có thể thu hồi tin nhắn do chính mình gửi!", None
-            
+
             cursor.execute("""
-                UPDATE messages 
+                UPDATE messages
                 SET is_deleted = 1, content = 'Tin nhắn đã được thu hồi'
                 WHERE id = ?
             """, (message_id,))
@@ -725,6 +725,11 @@ class Database:
         """Xóa toàn bộ cuộc trò chuyện và lịch sử tin nhắn."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            # Xóa các cảm xúc liên kết với tin nhắn trong hội thoại
+            cursor.execute("""
+                DELETE FROM message_reactions
+                WHERE message_id IN (SELECT id FROM messages WHERE conversation_id = ?)
+            """, (conversation_id,))
             # Xóa các tin nhắn trong hội thoại
             cursor.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))
             # Xóa các thành viên
@@ -753,7 +758,7 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                DELETE FROM blocked_users 
+                DELETE FROM blocked_users
                 WHERE user_id = ? AND blocked_id = ?
             """, (user_id, blocked_id))
             conn.commit()
@@ -764,7 +769,7 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT 1 FROM blocked_users 
+                SELECT 1 FROM blocked_users
                 WHERE (user_id = ? AND blocked_id = ?) OR (user_id = ? AND blocked_id = ?)
             """, (user_a, user_b, user_b, user_a))
             return cursor.fetchone() is not None
@@ -774,7 +779,7 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT 1 FROM blocked_users 
+                SELECT 1 FROM blocked_users
                 WHERE user_id = ? AND blocked_id = ?
             """, (user_id, target_id))
             return cursor.fetchone() is not None
@@ -859,9 +864,9 @@ class Database:
             cursor.execute("""
                 INSERT INTO pinned_messages (conversation_id, message_id, pinned_by)
                 VALUES (?, ?, ?)
-                ON CONFLICT(conversation_id) DO UPDATE SET 
-                    message_id = excluded.message_id, 
-                    pinned_by = excluded.pinned_by, 
+                ON CONFLICT(conversation_id) DO UPDATE SET
+                    message_id = excluded.message_id,
+                    pinned_by = excluded.pinned_by,
                     pinned_at = CURRENT_TIMESTAMP
             """, (conversation_id, message_id, user_id))
             conn.commit()
@@ -900,12 +905,12 @@ class Database:
             if row:
                 return row["id"]
             cursor.execute("""
-                INSERT INTO conversations (type, name, created_by) 
+                INSERT INTO conversations (type, name, created_by)
                 VALUES ('saved', 'Cloud của tôi (Saved Messages)', ?)
             """, (user_id,))
             conv_id = cursor.lastrowid
             cursor.execute("""
-                INSERT INTO conversation_members (conversation_id, user_id, role) 
+                INSERT INTO conversation_members (conversation_id, user_id, role)
                 VALUES (?, ?, 'admin')
             """, (conv_id, user_id))
             conn.commit()

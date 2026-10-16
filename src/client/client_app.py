@@ -1,6 +1,5 @@
 import customtkinter as ctk
 import sys
-import os
 import threading
 from typing import Optional
 
@@ -17,25 +16,25 @@ from src.client.desktop.quick_lock import QuickLockOverlay
 class ChatApplication(ctk.CTk):
     def __init__(self, host: str = "127.0.0.1", port: int = 8888):
         super().__init__()
-        
+
         self.host = host
         self.port = port
         self.net = NetworkClient(host=self.host, port=self.port)
         self.current_user = None
         self.current_frame = None
         self.lock_overlay: Optional[QuickLockOverlay] = None
-        
+
         # Configure Window
         self.title("Ứng Dụng Nhắn Tin & Truyền Thông Tin - Nhóm 05")
         self.minsize(980, 650)
-        
+
         # Khôi phục trạng thái kích thước và tọa độ từ lần trước (kích thước chuẩn 1380x940)
         restore_window_state(self, default_w=1380, default_h=940)
 
         # Themes
         ctk.set_appearance_mode("Dark")
         ctk.set_default_color_theme("blue")
-        
+
         # Xử lý đóng cửa sổ: Thu nhỏ xuống Khay hệ thống (System Tray)
         self.protocol("WM_DELETE_WINDOW", self.on_closing_to_tray)
 
@@ -82,7 +81,7 @@ class ChatApplication(ctk.CTk):
     def show_auth_frame(self, auto_login: bool = True):
         if self.current_frame:
             self.current_frame.destroy()
-        
+
         self.current_user = None
         self.lock_overlay = None
         self.current_frame = AuthFrame(self, on_login_success=self.show_main_window, network_client=self.net, auto_login=auto_login)
@@ -91,20 +90,20 @@ class ChatApplication(ctk.CTk):
     def show_main_window(self, user_info: dict):
         if self.current_frame:
             self.current_frame.destroy()
-        
+
         self.current_user = user_info
         self.title(f"Ứng Dụng Nhắn Tin - [{user_info['full_name']}]")
         self.current_frame = MainWindow(
-            self, 
-            current_user=user_info, 
-            network_client=self.net, 
+            self,
+            current_user=user_info,
+            network_client=self.net,
             on_logout=lambda: self.show_auth_frame(auto_login=False)
         )
         self.current_frame.grid(row=0, column=0, sticky="nsew")
 
         # Cài đặt Quick Lock Overlay
         self.lock_overlay = QuickLockOverlay(
-            self, 
+            self,
             username=user_info.get("username", "user"),
             unlock_validator=self._validate_unlock_password
         )
@@ -121,7 +120,7 @@ class ChatApplication(ctk.CTk):
         """Mở hộp thoại chuyển đổi nhanh Ctrl+K."""
         if not self.current_frame or not isinstance(self.current_frame, MainWindow):
             return
-        
+
         switcher = QuickSwitcher(
             self,
             conversations_provider=lambda: self.current_frame.conversations,

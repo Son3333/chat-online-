@@ -8,8 +8,8 @@ import tkinter as tk
 from typing import List, Dict, Callable, Optional
 
 class QuickSwitcher:
-    def __init__(self, parent: tk.Tk, 
-                 conversations_provider: Callable[[], List[Dict]], 
+    def __init__(self, parent: tk.Tk,
+                 conversations_provider: Callable[[], List[Dict]],
                  on_select_conversation: Callable[[int], None],
                  action_handlers: Optional[Dict[str, Callable]] = None):
         self.parent = parent
@@ -52,7 +52,7 @@ class QuickSwitcher:
 
         self.entry_var = tk.StringVar()
         self.entry_var.trace_add("write", self._on_search_change)
-        self.entry = tk.Entry(search_frame, textvariable=self.entry_var, font=("Segoe UI", 12), 
+        self.entry = tk.Entry(search_frame, textvariable=self.entry_var, font=("Segoe UI", 12),
                               bg="#1E293B", fg="white", insertbackground="white", bd=0, relief=tk.FLAT)
         self.entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
@@ -120,7 +120,7 @@ class QuickSwitcher:
 
         display_items = self.filtered_items[:7] # Hiển thị tối đa 7 mục
         if not display_items:
-            empty_lbl = tk.Label(self.list_frame, text="Không tìm thấy kết quả phù hợp", 
+            empty_lbl = tk.Label(self.list_frame, text="Không tìm thấy kết quả phù hợp",
                                  font=("Segoe UI", 10), fg="#64748B", bg="#0F172A", pady=20)
             empty_lbl.pack()
             return
@@ -133,7 +133,7 @@ class QuickSwitcher:
             row = tk.Frame(self.list_frame, bg=bg_col, padx=14, pady=6, cursor="hand2")
             row.pack(fill=tk.X)
 
-            t_lbl = tk.Label(row, text=item["title"], font=("Segoe UI", 10, "bold" if is_selected else "normal"), 
+            t_lbl = tk.Label(row, text=item["title"], font=("Segoe UI", 10, "bold" if is_selected else "normal"),
                              fg=fg_col, bg=bg_col, anchor="w")
             t_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
 

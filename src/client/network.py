@@ -16,7 +16,7 @@ class NetworkClient:
         self.current_user_id: Optional[int] = None
         self.auto_reconnect_enabled = True
         self.is_reconnecting = False
-        
+
         # Callbacks
         self.callbacks = {
             "new_message": None,
@@ -36,7 +36,7 @@ class NetworkClient:
             "call_ended": None,
             "call_media_relay": None,
         }
-        
+
         # Pending synchronous responses (action_name -> event & response)
         self.pending_responses = {}
         self.lock = threading.Lock()
@@ -56,7 +56,7 @@ class NetworkClient:
             self.sock.settimeout(None)
             self.connected = True
             self.running = True
-            
+
             # Khởi chạy thread lắng nghe dữ liệu từ server
             self.recv_thread = threading.Thread(target=self._listen_loop, daemon=True)
             self.recv_thread.start()
@@ -128,17 +128,17 @@ class NetworkClient:
                 if not header:
                     break
                 length = struct.unpack("!I", header)[0]
-                
+
                 raw_bytes = self._recv_exact(length)
                 if not raw_bytes:
                     break
-                
+
                 packet = json.loads(raw_bytes.decode('utf-8'))
-                
+
                 # Phân loại packet: Event broadcast hay Response của request
                 pkt_type = packet.get("type")
                 action = packet.get("action")
-                
+
                 if pkt_type and pkt_type in self.callbacks and self.callbacks[pkt_type]:
                     self.callbacks[pkt_type](packet)
                 elif action:
@@ -150,19 +150,19 @@ class NetworkClient:
                             event.set()
                         elif pkt_type and pkt_type in self.callbacks and self.callbacks[pkt_type]:
                             self.callbacks[pkt_type](packet)
-            except Exception as e:
+            except Exception:
                 break
-        
+
         self.connected = False
         self.running = False
-        
+
         # Báo sự kiện mất kết nối
         if self.callbacks.get("connection_lost"):
             try:
                 self.callbacks["connection_lost"]({})
             except Exception:
                 pass
-                
+
         # Tự động kích hoạt cơ chế kết nối lại
         if self.auto_reconnect_enabled:
             self._start_reconnect_thread()
@@ -173,7 +173,7 @@ class NetworkClient:
             if self.is_reconnecting:
                 return
             self.is_reconnecting = True
-            
+
         def _loop():
             import time
             while not self.connected and self.auto_reconnect_enabled:
@@ -182,7 +182,7 @@ class NetworkClient:
                     break
             with self.lock:
                 self.is_reconnecting = False
-                
+
         threading.Thread(target=_loop, daemon=True).start()
 
     def reconnect_and_identify(self) -> bool:
@@ -217,22 +217,22 @@ class NetworkClient:
         if not self.connected:
             if not self.connect():
                 return None
-        
+
         event = threading.Event()
         res_container = []
         with self.lock:
             self.pending_responses[expected_action] = (event, res_container)
-        
+
         if not self._send_packet(payload):
             with self.lock:
                 self.pending_responses.pop(expected_action, None)
             return None
-        
+
         # Chờ response
         signaled = event.wait(timeout)
         with self.lock:
             self.pending_responses.pop(expected_action, None)
-        
+
         if signaled and res_container:
             return res_container[0]
         return None
@@ -291,11 +291,11 @@ class NetworkClient:
         if not self.connected:
             if not self.reconnect_and_identify():
                 return False
-        
+
         res = self.send_request(payload, expected_action="send_message_response", timeout=5.0)
         if res and res.get("success"):
             return True
-        
+
         # Thử lại lần 2 nếu bị ngắt kết nối đúng thời điểm gửi
         if self.reconnect_and_identify():
             res = self.send_request(payload, expected_action="send_message_response", timeout=5.0)
@@ -311,11 +311,11 @@ class NetworkClient:
             filesize = os.path.getsize(filepath)
             ext = os.path.splitext(filename)[1].lower()
             file_type = "image" if ext in [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"] else "file"
-            
+
             with open(filepath, "rb") as f:
                 data = f.read()
                 b64 = base64.b64encode(data).decode('utf-8')
-            
+
             return self.send_request({
                 "action": "upload_file",
                 "conversation_id": conversation_id,

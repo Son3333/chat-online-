@@ -8,7 +8,6 @@ import time
 import base64
 import uuid
 from typing import Optional
-from datetime import datetime
 from src.server.database import Database
 
 if sys.stdout is not None:
@@ -37,13 +36,13 @@ UPLOADS_DIR = os.path.join(SERVER_DIR, "uploads")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 class ChatServer:
-    def __init__(self, host: str = "0.0.0.0", port: int = 8888, db: Optional[Database] = None):
+    def __init__(self, host: str = "0.0.0.0", port: int = 8888, db: Optional[Database] = None):  # nosec B104
         self.host = host
         self.port = port
         self.db = db if db is not None else Database()
         self.running = False
         self.server_socket = None
-        
+
         # Mapping: user_id -> client_socket
         self.active_clients = {}
         # Mapping: client_socket -> user_id
@@ -60,12 +59,12 @@ class ChatServer:
         self.running = True
         if ready_event:
             ready_event.set()
-        log(f"==================================================")
-        log(f"CHAT SERVER DA KHOI CHAY!")
+        log("==================================================")
+        log("CHAT SERVER DA KHOI CHAY!")
         log(f"   Dia chi may chu: {self.host}:{self.port}")
         log(f"   Thu muc uploads: {UPLOADS_DIR}")
-        log(f"   Dang cho cac may tram ket noi...")
-        log(f"==================================================")
+        log("   Dang cho cac may tram ket noi...")
+        log("==================================================")
 
         try:
             while self.running:
@@ -110,7 +109,7 @@ class ChatServer:
                 header = struct.pack("!I", len(data))
                 sock.sendall(header + data)
                 return True
-            except Exception as e:
+            except Exception:
                 # print(f"Lỗi gửi packet: {e}")
                 return False
 
@@ -134,11 +133,11 @@ class ChatServer:
             if not header:
                 return None
             length = struct.unpack("!I", header)[0]
-            
+
             raw_bytes = self._recv_exact(sock, length)
             if not raw_bytes:
                 return None
-            
+
             return json.loads(raw_bytes.decode('utf-8'))
         except Exception:
             return None
@@ -160,13 +159,13 @@ class ChatServer:
                 packet = self.receive_packet(client_sock)
                 if packet is None:
                     break
-                
+
                 action = packet.get("action")
                 response = self.process_action(client_sock, packet)
-                
+
                 if response:
                     self.send_packet(client_sock, response)
-                
+
                 # Cập nhật user_id của socket nếu đăng nhập thành công HOẶC kết nối lại (identify)
                 if action in ["login", "register"] and response.get("success"):
                     user_id = response["user"]["id"]
@@ -201,7 +200,7 @@ class ChatServer:
 
                         self.active_clients[user_id] = client_sock
                         self.socket_to_user[client_sock] = user_id
-                    
+
                     self.db.set_online_status(user_id, True)
                     # Báo trạng thái online cho các client khác
                     self.notify_status_change(user_id, True)
@@ -252,14 +251,14 @@ class ChatServer:
         user = self.db.get_user_by_id(user_id)
         if not user:
             return
-        
+
         payload = {
             "type": "user_status_changed",
             "user_id": user_id,
             "is_online": 1 if is_online else 0,
             "full_name": user["full_name"]
         }
-        
+
         # Lấy tất cả user đang online để broadcast
         with self.lock:
             all_online = list(self.active_clients.keys())
@@ -267,7 +266,7 @@ class ChatServer:
 
     def process_action(self, client_sock: socket.socket, packet: dict) -> dict:
         action = packet.get("action")
-        
+
         # 1. Đăng nhập
         if action == "login":
             username = packet.get("username", "")
@@ -305,8 +304,8 @@ class ChatServer:
             messages = self.db.get_messages(conv_id)
             members = self.db.get_conversation_members(conv_id)
             return {
-                "action": "messages_history", 
-                "conversation_id": conv_id, 
+                "action": "messages_history",
+                "conversation_id": conv_id,
                 "messages": messages,
                 "members": members
             }
@@ -317,10 +316,10 @@ class ChatServer:
             sender_id = packet.get("sender_id")
             content = packet.get("content", "").strip()
             msg_type = packet.get("message_type", "text")
-            
+
             if not content:
                 return {"action": "send_message_response", "success": False, "message": "Nội dung rỗng"}
-            
+
             # Kiểm tra xem cuộc trò chuyện có bị chặn không (đối với chat 1-1)
             members = self.db.get_conversation_members(conv_id)
             if len(members) == 2:
@@ -329,18 +328,18 @@ class ChatServer:
                     other_id = other_members[0]["id"]
                     if self.db.is_blocked(sender_id, other_id):
                         return {
-                            "action": "send_message_response", 
-                            "success": False, 
+                            "action": "send_message_response",
+                            "success": False,
                             "message": "Không thể gửi tin nhắn vì cuộc trò chuyện đã bị chặn!"
                         }
-            
+
             reply_to_id = packet.get("reply_to_id")
             saved_msg = self.db.save_message(conv_id, sender_id, msg_type, content, reply_to_id=reply_to_id)
             if saved_msg:
                 # Gửi cho tất cả thành viên trong nhóm đang online
                 members = self.db.get_conversation_members(conv_id)
                 member_ids = [m["id"] for m in members]
-                
+
                 broadcast_packet = {
                     "type": "new_message",
                     "conversation_id": conv_id,
@@ -359,10 +358,10 @@ class ChatServer:
             file_base64 = packet.get("file_data", "")
             file_size = packet.get("file_size", 0)
             file_type = packet.get("file_type", "file") # 'image' hoặc 'file'
-            
+
             if not file_base64:
                 return {"action": "upload_response", "success": False, "message": "Dữ liệu tệp rỗng!"}
-            
+
             # Kiểm tra xem cuộc trò chuyện có bị chặn không (đối với chat 1-1)
             members = self.db.get_conversation_members(conv_id)
             if len(members) == 2:
@@ -371,11 +370,11 @@ class ChatServer:
                     other_id = other_members[0]["id"]
                     if self.db.is_blocked(sender_id, other_id):
                         return {
-                            "action": "upload_response", 
-                            "success": False, 
+                            "action": "upload_response",
+                            "success": False,
                             "message": "Không thể gửi tệp vì cuộc trò chuyện đã bị chặn!"
                         }
-            
+
             try:
                 # Lưu file vào thư mục uploads
                 file_bytes = base64.b64decode(file_base64)
@@ -383,19 +382,20 @@ class ChatServer:
                 saved_path = os.path.join(UPLOADS_DIR, unique_name)
                 with open(saved_path, "wb") as f:
                     f.write(file_bytes)
-                
+
                 # Lưu vào database
-                file_id = self.db.save_file_record(filename, unique_name, len(file_bytes), file_type, sender_id)
-                
+                actual_size = file_size if file_size else len(file_bytes)
+                file_id = self.db.save_file_record(filename, unique_name, actual_size, file_type, sender_id)
+
                 # Tạo tin nhắn kèm file
                 caption = packet.get("caption", "") or f"Đã gửi tệp: {filename}"
                 reply_to_id = packet.get("reply_to_id")
                 saved_msg = self.db.save_message(conv_id, sender_id, file_type, caption, file_id, reply_to_id=reply_to_id)
-                
+
                 # Broadcast tin nhắn kèm tệp tin
                 members = self.db.get_conversation_members(conv_id)
                 member_ids = [m["id"] for m in members]
-                
+
                 broadcast_packet = {
                     "type": "new_message",
                     "conversation_id": conv_id,
@@ -412,15 +412,15 @@ class ChatServer:
             file_rec = self.db.get_file_record(file_id)
             if not file_rec:
                 return {"action": "download_response", "success": False, "message": "Không tìm thấy tệp!"}
-            
+
             file_path = os.path.join(UPLOADS_DIR, file_rec["stored_path"])
             if not os.path.exists(file_path):
                 return {"action": "download_response", "success": False, "message": "Tệp tin đã bị xóa trên máy chủ!"}
-            
+
             with open(file_path, "rb") as f:
                 data = f.read()
                 b64 = base64.b64encode(data).decode('utf-8')
-            
+
             return {
                 "action": "download_response",
                 "success": True,
@@ -456,18 +456,18 @@ class ChatServer:
             creator_id = packet.get("creator_id")
             name = packet.get("name", "").strip()
             raw_member_ids = packet.get("member_ids", [])
-            
+
             if not name:
                 return {"action": "create_group_response", "success": False, "message": "Tên nhóm không được để trống!"}
             if len(name) > 60:
                 return {"action": "create_group_response", "success": False, "message": "Tên nhóm quá dài (tối đa 60 ký tự)!"}
-            
+
             # Lọc thành viên hợp lệ (không bao gồm chính người tạo)
             try:
-                member_ids = list(set([int(m) for m in raw_member_ids if int(m) != int(creator_id)]))
+                member_ids = list({int(m) for m in raw_member_ids if int(m) != int(creator_id)})
             except Exception:
                 member_ids = []
-                
+
             if not member_ids:
                 return {"action": "create_group_response", "success": False, "message": "Nhóm phải có ít nhất 1 thành viên khác!"}
             if len(member_ids) > 100:
@@ -495,14 +495,14 @@ class ChatServer:
             self._recent_created_groups.append((now, creator_id, name, mems_tuple))
 
             conv_id = self.db.create_group_conversation(name, creator_id, member_ids)
-            
+
             # Gửi tin nhắn tạo nhóm
             self.db.save_message(conv_id, creator_id, 'text', f"Nhóm \"{name}\" đã được tạo.")
-            
+
             # Broadcast cập nhật danh sách hội thoại cho tất cả thành viên
             all_members = set([creator_id] + member_ids)
             self.broadcast_to_users(list(all_members), {"type": "refresh_conversations"})
-            
+
             return {"action": "create_group_response", "success": True, "conversation_id": conv_id}
 
         # 11. Đang soạn tin nhắn (Typing indicator)
@@ -526,9 +526,9 @@ class ChatServer:
             friends = self.db.get_friends(user_id)
             pending_reqs = self.db.get_pending_requests(user_id)
             return {
-                "action": "get_friends_response", 
-                "success": True, 
-                "friends": friends, 
+                "action": "get_friends_response",
+                "success": True,
+                "friends": friends,
                 "pending_requests": pending_reqs
             }
 
@@ -579,7 +579,7 @@ class ChatServer:
             friend_id = packet.get("friend_id")
             status = self.db.get_friendship_status(user_id, friend_id)
             return {
-                "action": "check_friend_response", 
+                "action": "check_friend_response",
                 "is_friend": (status == "friends"),
                 "friendship_status": status
             }

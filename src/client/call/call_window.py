@@ -1,10 +1,9 @@
 import customtkinter as ctk
-from PIL import Image, ImageTk
+from PIL import Image
 import threading
 import time
 import base64
 import zlib
-import os
 
 try:
     import winsound
