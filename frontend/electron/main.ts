@@ -83,6 +83,9 @@ async function createWindow() {
     frame: false, // Custom Telegram-style titlebar
     titleBarStyle: 'hidden',
     backgroundColor: '#0e1621',
+    icon: fs.existsSync(path.join(__dirname, '../../app.ico'))
+      ? path.join(__dirname, '../../app.ico')
+      : path.join(__dirname, '../public/logo.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

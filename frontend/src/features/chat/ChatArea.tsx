@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { MessageSquare, Pin, X } from 'lucide-react';
+import { Pin, X } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { ChatHeader } from './ChatHeader';
 import { ChatBubble } from './ChatBubble';
@@ -19,9 +19,11 @@ export const ChatArea: React.FC = () => {
   if (!activeConv) {
     return (
       <div className="flex-1 h-full flex flex-col items-center justify-center bg-slate-50 dark:bg-[#0e1621] p-6 text-center select-none">
-        <div className="w-20 h-20 rounded-full bg-[#2481cc]/10 dark:bg-[#2481cc]/15 flex items-center justify-center text-[#2481cc] mb-4 shadow-inner">
-          <MessageSquare className="w-10 h-10" />
-        </div>
+        <img
+          src="/logo.png"
+          alt="Vibe Người Tốt Logo"
+          className="w-24 h-24 rounded-2xl object-cover mb-4 shadow-xl border-2 border-amber-300 dark:border-amber-400 bg-amber-300 animate-in zoom-in-95 duration-200"
+        />
         <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">
           Chào mừng đến với Vibe Người Tốt!
         </h2>

@@ -15,7 +15,9 @@ def create_desktop_shortcut():
 
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     bat_path = os.path.join(root, "CHAY_UNG_DUNG.bat")
-    ico_path = os.path.join(root, "frontend", "node_modules", "electron", "dist", "electron.exe")
+    app_ico = os.path.join(root, "app.ico")
+    electron_ico = os.path.join(root, "frontend", "node_modules", "electron", "dist", "electron.exe")
+    ico_path = app_ico if os.path.exists(app_ico) else electron_ico
 
     ps_code = f"""
 $wsh = New-Object -ComObject WScript.Shell
@@ -23,7 +25,7 @@ $sc = $wsh.CreateShortcut('{temp_path}')
 $sc.TargetPath = $env:ComSpec
 $sc.Arguments = '/c "{bat_path}"'
 $sc.WorkingDirectory = '{root}'
-$sc.Description = 'Vibe Nguoi Tot - Desktop Chat App'
+$sc.Description = 'Vibe Người Tốt - Ứng dụng nhắn tin bảo mật'
 if (Test-Path '{ico_path}') {{
     $sc.IconLocation = '{ico_path},0'
 }}

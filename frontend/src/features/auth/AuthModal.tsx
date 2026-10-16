@@ -57,14 +57,16 @@ export const AuthModal: React.FC = () => {
       <div className="w-full max-w-sm bg-white dark:bg-[#17212b] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 flex flex-col animate-in zoom-in-95 duration-150">
         {/* Brand Icon */}
         <div className="flex flex-col items-center mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-[#2481cc] flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-[#2481cc]/25 mb-3">
-            T
-          </div>
+          <img
+            src="/logo.png"
+            alt="Vibe Người Tốt"
+            className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-amber-300 dark:border-amber-400 bg-amber-300 mb-3"
+          />
           <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">
-            {isRegister ? 'Tạo Tài Khoản Mới' : 'Đăng Nhập Telegram'}
+            {isRegister ? 'Tạo Tài Khoản Mới' : 'Đăng Nhập Vibe Người Tốt'}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Ứng dụng nhắn tin an toàn, mã hóa và bảo mật
+            Ứng dụng nhắn tin an toàn, tốc độ cao và bảo mật
           </p>
         </div>
 

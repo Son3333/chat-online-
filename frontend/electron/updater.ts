@@ -136,3 +136,4 @@ export function registerUpdaterIpc(updater: GitUpdater) {
     return await updater.applyUpdate();
   });
 }
+

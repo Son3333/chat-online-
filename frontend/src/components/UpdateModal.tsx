@@ -127,3 +127,4 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ updateInfo, onDismiss 
     </div>
   );
 };
+
