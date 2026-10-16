@@ -1,6 +1,8 @@
 # Do an chuyen nganh Cong nghe phan mem - Nhom 05
 # Messaging & Media Transfer Application Dependencies
 
+bcrypt>=4.0.0
+requests>=2.31.0
 customtkinter>=6.0.0
 pillow>=10.0.0
 pystray>=0.19.5
