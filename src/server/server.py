@@ -170,6 +170,8 @@ class ChatServer:
                     sock = self.active_clients.get(str(uid))
                 if sock and sock not in sockets:
                     sockets.append(sock)
+        if payload.get("type") in ("call_connected", "call_incoming", "call_rejected", "call_ended"):
+            log(f"[Call Broadcast] {payload.get('type')} to user_ids={user_ids}. Found {len(sockets)} target sockets.")
         for sock in sockets:
             self.send_packet(sock, payload)
 
@@ -957,6 +959,42 @@ class ChatServer:
                         "message": saved_m
                     })
             return {"action": "call_end_response", "success": True}
+
+        # 31. Kiểm tra trạng thái cuộc gọi (Call Status Poll / Heartbeat)
+        elif action in ("check_call_status", "get_call_status"):
+            channel_id = packet.get("channel_id")
+            caller_id = packet.get("caller_id")
+            receiver_id = packet.get("receiver_id")
+            try:
+                if caller_id: caller_id = int(caller_id)
+                if receiver_id: receiver_id = int(receiver_id)
+            except Exception:
+                pass
+
+            call = getattr(self, "active_calls", {}).get(channel_id)
+            if not call and (caller_id and receiver_id):
+                for cid, c in getattr(self, "active_calls", {}).items():
+                    if (c.get("caller_id") == caller_id and c.get("receiver_id") == receiver_id) or \
+                       (c.get("caller_id") == receiver_id and c.get("receiver_id") == caller_id):
+                        call = c
+                        channel_id = cid
+                        break
+
+            if call:
+                return {
+                    "action": "check_call_status_response",
+                    "success": True,
+                    "channel_id": channel_id,
+                    "status": call.get("status", "ringing"),
+                    "call_type": call.get("call_type", "voice"),
+                    "start_time": call.get("start_time")
+                }
+            return {
+                "action": "check_call_status_response",
+                "success": False,
+                "status": "ended",
+                "message": "Cuộc gọi đã kết thúc hoặc không tồn tại."
+            }
 
         # 30. Chuyển tiếp luồng Audio / Video thời gian thực (Media Relay)
         elif action == "call_media":

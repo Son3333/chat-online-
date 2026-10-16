@@ -276,6 +276,35 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.removeItem('telegram_user');
   };
 
+  // Polling heartbeat while outgoing call is ringing
+  // Guarantees caller transitions to connected screen within 800ms as soon as receiver accepts
+  useEffect(() => {
+    if (!activeCall || !activeCall.isOutgoing || activeCall.isConnected) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await apiService.sendRequest('check_call_status', {
+          channel_id: activeCall.channelId,
+          caller_id: currentUser?.id,
+          receiver_id: activeCall.partnerId,
+        });
+
+        if (res && res.success && res.status === 'connected') {
+          setActiveCall((prev) =>
+            prev ? { ...prev, isConnected: true, channelId: res.channel_id || prev.channelId } : null
+          );
+        } else if (res && res.status === 'ended') {
+          setActiveCall(null);
+          setIncomingCall(null);
+        }
+      } catch (err) {
+        // Silent catch on poll
+      }
+    }, 800);
+
+    return () => clearInterval(interval);
+  }, [activeCall?.isOutgoing, activeCall?.isConnected, activeCall?.channelId, activeCall?.partnerId, currentUser?.id]);
+
   // Listen to real-time events from Python Server
   useEffect(() => {
     const unsubscribe = apiService.onServerEvent((event: ServerEvent) => {

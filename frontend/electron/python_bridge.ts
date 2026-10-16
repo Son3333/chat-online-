@@ -158,6 +158,7 @@ export class PythonBridge {
       download_file: ['download_response', 'download_file_response', 'download_file'],
       start_direct_chat: ['direct_chat_started', 'start_direct_chat_response', 'start_direct_chat'],
       create_group: ['create_group_response', 'create_group'],
+      check_call_status: ['check_call_status_response', 'check_call_status'],
     };
 
     // Check if there is an in-flight request waiting for this action response directly
