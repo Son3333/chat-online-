@@ -38,7 +38,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({ hasUpdateAvailable, onOpenUp
   return (
     <div className="h-9 w-full bg-slate-100 dark:bg-[#17212b] border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between select-none app-drag-region px-3 z-50">
       {/* Left: App Title, Connection info, and Update notification */}
-      <div className="flex items-center space-x-2.5">
+      <div className="flex items-center space-x-2.5 app-no-drag">
         <img
           src="/logo.png"
           alt="Logo"
