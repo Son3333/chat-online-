@@ -9,6 +9,11 @@ if sys.stdout is not None:
     except Exception:
         pass
 
+try:
+    from scripts.create_shortcut import make_shortcut
+except ImportError:
+    from create_shortcut import make_shortcut
+
 def ensure_desktop_shortcut():
     desktop = os.path.join(os.environ.get("USERPROFILE", ""), "Desktop")
     if not os.path.exists(desktop):
@@ -17,46 +22,29 @@ def ensure_desktop_shortcut():
     final_shortcut_name = "Vibe Người Tốt.lnk"
     final_path = os.path.join(desktop, final_shortcut_name)
 
-    # Nếu đã có icon ngoài desktop rồi thì thôi
-    if os.path.exists(final_path):
+    # Nếu đã có icon hợp lệ ngoài desktop rồi (> 500 bytes) thì thôi
+    if os.path.exists(final_path) and os.path.getsize(final_path) > 500:
         print("[*] Biểu tượng 'Vibe Người Tốt' ngoài Desktop đã có sẵn -> Bỏ qua.")
         return
 
-    print("[+] Chưa có biểu tượng ngoài Desktop -> Đang tạo lối tắt mới...")
-    temp_shortcut_name = "Vibe_Nguoi_Tot_temp.lnk"
-    temp_path = os.path.join(desktop, temp_shortcut_name)
-
+    print("[+] Chưa có biểu tượng ngoài Desktop hoặc bị lỗi -> Đang tạo lối tắt mới...")
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     bat_path = os.path.join(root, "CHAY_UNG_DUNG.bat")
-    app_ico = os.path.join(root, "app.ico")
-    electron_ico = os.path.join(root, "frontend", "node_modules", "electron", "dist", "electron.exe")
-    ico_path = app_ico if os.path.exists(app_ico) else electron_ico
+    ico_path = os.path.join(root, "app.ico")
 
-    ps_code = f"""
-$wsh = New-Object -ComObject WScript.Shell
-$sc = $wsh.CreateShortcut('{temp_path}')
-$sc.TargetPath = $env:ComSpec
-$sc.Arguments = '/c "{bat_path}"'
-$sc.WorkingDirectory = '{root}'
-$sc.Description = 'Vibe Người Tốt - Ứng dụng nhắn tin bảo mật'
-if (Test-Path '{ico_path}') {{
-    $sc.IconLocation = '{ico_path},0'
-}}
-$sc.WindowStyle = 1
-$sc.Save()
-"""
-    import base64
-    encoded_command = base64.b64encode(ps_code.encode("utf-16le")).decode("ascii")
-    subprocess.run(["powershell", "-NoProfile", "-EncodedCommand", encoded_command], capture_output=True)
-
-    if os.path.exists(temp_path):
-        try:
-            if os.path.exists(final_path):
-                os.remove(final_path)
-            os.rename(temp_path, final_path)
-            print("[OK] Đã tạo thành công biểu tượng ngoài Desktop: Vibe Người Tốt.lnk")
-        except Exception:
-            pass
+    ok = make_shortcut(
+        shortcut_path=final_path,
+        target_path=bat_path,
+        arguments="",
+        working_dir=root,
+        icon_path=ico_path,
+        description="Vibe Người Tốt - Ứng dụng nhắn tin bảo mật",
+        show_cmd=1
+    )
+    if ok:
+        print("[OK] Đã tạo thành công biểu tượng ngoài Desktop: Vibe Người Tốt.lnk")
+    else:
+        print("[-] Không thể tạo lối tắt ngoài Desktop.")
 
 def ensure_windows_startup():
     startup_dir = os.path.join(os.environ.get("APPDATA", ""), "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
@@ -72,11 +60,10 @@ def ensure_windows_startup():
             pass
 
     final_lnk = os.path.join(startup_dir, "Vibe_Server_WAN.lnk")
-    if os.path.exists(final_lnk):
+    if os.path.exists(final_lnk) and os.path.getsize(final_lnk) > 500:
         print("[*] Khởi động Server WAN cùng Windows đã được thiết lập -> Bỏ qua.")
         return
 
-    temp_lnk = os.path.join(startup_dir, "Vibe_Server_WAN_temp.lnk")
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     wan_script = os.path.join(root, "run_server_wan.py")
 
@@ -84,28 +71,18 @@ def ensure_windows_startup():
     pythonw_candidate = os.path.join(python_dir, "pythonw.exe")
     python_bin = pythonw_candidate if os.path.exists(pythonw_candidate) else sys.executable
 
-    ps_code = f"""
-$wsh = New-Object -ComObject WScript.Shell
-$sc = $wsh.CreateShortcut('{temp_lnk}')
-$sc.TargetPath = '{python_bin}'
-$sc.Arguments = '"{wan_script}"'
-$sc.WorkingDirectory = '{root}'
-$sc.Description = 'Vibe Server WAN Auto-Startup'
-$sc.WindowStyle = 7
-$sc.Save()
-"""
-    import base64
-    encoded_command = base64.b64encode(ps_code.encode("utf-16le")).decode("ascii")
-    subprocess.run(["powershell", "-NoProfile", "-EncodedCommand", encoded_command], capture_output=True)
+    ok = make_shortcut(
+        shortcut_path=final_lnk,
+        target_path=python_bin,
+        arguments=f'"{wan_script}"',
+        working_dir=root,
+        icon_path="",
+        description="Vibe Server WAN Auto-Startup",
+        show_cmd=7 # Minimized
+    )
+    if ok:
+        print("[OK] Đã đăng ký tự khởi động Server WAN cùng Windows (bật máy tính là server chạy ngầm sẵn sàng).")
 
-    if os.path.exists(temp_lnk):
-        try:
-            if os.path.exists(final_lnk):
-                os.remove(final_lnk)
-            os.rename(temp_lnk, final_lnk)
-            print("[OK] Đã đăng ký tự khởi động Server WAN cùng Windows (bật máy tính là server chạy ngầm sẵn sàng).")
-        except Exception:
-            pass
 
 def ensure_server_running():
     # Kiểm tra cổng 8888

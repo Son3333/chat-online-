@@ -23,9 +23,7 @@ user_credentials.json
 crash_log.txt
 cache/
 
-# Microsoft Office Documents (Báo cáo nội bộ, không push lên Git)
-*.docx
-*.doc
+# Microsoft Office Documents (Chỉ bỏ qua file tạm thời mở ~$*)
 ~$*.docx
 ~$*.doc
 
