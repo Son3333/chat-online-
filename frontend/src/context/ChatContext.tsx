@@ -184,7 +184,10 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       (typeof activeConv.id === 'string' && activeConv.id.startsWith('direct_')
         ? Number(activeConv.id.replace('direct_', ''))
         : undefined);
-    if (!rawPartnerId) return;
+    if (!rawPartnerId) {
+      alert('Không tìm thấy thông tin đối phương để thực hiện cuộc gọi.');
+      return;
+    }
     const partnerId = Number(rawPartnerId);
 
     // Immediately show outgoing ringing screen
@@ -196,17 +199,22 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isConnected: false,
     });
 
-    const res = await apiService.sendRequest('call_invite', {
-      caller_id: Number(currentUser.id),
-      receiver_id: partnerId,
-      call_type: callType,
-      conversation_id: activeConv.id,
-    });
+    try {
+      const res = await apiService.sendRequest('call_invite', {
+        caller_id: Number(currentUser.id),
+        receiver_id: partnerId,
+        call_type: callType,
+        conversation_id: activeConv.id,
+      });
 
-    if (res && res.channel_id) {
-      setActiveCall((prev) => (prev ? { ...prev, channelId: res.channel_id } : null));
-    } else if (res && res.success === false) {
-      alert(res.message || 'Không thể thực hiện cuộc gọi vào lúc này.');
+      if (res && res.channel_id) {
+        setActiveCall((prev) => (prev ? { ...prev, channelId: res.channel_id } : null));
+      } else {
+        alert(res?.message || 'Không thể thực hiện cuộc gọi vào lúc này.');
+        setActiveCall(null);
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Không thể kết nối đến máy chủ để thực hiện cuộc gọi.');
       setActiveCall(null);
     }
   };
@@ -223,25 +231,37 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isConnected: true,
     });
     setIncomingCall(null);
-    await apiService.sendRequest('call_accept', {
-      channel_id: channelId,
-    });
+    try {
+      await apiService.sendRequest('call_accept', {
+        channel_id: channelId,
+      });
+    } catch (err) {
+      console.warn('[Call] Error sending call_accept:', err);
+    }
   };
 
   const rejectCall = async () => {
     if (!incomingCall) return;
-    await apiService.sendRequest('call_reject', {
-      channel_id: incomingCall.channelId,
-    });
+    try {
+      await apiService.sendRequest('call_reject', {
+        channel_id: incomingCall.channelId,
+      });
+    } catch (err) {
+      console.warn('[Call] Error sending call_reject:', err);
+    }
     setIncomingCall(null);
   };
 
   const endCall = async () => {
     if (!activeCall) return;
     if (activeCall.channelId) {
-      await apiService.sendRequest('call_end', {
-        channel_id: activeCall.channelId,
-      });
+      try {
+        await apiService.sendRequest('call_end', {
+          channel_id: activeCall.channelId,
+        });
+      } catch (err) {
+        console.warn('[Call] Error sending call_end:', err);
+      }
     }
     setActiveCall(null);
   };

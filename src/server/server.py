@@ -662,8 +662,9 @@ class ChatServer:
             requester_id = packet.get("requester_id")
             res = self.db.accept_friend_request(user_id, requester_id)
             if res.get("success"):
-                # Cập nhật danh bạ ngay lập tức cho cả 2 bên
+                # Cập nhật danh bạ và cuộc trò chuyện ngay lập tức cho cả 2 bên
                 self.broadcast_to_users([user_id, requester_id], {"type": "refresh_friends"})
+                self.broadcast_to_users([user_id, requester_id], {"type": "refresh_conversations"})
             return {"action": "accept_friend_response", **res}
 
         elif action == "reject_friend":
@@ -836,9 +837,20 @@ class ChatServer:
             call_type = packet.get("call_type", "voice") # 'voice' hoặc 'video'
             conv_id = packet.get("conversation_id")
 
-            # Kiểm tra xem có bị chặn không
+            # 1. Kiểm tra xem có bị chặn không
             if self.db.is_blocked(caller_id, receiver_id):
                 return {"action": "call_invite_response", "success": False, "message": "Không thể gọi vì cuộc trò chuyện đã bị chặn!"}
+
+            # 2. Kiểm tra xem đối phương có đang trực tuyến không
+            with self.lock:
+                is_receiver_online = (receiver_id in self.active_clients) or (str(receiver_id) in self.active_clients)
+            if not is_receiver_online:
+                log(f"[Call] call_invite failed: receiver #{receiver_id} is offline")
+                return {
+                    "action": "call_invite_response",
+                    "success": False,
+                    "message": "Người dùng hiện không trực tuyến hoặc đã tắt ứng dụng!"
+                }
 
             caller = self.db.get_user_by_id(caller_id)
             caller_name = caller["full_name"] if caller else "Người dùng"
@@ -880,7 +892,9 @@ class ChatServer:
                 self.broadcast_to_users([call["caller_id"], call["receiver_id"]], {
                     "type": "call_connected",
                     "channel_id": channel_id,
-                    "call_type": call["call_type"]
+                    "call_type": call["call_type"],
+                    "caller_id": call["caller_id"],
+                    "receiver_id": call["receiver_id"]
                 })
             else:
                 log(f"[Call] call_accept warning: channel_id '{channel_id}' not found in active_calls!")

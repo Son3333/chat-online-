@@ -508,6 +508,11 @@ class Database:
 
     # --- Danh bạ bạn bè & Lời mời kết bạn (Friend Request & Approval APIs) ---
     def send_friend_request(self, user_id, friend_id):
+        try:
+            user_id = int(user_id)
+            friend_id = int(friend_id)
+        except Exception:
+            pass
         if user_id == friend_id:
             return {"success": False, "message": "Không thể kết bạn với chính mình!"}
         with self.get_connection() as conn:
@@ -577,6 +582,11 @@ class Database:
         """Chấp nhận lời mời kết bạn từ requester_id."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            try:
+                user_id = int(user_id)
+                requester_id = int(requester_id)
+            except Exception:
+                pass
             cursor.execute("SELECT id, username, full_name, avatar_color, is_online FROM users WHERE id = ?", (requester_id,))
             requester = cursor.fetchone()
             if not requester:
