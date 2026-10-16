@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Check, Pin, Reply, Trash2, Copy, FileText, Download, ExternalLink, Heart } from 'lucide-react';
 import { Message } from '../../types';
 import { formatTime, formatFileSize } from '../../lib/utils';
@@ -8,8 +8,73 @@ import { apiService } from '../../services/api';
 interface ChatBubbleProps {
   message: Message;
   isSelf: boolean;
-  onOpenImage?: (fileId: string, name: string) => void;
+  onOpenImage?: (fileId: string, name: string, dataUrl?: string) => void;
 }
+
+const ImageBubbleContent: React.FC<{
+  fileId: string | number;
+  originalName?: string;
+  onOpenImage?: (fileId: string, name: string, dataUrl?: string) => void;
+  onDownload: () => void;
+}> = ({ fileId, originalName, onOpenImage, onDownload }) => {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    apiService.getImageUrl(fileId).then((url) => {
+      if (mounted) {
+        setDataUrl(url);
+        setLoading(false);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [fileId]);
+
+  return (
+    <div
+      onClick={() => onOpenImage && onOpenImage(String(fileId), originalName || 'image.png', dataUrl || undefined)}
+      className="cursor-pointer group/img relative overflow-hidden bg-slate-200 dark:bg-slate-800 min-w-[200px] min-h-[140px] flex items-center justify-center rounded-xl"
+    >
+      {loading ? (
+        <div className="flex flex-col items-center justify-center p-6 text-slate-400 animate-pulse">
+          <div className="w-7 h-7 rounded-full border-2 border-blue-500 border-t-transparent animate-spin mb-2" />
+          <span className="text-[11px]">Đang tải ảnh...</span>
+        </div>
+      ) : dataUrl ? (
+        <img
+          src={dataUrl}
+          alt={originalName || 'Image'}
+          className="max-h-72 max-w-full rounded-xl object-contain group-hover/img:scale-[1.02] transition-transform duration-200"
+        />
+      ) : (
+        <div className="flex flex-col items-center justify-center p-6 text-slate-400">
+          <span className="text-2xl mb-1">🖼️</span>
+          <span className="text-xs">{originalName || 'Hình ảnh'}</span>
+        </div>
+      )}
+
+      {/* Overlay action bar on hover */}
+      <div className="absolute inset-0 bg-black/35 opacity-0 group-hover/img:opacity-100 flex items-center justify-center space-x-3 transition-opacity">
+        <span className="p-2 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors shadow-md" title="Xem toàn màn hình">
+          <ExternalLink className="w-4 h-4" />
+        </span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDownload();
+          }}
+          className="p-2 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors shadow-md"
+          title="Tải ảnh về máy"
+        >
+          <Download className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🔥'];
 
@@ -76,35 +141,12 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
         {isImage && !isDeleted && (
           <div className="my-1 overflow-hidden rounded-xl border border-black/5 dark:border-white/5">
             {message.file_id ? (
-              <div
-                onClick={() => onOpenImage && onOpenImage(message.file_id!, message.original_name || 'image.png')}
-                className="cursor-pointer group/img relative overflow-hidden bg-slate-200 dark:bg-slate-800"
-              >
-                <img
-                  src={`http://127.0.0.1:8888/uploads/${message.file_id}`}
-                  onError={(e) => {
-                    // Fallback to direct placeholder
-                    (e.target as HTMLImageElement).src =
-                      'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160"><rect width="240" height="160" fill="%231e293b"/><text x="50%" y="50%" fill="%2394a3b8" text-anchor="middle" font-size="14">🖼️ Xem hình ảnh</text></svg>';
-                  }}
-                  alt={message.original_name || 'Image'}
-                  className="max-h-60 max-w-full object-cover group-hover/img:scale-102 transition-transform duration-200"
-                />
-                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 flex items-center justify-center space-x-2 transition-opacity">
-                  <span className="p-1.5 rounded-full bg-black/60 text-white">
-                    <ExternalLink className="w-4 h-4" />
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDownloadFile();
-                    }}
-                    className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+              <ImageBubbleContent
+                fileId={message.file_id}
+                originalName={message.original_name}
+                onOpenImage={onOpenImage}
+                onDownload={handleDownloadFile}
+              />
             ) : (
               <div className="p-4 bg-slate-100 dark:bg-slate-800 text-xs">🖼️ Hình ảnh</div>
             )}

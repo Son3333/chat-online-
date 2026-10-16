@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Image as ImageIcon, FileText, Pin, Download, User, Phone, Video } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { getInitials, formatTime } from '../../lib/utils';
@@ -9,9 +9,87 @@ interface ChatInfoModalProps {
   onClose: () => void;
 }
 
+const MediaThumbnailItem: React.FC<{
+  fileId: string;
+  name: string;
+  onPreview: (url?: string) => void;
+  onDownload: () => void;
+}> = ({ fileId, name, onPreview, onDownload }) => {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    apiService.getImageUrl(fileId).then((imgUrl) => {
+      if (mounted) {
+        setUrl(imgUrl);
+        setLoading(false);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [fileId]);
+
+  return (
+    <div
+      className="group relative aspect-square rounded-xl overflow-hidden bg-slate-800 cursor-pointer border border-slate-700/60 shadow-sm"
+      onClick={() => onPreview(url || undefined)}
+    >
+      {loading ? (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 text-slate-400 p-2 animate-pulse">
+          <div className="w-5 h-5 rounded-full border-2 border-[#2481cc] border-t-transparent animate-spin mb-1.5" />
+          <span className="text-[9px]">Đang tải...</span>
+        </div>
+      ) : url ? (
+        <img
+          src={url}
+          alt={name}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-800 p-2 text-center">
+          <ImageIcon className="w-6 h-6 text-[#2481cc] mb-1" />
+          <span className="text-[9px] truncate max-w-full opacity-80">{name}</span>
+        </div>
+      )}
+
+      {/* Hover action overlay */}
+      <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 flex items-center justify-center space-x-2 transition-opacity">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onPreview(url || undefined);
+          }}
+          className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black/90 transition-colors"
+          title="Xem ảnh"
+        >
+          <ImageIcon className="w-4 h-4" />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDownload();
+          }}
+          className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black/90 transition-colors"
+          title="Tải về máy"
+        >
+          <Download className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Name banner at bottom */}
+      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-1 px-1.5">
+        <p className="text-[9px] text-white/90 truncate">{name}</p>
+      </div>
+    </div>
+  );
+};
+
 export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose }) => {
   const { activeConv, messages, startCall } = useChat();
   const [activeTab, setActiveTab] = useState<'media' | 'files' | 'pinned'>('media');
+  const [previewImage, setPreviewImage] = useState<{ fileId: string; name: string; url?: string } | null>(null);
 
   if (!isOpen || !activeConv) return null;
 
@@ -154,21 +232,13 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   {mediaMsgs.map((m) => (
-                    <div
+                    <MediaThumbnailItem
                       key={m.id}
-                      className="group relative aspect-square rounded-lg overflow-hidden bg-slate-800 cursor-pointer border border-slate-700/50"
-                      onClick={() => handleDownload(m.file_id, m.original_name || 'image.png')}
-                    >
-                      <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 bg-slate-800/80 p-2 text-center">
-                        <ImageIcon className="w-6 h-6 text-[#2481cc] mb-1" />
-                        <span className="text-[10px] truncate max-w-full">
-                          {m.original_name || 'Ảnh'}
-                        </span>
-                      </div>
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                        <Download className="w-5 h-5 text-white" />
-                      </div>
-                    </div>
+                      fileId={String(m.file_id)}
+                      name={m.original_name || 'image.png'}
+                      onPreview={(url) => setPreviewImage({ fileId: String(m.file_id), name: m.original_name || 'image.png', url })}
+                      onDownload={() => handleDownload(m.file_id, m.original_name || 'image.png')}
+                    />
                   ))}
                 </div>
               )}
@@ -245,6 +315,50 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
             </div>
           )}
         </div>
+
+        {/* Fullscreen Image Preview Lightbox inside Info Modal */}
+        {previewImage && (
+          <div
+            onClick={() => setPreviewImage(null)}
+            className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150 select-none"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative max-w-4xl max-h-[90vh] flex flex-col items-center"
+            >
+              <div className="absolute -top-11 right-0 flex items-center space-x-2">
+                <button
+                  onClick={() => handleDownload(previewImage.fileId, previewImage.name)}
+                  className="p-2 text-white/80 hover:text-white rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                  title="Tải ảnh về máy"
+                >
+                  <Download className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => setPreviewImage(null)}
+                  className="p-2 text-white/80 hover:text-white rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                  title="Đóng"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {previewImage.url ? (
+                <img
+                  src={previewImage.url}
+                  alt={previewImage.name}
+                  className="max-h-[82vh] w-auto max-w-full rounded-2xl shadow-2xl object-contain border border-white/10"
+                />
+              ) : (
+                <div className="p-12 text-white/70 text-xs">Đang tải ảnh...</div>
+              )}
+
+              <div className="mt-3 px-4 py-1.5 rounded-full bg-black/60 border border-white/10 text-xs text-white/90 font-medium">
+                {previewImage.name}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Pin, X } from 'lucide-react';
+import { Pin, X, Download } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
+import { apiService } from '../../services/api';
 import { ChatHeader } from './ChatHeader';
 import { ChatBubble } from './ChatBubble';
 import { ChatComposer } from './ChatComposer';
@@ -8,7 +9,7 @@ import { ChatComposer } from './ChatComposer';
 export const ChatArea: React.FC = () => {
   const { activeConv, messages, currentUser, pinnedMessage } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [previewImage, setPreviewImage] = useState<{ fileId: string; name: string } | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ fileId: string; name: string; url?: string } | null>(null);
 
   // Auto scroll to bottom on new messages
   useEffect(() => {
@@ -61,7 +62,7 @@ export const ChatArea: React.FC = () => {
               key={msg.id}
               message={msg}
               isSelf={isSelf}
-              onOpenImage={(fileId, name) => setPreviewImage({ fileId, name })}
+              onOpenImage={(fileId, name, dataUrl) => setPreviewImage({ fileId, name, url: dataUrl })}
             />
           );
         })}
@@ -73,29 +74,89 @@ export const ChatArea: React.FC = () => {
 
       {/* 5. Fullscreen Image Preview Modal */}
       {previewImage && (
-        <div
-          onClick={() => setPreviewImage(null)}
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative max-w-4xl max-h-[90vh] flex flex-col items-center"
-          >
-            <button
-              onClick={() => setPreviewImage(null)}
-              className="absolute -top-10 right-0 p-1.5 text-white/80 hover:text-white rounded-full bg-black/40 hover:bg-black/60"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <img
-              src={`http://127.0.0.1:8888/uploads/${previewImage.fileId}`}
-              alt={previewImage.name}
-              className="max-h-[80vh] w-auto rounded-lg shadow-2xl object-contain"
-            />
-            <span className="mt-2 text-xs text-white/80 font-medium">{previewImage.name}</span>
-          </div>
-        </div>
+        <FullscreenPreviewModal
+          fileId={previewImage.fileId}
+          name={previewImage.name}
+          initialUrl={previewImage.url}
+          onClose={() => setPreviewImage(null)}
+        />
       )}
+    </div>
+  );
+};
+
+const FullscreenPreviewModal: React.FC<{
+  fileId: string;
+  name: string;
+  initialUrl?: string;
+  onClose: () => void;
+}> = ({ fileId, name, initialUrl, onClose }) => {
+  const [url, setUrl] = useState<string | null>(initialUrl || null);
+  const [loading, setLoading] = useState(!initialUrl);
+
+  useEffect(() => {
+    if (!url) {
+      apiService.getImageUrl(fileId).then((loaded) => {
+        setUrl(loaded);
+        setLoading(false);
+      });
+    }
+  }, [fileId, url]);
+
+  const handleDownload = async () => {
+    const res = await apiService.downloadFile(fileId);
+    if (res && res.file_data) {
+      await apiService.saveDownloadedFile(name || 'image.png', res.file_data);
+    }
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150 select-none"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative max-w-5xl max-h-[92vh] flex flex-col items-center"
+      >
+        <div className="absolute -top-11 right-0 flex items-center space-x-2">
+          <button
+            onClick={handleDownload}
+            className="p-2 text-white/80 hover:text-white rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            title="Tải ảnh về máy"
+          >
+            <Download className="w-5 h-5" />
+          </button>
+          <button
+            onClick={onClose}
+            className="p-2 text-white/80 hover:text-white rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            title="Đóng"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="p-12 flex flex-col items-center justify-center text-white/70">
+            <div className="w-10 h-10 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin mb-3" />
+            <span className="text-xs">Đang tải hình ảnh...</span>
+          </div>
+        ) : url ? (
+          <img
+            src={url}
+            alt={name}
+            className="max-h-[82vh] w-auto max-w-full rounded-2xl shadow-2xl object-contain border border-white/10"
+          />
+        ) : (
+          <div className="p-12 text-center text-white/70 text-xs">
+            Không thể tải được hình ảnh này.
+          </div>
+        )}
+
+        <div className="mt-3 px-4 py-1.5 rounded-full bg-black/60 border border-white/10 text-xs text-white/90 font-medium">
+          {name}
+        </div>
+      </div>
     </div>
   );
 };

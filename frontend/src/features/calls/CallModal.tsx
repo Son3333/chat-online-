@@ -322,15 +322,17 @@ export const CallModal: React.FC = () => {
                 {/* 3. Screen Share */}
                 <button
                   onClick={toggleScreenShare}
-                  title={isScreenSharing ? 'Dừng chia sẻ màn hình' : 'Chia sẻ màn hình'}
+                  title={isScreenSharing ? 'Dừng chia sẻ màn hình máy tính' : 'Chia sẻ màn hình máy tính / cửa sổ ứng dụng (Screen Share)'}
                   className={`p-3.5 rounded-xl transition-all font-medium text-xs flex items-center space-x-2 ${
                     isScreenSharing
-                      ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                      ? 'bg-cyan-500/25 text-cyan-300 border border-cyan-400/40 ring-2 ring-cyan-400/20'
                       : 'bg-white/10 hover:bg-white/15 text-white'
                   }`}
                 >
-                  <Monitor className="w-5 h-5" />
-                  <span className="hidden sm:inline">{isScreenSharing ? 'Dừng Chia Sẻ' : 'Chia Sẻ'}</span>
+                  <Monitor className="w-5 h-5 text-cyan-400" />
+                  <span className="hidden sm:inline font-semibold">
+                    {isScreenSharing ? 'Dừng Chia Sẻ' : 'Chia Sẻ Màn Hình'}
+                  </span>
                 </button>
 
                 {/* 4. End Call Button */}
