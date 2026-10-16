@@ -436,6 +436,15 @@ class ActiveCallWindow(ctk.CTkToplevel):
         except Exception:
             pass
 
+    def receive_media(self, packet: dict):
+        """Tiếp nhận gói tin media từ callback relay của máy chủ."""
+        if not self.running or not packet:
+            return
+        media_type = packet.get("media_type")
+        data = packet.get("data")
+        if media_type and data:
+            self.on_media_received(media_type, data)
+
     def on_media_received(self, media_type: str, b64_data: str):
         """Nhận gói tin media (audio/video) từ đối phương được server relay tới."""
         if not self.running:

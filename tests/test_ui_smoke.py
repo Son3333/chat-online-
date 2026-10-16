@@ -1,6 +1,3 @@
-import pytest
-import re
-from unittest.mock import MagicMock
 import customtkinter as ctk
 
 

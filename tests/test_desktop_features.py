@@ -1,7 +1,6 @@
 import os
 import json
 import tempfile
-import pytest
 from unittest.mock import MagicMock
 from src.client.desktop.window_manager import save_window_state, restore_window_state
 from src.client.ui.chat_bubble import is_pure_emoji, format_file_size, format_time

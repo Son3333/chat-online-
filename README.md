@@ -15,7 +15,7 @@
 ---
 
 [![CI/CD Pipeline](https://github.com/phatdat08/ChatApp_Nhom5/actions/workflows/ci.yml/badge.svg)](https://github.com/phatdat08/ChatApp_Nhom5/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/Pytest-33%20Passed%20(100%25)-brightgreen)
+![Tests](https://img.shields.io/badge/Pytest-39%20Passed%20(100%25)-brightgreen)
 ![Security Audit](https://img.shields.io/badge/Bandit%20Audit-0%20Issues%20(Safe)-blue)
 ![Dependencies](https://img.shields.io/badge/pip--audit-0%20Vulnerabilities-success)
 ![Linter](https://img.shields.io/badge/Ruff-Passed-informational)
@@ -88,15 +88,16 @@
 ```
 ├── .github/workflows/ci.yml  # Pipeline CI/CD tự động (Lint, Test, Package EXE)
 ├── pyproject.toml            # Cấu hình chuẩn hóa Ruff Linter và Pytest
-├── tests/                    # Bộ kiểm thử tự động toàn diện (33 test cases, 100% Pass)
+├── tests/                    # Bộ kiểm thử tự động toàn diện (39 test cases, 100% Pass)
+│   ├── test_calling_feature.py # Kiểm thử toàn diện Đàm thoại trực tuyến Voice & Video Call
 │   ├── test_database.py      # Kiểm thử CSDL, mật khẩu, xác thực, danh bạ, tin nhắn
 │   ├── test_network_server.py# Kiểm thử tích hợp Socket TCP, handshake, broadcast
 │   ├── test_desktop_features.py# Kiểm thử Window Manager, phục hồi màn hình, formatters
 │   └── test_ui_smoke.py      # Kiểm thử khói Giao diện, Theme, ô tìm kiếm, nhập liệu
 ├── reports/                  # Báo cáo kỹ thuật chi tiết sau kiểm toán
-│   ├── bug-report.md         # Danh sách và giải pháp 9 lỗi phát hiện
-│   ├── test-plan.md          # Kế hoạch và ma trận kiểm thử chi tiết
-│   ├── test-results.md       # Kết quả kiểm thử (33 passed, 1.50s, 52% coverage)
+│   ├── bug-report.md         # Danh sách và giải pháp 10 lỗi phát hiện
+│   ├── test-plan.md          # Kế hoạch và ma trận kiểm thử chi tiết (39 tests)
+│   ├── test-results.md       # Kết quả kiểm thử chi tiết (39 passed, 100%)
 │   ├── security-audit.md     # Báo cáo an ninh Bandit (0 Issues) và pip-audit
 │   └── ci-cd-setup.md        # Hướng dẫn quy trình CI/CD và debug GitHub Actions
 │

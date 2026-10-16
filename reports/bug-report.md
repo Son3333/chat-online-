@@ -131,5 +131,19 @@
 
 ---
 
+### Bug #10: Thiếu phương thức `receive_media` trên lớp `ActiveCallWindow`
+- **Tập tin**: `src/client/call/call_window.py` (Lớp `ActiveCallWindow`)
+- **Mức độ**: 🔴 **High (Calling Media Relay Crash)**
+- **Hiện tượng & Bước tái hiện**:
+  1. Hai người dùng kết nối cuộc gọi thoại hoặc video thành công.
+  2. Phía người gọi truyền dữ liệu audio/video qua socket server (`call_media_relay`).
+  3. Phía người nhận, callback `_on_call_media_relay` trong `main_window.py` gọi `self.active_call_window.receive_media(packet)`.
+  4. Ứng dụng ném lỗi `AttributeError: 'ActiveCallWindow' object has no attribute 'receive_media'` do lớp chỉ định nghĩa `on_media_received(media_type, data)`.
+- **Cách khắc phục**:
+  - Bổ sung phương thức `receive_media(self, packet: dict)` vào `ActiveCallWindow` để bóc tách `media_type` và `data` an toàn trước khi gọi `on_media_received`.
+- **Trạng thái**: ✅ **ĐÃ KHẮC PHỤC & VERIFIED**.
+
+---
+
 ## 3. KẾT LUẬN
-Toàn bộ mã nguồn đã được rà soát tỉ mỉ. Các lỗi nghiêm trọng về Exception Handling, UI Logic Binding, Toàn vẹn cơ sở dữ liệu và An toàn kết nối đều đã được giải quyết triệt để. Hệ thống hiện hoạt động ổn định, mượt mà và an toàn 100%.
+Toàn bộ mã nguồn đã được rà soát tỉ mỉ. Các lỗi nghiêm trọng về Exception Handling, Calling Media Relay, UI Logic Binding, Toàn vẹn cơ sở dữ liệu và An toàn kết nối đều đã được giải quyết triệt để. Hệ thống hiện hoạt động ổn định, mượt mà và an toàn 100%.

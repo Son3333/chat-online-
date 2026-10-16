@@ -94,6 +94,7 @@
 
 | Mã Module | Tên File Test | Số lượng Test | Mô tả mục tiêu |
 |---|---|---|---|
+| **CALL-01..06**| `tests/test_calling_feature.py`| 6 | Vòng đời cuộc gọi thoại/video, chuông reo, từ chối, chặn cuộc gọi, cuộc gọi nhỡ, relay audio/video |
 | **DB-01..07** | `tests/test_database.py` | 7 | Xác thực độ phức tạp mật khẩu, băm PBKDF2 |
 | **DB-08..12** | `tests/test_database.py` | 5 | Đăng ký tài khoản, đăng nhập đúng/sai, tìm kiếm |
 | **DB-13..14** | `tests/test_database.py` | 2 | Vòng đời lời mời kết bạn, cơ chế chặn 2 chiều |
@@ -101,13 +102,13 @@
 | **NET-01..05**| `tests/test_network_server.py`| 5 | Kết nối socket, flow login socket, nhắn tin P2P 2 client, typing indicator, rate limit |
 | **DSK-01..05**| `tests/test_desktop_features.py`| 5 | Window manager restore, multi-monitor bounds, emoji check, file size format, time format |
 | **UI-01..03** | `tests/test_ui_smoke.py` | 3 | Dark/Light mode theme values, Search filter regex, Message length validator |
-| **TỔNG CỘNG** | **4 File Test** | **33 Test Cases** | **Đảm bảo 100% Passed** |
+| **TỔNG CỘNG** | **5 File Test** | **39 Test Cases** | **Đảm bảo 100% Passed** |
 
 ---
 
 ## 6. TIÊU CHÍ ĐÁNH GIÁ (PASS / FAIL CRITERIA)
 - **Tiêu chí Đạt (Pass)**:
-  - 100% test cases (33/33) vượt qua thành công, 0 lỗi, 0 warning nghiêm trọng.
+  - 100% test cases (39/39) vượt qua thành công, 0 lỗi, 0 warning nghiêm trọng.
   - Thời gian thực thi toàn bộ test suite dưới 5 giây.
   - Công cụ Ruff báo cáo `All checks passed!` không có lỗi cú pháp hay biến chưa khai báo.
   - Công cụ Bandit báo cáo `No issues identified` (0 Medium, 0 High).

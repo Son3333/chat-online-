@@ -1,8 +1,6 @@
 import os
 import tempfile
 import threading
-import time
-import socket
 import pytest
 from src.server.database import Database
 from src.server.server import ChatServer
