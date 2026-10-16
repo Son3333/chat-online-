@@ -95,45 +95,18 @@ def check_wan_server_online(host="bore.pub", port=38888):
         return False
 
 def ensure_server_running():
-    # 1. Kiểm tra cổng 8888 cục bộ
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        s.settimeout(0.8)
-        s.connect(('127.0.0.1', 8888))
-        s.close()
-        print("[*] Server cục bộ đang hoạt động sẵn sàng trên cổng 8888.")
-        return True
-    except Exception:
-        pass
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    cfg_file = os.path.join(root, "server_config.json")
 
-    # 2. Kiểm tra nếu Máy chủ WAN (Internet) đang trực tuyến
-    if check_wan_server_online("bore.pub", 38888):
-        print("[+] Đã phát hiện Máy chủ WAN trực tuyến tại bore.pub:38888!")
-        print("[*] Ứng dụng trên máy này sẽ kết nối trực tiếp tới Máy chủ WAN.")
-        root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        cfg_file = os.path.join(root, "server_config.json")
+    # Đảm bảo server_config.json luôn trỏ tới máy chủ WAN chung bore.pub:38888
+    if not os.path.exists(cfg_file):
         try:
             import json
             with open(cfg_file, "w", encoding="utf-8") as f:
                 json.dump({"host": "bore.pub", "port": 38888}, f, indent=2)
+            print("[+] Đã tạo cấu hình kết nối WAN mặc định: bore.pub:38888")
         except Exception:
             pass
-        return True
-
-    # 3. Nếu chưa có máy chủ nào -> Khởi động Chat Server WAN ngầm làm Host
-    print("[+] Server chưa chạy -> Đang khởi động Chat Server WAN ngầm...")
-    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    wan_script = os.path.join(root, "run_server_wan.py")
-    python_dir = os.path.dirname(sys.executable)
-    pythonw_candidate = os.path.join(python_dir, "pythonw.exe")
-    python_bin = pythonw_candidate if os.path.exists(pythonw_candidate) else sys.executable
-
-    if os.name == 'nt':
-        flags = subprocess.CREATE_NO_WINDOW
-        subprocess.Popen([python_bin, wan_script], cwd=root, creationflags=flags)
-    else:
-        subprocess.Popen([python_bin, wan_script], cwd=root)
-    print("[OK] Đã kích hoạt Chat Server WAN chạy ngầm.")
     return True
 
 if __name__ == "__main__":
@@ -141,9 +114,6 @@ if __name__ == "__main__":
     print("   VIBE NGUOI TOT - ALL-IN-ONE SYSTEM INITIALIZER")
     print("=================================================================")
     ensure_desktop_shortcut()
-    # Chỉ tự động kích hoạt startup Server nếu không có WAN server sẵn từ máy khác
-    if not check_wan_server_online("bore.pub", 38888):
-        ensure_windows_startup()
     ensure_server_running()
     print("=================================================================")
 

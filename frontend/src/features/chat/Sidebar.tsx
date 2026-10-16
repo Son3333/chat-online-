@@ -509,14 +509,81 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
             ))
           )
         ) : filteredConversations.length === 0 && globalUsers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 text-center text-slate-400 text-xs px-4">
-            <UserIcon className="w-8 h-8 mb-2 opacity-40" />
-            <span>
-              {activeTab === 'archived'
-                ? 'Không có cuộc trò chuyện nào trong kho lưu trữ'
-                : 'Không tìm thấy cuộc trò chuyện nào'}
-            </span>
-          </div>
+          activeTab === 'all' && friends.length > 0 ? (
+            <div className="py-2 px-1">
+              <div className="px-2 pb-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                <span>Bạn bè ({friends.length}) - Bấm để chat:</span>
+                <button
+                  onClick={onOpenContacts}
+                  className="text-[10px] text-[#2481cc] hover:underline"
+                >
+                  Thêm bạn
+                </button>
+              </div>
+              <div className="space-y-1">
+                {friends.map((friend) => (
+                  <div
+                    key={friend.id}
+                    onClick={() => handleStartChatWithFriend(friend)}
+                    className="p-2.5 rounded-xl flex items-center justify-between cursor-pointer transition-all hover:bg-slate-100 dark:hover:bg-[#202b36] text-slate-800 dark:text-slate-200 group border border-slate-100 dark:border-slate-800/60 shadow-xs"
+                  >
+                    <div className="flex items-center space-x-3 overflow-hidden">
+                      <div className="relative flex-shrink-0">
+                        <div
+                          className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm text-white shadow-sm overflow-hidden"
+                          style={{ backgroundColor: friend.avatar_color || '#2563eb' }}
+                        >
+                          {friend.avatar_url ? (
+                            <img src={friend.avatar_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            getInitials(friend.full_name)
+                          )}
+                        </div>
+                        {Boolean(friend.is_online) && (
+                          <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white dark:border-[#17212b] bg-emerald-500" />
+                        )}
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-semibold text-xs truncate text-slate-800 dark:text-slate-100 group-hover:text-[#2481cc] transition-colors">
+                          {friend.full_name}
+                        </span>
+                        <span className="text-[10px] text-slate-400 truncate">
+                          @{friend.username} {Boolean(friend.is_online) ? '• Đang hoạt động' : ''}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStartChatWithFriend(friend);
+                      }}
+                      title="Nhắn tin ngay"
+                      className="p-1.5 rounded-lg bg-[#2481cc]/10 dark:bg-[#2481cc]/20 text-[#2481cc] hover:bg-[#2481cc] hover:text-white transition-colors"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-48 text-center text-slate-400 text-xs px-4">
+              <UserIcon className="w-8 h-8 mb-2 opacity-40 text-[#2481cc]" />
+              <span className="font-medium text-slate-600 dark:text-slate-300">
+                {activeTab === 'archived'
+                  ? 'Không có cuộc trò chuyện nào trong kho lưu trữ'
+                  : 'Không tìm thấy cuộc trò chuyện nào'}
+              </span>
+              {activeTab === 'all' && (
+                <button
+                  onClick={onOpenContacts}
+                  className="mt-3 px-3 py-1.5 rounded-lg bg-[#2481cc] hover:bg-[#1d6fa5] text-white text-[11px] font-semibold shadow-sm transition-colors"
+                >
+                  Mở Danh Bạ / Kết Bạn
+                </button>
+              )}
+            </div>
+          )
         ) : (
           filteredConversations.map((conv) => {
             const isSelected = activeConv?.id === conv.id;
