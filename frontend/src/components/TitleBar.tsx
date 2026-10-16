@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Minus, Square, X, Pin, Lock, Sun, Moon, RefreshCw, Radio, Sparkles } from 'lucide-react';
 import { useChat } from '../context/ChatContext';
 import { apiService } from '../services/api';
+import APP_LOGO from '../assets/logo';
 
 interface TitleBarProps {
   hasUpdateAvailable?: boolean;
@@ -40,7 +41,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({ hasUpdateAvailable, onOpenUp
       {/* Left: App Title, Connection info, and Update notification */}
       <div className="flex items-center space-x-2.5 app-no-drag">
         <img
-          src="/logo.png"
+          src={APP_LOGO}
           alt="Logo"
           className="w-5 h-5 rounded-full object-cover shadow-sm border border-amber-400/80 bg-amber-300 flex-shrink-0"
         />

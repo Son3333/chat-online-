@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Pin, X, Download } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { apiService } from '../../services/api';
+import APP_LOGO from '../../assets/logo';
 import { ChatHeader } from './ChatHeader';
 import { ChatBubble } from './ChatBubble';
 import { ChatComposer } from './ChatComposer';
@@ -21,7 +22,7 @@ export const ChatArea: React.FC = () => {
     return (
       <div className="flex-1 h-full flex flex-col items-center justify-center bg-slate-50 dark:bg-[#0e1621] p-6 text-center select-none">
         <img
-          src="/logo.png"
+          src={APP_LOGO}
           alt="Vibe Người Tốt Logo"
           className="w-24 h-24 rounded-2xl object-cover mb-4 shadow-xl border-2 border-amber-300 dark:border-amber-400 bg-amber-300 animate-in zoom-in-95 duration-200"
         />

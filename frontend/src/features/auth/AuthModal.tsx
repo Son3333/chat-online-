@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Lock, User, AtSign, Eye, EyeOff } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { useChat } from '../../context/ChatContext';
+import APP_LOGO from '../../assets/logo';
 
 export const AuthModal: React.FC = () => {
   const { setCurrentUser } = useChat();
@@ -58,7 +59,7 @@ export const AuthModal: React.FC = () => {
         {/* Brand Icon */}
         <div className="flex flex-col items-center mb-6">
           <img
-            src="/logo.png"
+            src={APP_LOGO}
             alt="Vibe Người Tốt"
             className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-amber-300 dark:border-amber-400 bg-amber-300 mb-3"
           />
