@@ -65,6 +65,14 @@ export const apiService = {
     return await this.sendRequest('update_profile', { user_id: userId, ...data });
   },
 
+  async requestPhoneOtp(userId: number, phoneNumber: string): Promise<{ success: boolean; otp_code?: string; error?: string; message?: string }> {
+    return await this.sendRequest('request_phone_otp', { user_id: userId, phone_number: phoneNumber });
+  },
+
+  async verifyPhoneOtp(userId: number, phoneNumber: string, otpCode: string): Promise<{ success: boolean; user?: User; error?: string; message?: string }> {
+    return await this.sendRequest('verify_phone_otp', { user_id: userId, phone_number: phoneNumber, otp_code: otpCode });
+  },
+
   // Conversations
   async getConversations(userId: number): Promise<{ success: boolean; conversations: Conversation[] }> {
     const res = await this.sendRequest('get_conversations', { user_id: userId });

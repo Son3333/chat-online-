@@ -141,7 +141,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
         title: u.full_name,
         type: 'direct',
         avatar_color: u.avatar_color,
+        avatar_url: u.avatar_url,
         partner_id: u.id,
+        partner_username: u.username,
+        phone_number: u.phone_number,
+        is_phone_verified: u.is_phone_verified,
         is_online: u.is_online,
       });
       setSearchQuery('');
@@ -520,9 +524,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
                     <span className="font-semibold text-xs text-slate-800 dark:text-slate-100 truncate">
                       {u.full_name}
                     </span>
-                    <span className="text-[10px] text-slate-400">
-                      @{u.username} • #{u.id}
-                    </span>
+                    <div className="flex items-center space-x-1.5 text-[10px] text-slate-400">
+                      <span>@{u.username} • #{u.id}</span>
+                      {u.phone_number && (
+                        <>
+                          <span>•</span>
+                          <span className="text-[#2481cc] font-medium font-mono">{u.phone_number}</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <button

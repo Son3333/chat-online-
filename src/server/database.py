@@ -3,6 +3,7 @@ import os
 import hashlib
 import re
 import random
+from datetime import datetime, timedelta
 from contextlib import contextmanager
 
 DB_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -206,6 +207,21 @@ class Database:
                 except Exception:
                     pass
 
+            # 10. Bảng Lưu mã OTP xác thực số điện thoại
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS phone_verifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                phone_number TEXT NOT NULL,
+                otp_code TEXT NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                is_used INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+            """)
+            conn.commit()
+
     # --- User APIs ---
     def register_user(self, username, password, full_name):
         username = username.strip().lower().lstrip("@")
@@ -342,6 +358,80 @@ class Database:
             user = self.get_user_by_id(user_id)
             return {"success": True, "user": user}
 
+    def create_phone_otp(self, user_id, phone_number):
+        """Tạo mã OTP 6 số xác thực số điện thoại và lưu vào CSDL với thời hạn 5 phút."""
+        clean_phone = re.sub(r'[\s\-\(\)]', '', str(phone_number or '').strip())
+        if not clean_phone or len(clean_phone) < 9 or len(clean_phone) > 15:
+            return {"success": False, "error": "Số điện thoại không hợp lệ (từ 9 đến 15 chữ số)!"}
+
+        # Sinh mã OTP ngẫu nhiên 6 chữ số
+        otp_code = f"{random.randint(100000, 999999)}"
+        # Hạn 5 phút
+        expires_at = (datetime.utcnow() + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            # Hủy các OTP chưa dùng trước đó cho user này
+            cursor.execute("""
+                UPDATE phone_verifications SET is_used = 1
+                WHERE user_id = ? AND is_used = 0
+            """, (user_id,))
+            cursor.execute("""
+                INSERT INTO phone_verifications (user_id, phone_number, otp_code, expires_at)
+                VALUES (?, ?, ?, ?)
+            """, (user_id, clean_phone, otp_code, expires_at))
+            conn.commit()
+
+        print(f"[OTP] Generated OTP for user {user_id} ({clean_phone}): {otp_code} (expires at {expires_at})")
+        return {
+            "success": True,
+            "otp_code": otp_code,
+            "phone_number": clean_phone,
+            "expires_in": 300,
+            "message": f"Mã OTP đã được tạo thành công cho {clean_phone}."
+        }
+
+    def verify_phone_otp(self, user_id, phone_number, otp_code):
+        """Xác thực mã OTP từ CSDL và đánh dấu số điện thoại đã xác minh."""
+        clean_phone = re.sub(r'[\s\-\(\)]', '', str(phone_number or '').strip())
+        clean_otp = str(otp_code or '').strip()
+
+        if not clean_phone or not clean_otp:
+            return {"success": False, "error": "Thiếu số điện thoại hoặc mã OTP!"}
+
+        now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, otp_code, expires_at, is_used
+                FROM phone_verifications
+                WHERE user_id = ? AND phone_number = ? AND is_used = 0
+                ORDER BY id DESC LIMIT 1
+            """, (user_id, clean_phone))
+            record = cursor.fetchone()
+
+            if not record:
+                return {"success": False, "error": "Không tìm thấy yêu cầu xác minh nào! Vui lòng nhấn gửi lại mã OTP."}
+
+            if record["otp_code"] != clean_otp:
+                return {"success": False, "error": "Mã OTP không chính xác! Vui lòng kiểm tra lại."}
+
+            if record["expires_at"] < now_str:
+                return {"success": False, "error": "Mã OTP đã hết hạn (chỉ có hiệu lực trong 5 phút)! Vui lòng yêu cầu mã mới."}
+
+            # Đánh dấu mã đã dùng
+            cursor.execute("UPDATE phone_verifications SET is_used = 1 WHERE id = ?", (record["id"],))
+
+            # Cập nhật số điện thoại và trạng thái đã xác minh cho user
+            cursor.execute("""
+                UPDATE users SET phone_number = ?, is_phone_verified = 1 WHERE id = ?
+            """, (clean_phone, user_id))
+            conn.commit()
+
+            user = self.get_user_by_id(user_id)
+            return {"success": True, "message": "Xác minh số điện thoại thành công!", "user": user}
+
     def search_users(self, keyword, current_user_id=None):
         keyword = (keyword or "").strip()
         if not keyword:
@@ -363,13 +453,14 @@ class Database:
 
         search_normalized = _strip_accents(clean_keyword)
         search_lower = clean_keyword.lower()
+        search_digits = re.sub(r'[^0-9]', '', clean_keyword)
 
         with self.get_connection() as conn:
             cursor = conn.cursor()
 
-            # 1. Tìm theo ID cụ thể nếu là số (ví dụ: "2844831592", "#2844831592", "id:2844831592")
+            # 1. Tìm theo ID cụ thể nếu là số ngắn (ví dụ: "#5", "id:5")
             id_query = clean_keyword.replace("id:", "").strip()
-            if id_query.isdigit():
+            if id_query.isdigit() and len(id_query) <= 6:
                 cursor.execute("""
                     SELECT id, username, full_name, avatar_color, avatar_url, phone_number, is_phone_verified, is_online
                     FROM users
@@ -379,7 +470,7 @@ class Database:
                 if res:
                     return res
 
-            # 2. Tìm kiếm thông minh hỗ trợ cả tiếng Việt có dấu, không dấu, username và họ tên
+            # 2. Tìm kiếm thông minh hỗ trợ cả số điện thoại, tiếng Việt có dấu, không dấu, username và họ tên
             cursor.execute("""
                 SELECT id, username, full_name, avatar_color, avatar_url, phone_number, is_phone_verified, is_online
                 FROM users
@@ -394,12 +485,17 @@ class Database:
                 uname_norm = _strip_accents(uname)
                 fname_norm = _strip_accents(fname)
                 uid_str = str(u.get("id"))
+                phone = (u.get("phone_number") or "").strip()
+                phone_digits = re.sub(r'[^0-9]', '', phone)
 
                 # Kiểm tra khớp:
+                # - Số điện thoại chứa dãy số tìm kiếm (nếu tìm kiếm có ít nhất 3 chữ số)
                 # - ID chứa từ khóa
                 # - Username khớp hoàn toàn hoặc chứa từ khóa (cả có dấu và không dấu)
                 # - Họ tên chứa từ khóa (cả có dấu và không dấu)
-                if (search_lower == uname or
+                is_phone_match = bool(search_digits and len(search_digits) >= 3 and phone_digits and (search_digits in phone_digits))
+                if (is_phone_match or
+                    search_lower == uname or
                     search_normalized in uname_norm or
                     search_lower in fname or
                     search_normalized in fname_norm or
@@ -669,7 +765,7 @@ class Database:
                 elif conv["type"] == 'direct':
                     # Tìm đối phương
                     cursor.execute("""
-                        SELECT u.id, u.full_name, u.avatar_color, u.avatar_url, u.is_online
+                        SELECT u.id, u.username, u.full_name, u.avatar_color, u.avatar_url, u.phone_number, u.is_phone_verified, u.is_online
                         FROM users u
                         JOIN conversation_members m ON u.id = m.user_id
                         WHERE m.conversation_id = ? AND u.id != ?
@@ -681,6 +777,9 @@ class Database:
                         conv["avatar_url"] = partner["avatar_url"]
                         conv["is_online"] = partner["is_online"]
                         conv["partner_id"] = partner["id"]
+                        conv["partner_username"] = partner["username"]
+                        conv["phone_number"] = partner["phone_number"]
+                        conv["is_phone_verified"] = partner["is_phone_verified"]
                     else:
                         conv["title"] = "Người dùng"
                         conv["avatar_color"] = "#64748B"
@@ -699,7 +798,7 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT u.id, u.username, u.full_name, u.avatar_color, u.is_online, m.role
+                SELECT u.id, u.username, u.full_name, u.avatar_color, u.avatar_url, u.is_online, m.role
                 FROM conversation_members m
                 JOIN users u ON m.user_id = u.id
                 WHERE m.conversation_id = ?
@@ -721,7 +820,7 @@ class Database:
             cursor.execute("""
                 SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content,
                        m.file_id, m.is_deleted, m.created_at, m.reply_to_id,
-                       u.full_name as sender_name, u.avatar_color,
+                       u.full_name as sender_name, u.avatar_color, u.avatar_url,
                        f.original_name, f.file_size, f.file_type,
                        parent.content as reply_content, parent_user.full_name as reply_sender_name
                 FROM messages m
@@ -744,7 +843,7 @@ class Database:
                 SELECT * FROM (
                     SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content,
                            m.file_id, m.is_deleted, m.created_at, m.reply_to_id,
-                           u.full_name as sender_name, u.avatar_color,
+                           u.full_name as sender_name, u.avatar_color, u.avatar_url,
                            f.original_name, f.file_size, f.file_type,
                            parent.content as reply_content, parent_user.full_name as reply_sender_name
                     FROM messages m

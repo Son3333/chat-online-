@@ -29,6 +29,9 @@ export interface Conversation {
   avatar_color?: string;
   avatar_url?: string;
   partner_id?: number | null;
+  partner_username?: string;
+  phone_number?: string;
+  is_phone_verified?: number | boolean;
   is_online?: number | boolean;
   member_count?: number;
   last_message?: LastMessage | null;
@@ -52,6 +55,8 @@ export interface Message {
   conversation_id: string | number;
   sender_id: number;
   sender_name: string;
+  avatar_color?: string;
+  avatar_url?: string;
   content: string;
   msg_type: MessageType;
   file_id?: string | null;
@@ -132,5 +137,6 @@ export interface ServerEvent {
   channel_id?: string;
   duration?: string;
   target_id?: number;
+  user?: User;
 }
 

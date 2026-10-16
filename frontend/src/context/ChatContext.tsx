@@ -341,6 +341,33 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           refreshFriends();
           break;
 
+        case 'profile_updated':
+          if (event.user) {
+            const u = event.user;
+            if (currentUser && currentUser.id === u.id) {
+              setCurrentUser((prev) => (prev ? { ...prev, ...u } : u));
+              localStorage.setItem('vibe_user', JSON.stringify({ ...currentUser, ...u }));
+            }
+            if (activeConv && activeConv.type === 'direct' && activeConv.partner_id === u.id) {
+              setActiveConv((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      title: u.full_name || prev.title,
+                      avatar_color: u.avatar_color || prev.avatar_color,
+                      avatar_url: u.avatar_url,
+                      partner_username: u.username || prev.partner_username,
+                      phone_number: u.phone_number,
+                      is_phone_verified: u.is_phone_verified,
+                    }
+                  : null
+              );
+            }
+            refreshConversations();
+            refreshFriends();
+          }
+          break;
+
         case 'refresh_conversations':
           refreshConversations();
           break;

@@ -254,6 +254,12 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
                       </span>
                       <div className="flex items-center space-x-1.5 text-slate-400 text-[11px]">
                         <span>@{friend.username} • #{friend.id}</span>
+                        {friend.phone_number && (
+                          <>
+                            <span>•</span>
+                            <span className="text-[#2481cc] font-medium font-mono">{friend.phone_number}</span>
+                          </>
+                        )}
                         <span>•</span>
                         <span className={friend.is_online ? 'text-emerald-500 font-medium' : 'text-slate-400'}>
                           {friend.is_online ? 'Trực tuyến' : 'Ngoại tuyến'}
@@ -361,7 +367,7 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Nhập @username hoặc ID người dùng..."
+                placeholder="Nhập username, số điện thoại, ID hoặc họ tên..."
                 className="flex-1 h-9 px-3 rounded-xl bg-slate-100 dark:bg-[#242f3d] text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#2481cc]"
               />
               <button
@@ -377,7 +383,7 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
             <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
               {searchResults.length === 0 ? (
                 <p className="text-xs text-slate-400 text-center py-10">
-                  Nhập tên tài khoản (@username), mã số (#ID) hoặc họ tên để tìm kiếm người dùng toàn hệ thống
+                  Nhập số điện thoại, tên tài khoản (@username), mã số (#ID) hoặc họ tên để tìm kiếm người dùng toàn hệ thống
                 </p>
               ) : (
                 searchResults.map((user) => {
@@ -410,9 +416,15 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
                           <span className="font-semibold block text-slate-800 dark:text-slate-100">
                             {user.full_name}
                           </span>
-                          <span className="text-slate-400 block text-[11px]">
-                            @{user.username} • #{user.id}
-                          </span>
+                          <div className="text-slate-400 flex items-center space-x-1.5 text-[11px]">
+                            <span>@{user.username} • #{user.id}</span>
+                            {user.phone_number && (
+                              <>
+                                <span>•</span>
+                                <span className="text-[#2481cc] font-medium font-mono">{user.phone_number}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
 

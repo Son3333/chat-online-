@@ -189,58 +189,84 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     }
   };
 
-  // Gửi mã OTP xác minh số điện thoại
-  const handleSendOtp = () => {
+  // Gửi mã OTP xác minh số điện thoại từ Backend Server
+  const handleSendOtp = async () => {
     const cleanPhone = phoneNumber.trim().replace(/\s+/g, '');
     if (!cleanPhone || cleanPhone.length < 9) {
       setErrorMsg('Vui lòng nhập số điện thoại hợp lệ (từ 9 đến 11 số)!');
       return;
     }
-    const generated = Math.floor(100000 + Math.random() * 900000).toString();
-    setSentOtp(generated);
-    setSmsAlert({
-      code: generated,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    });
-    setOtpCountdown(60);
+    setIsSaving(true);
     setErrorMsg(null);
-    setSuccessMsg('Mã OTP xác thực đã được gửi tới số ' + cleanPhone);
+    try {
+      const res = await apiService.requestPhoneOtp(currentUser.id, cleanPhone);
+      if (res && res.success && res.otp_code) {
+        setSentOtp(res.otp_code);
+        setSmsAlert({
+          code: res.otp_code,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        });
+        setOtpCountdown(60);
+        setSuccessMsg(`Mã OTP bảo mật đã được tạo bởi máy chủ cho ${cleanPhone}`);
+
+        // Phát thông báo Toast Notification của hệ thống Windows
+        try {
+          if ('Notification' in window) {
+            if (Notification.permission === 'granted') {
+              new Notification('Vibe Messenger - Mã xác thực OTP', {
+                body: `Mã OTP xác thực số điện thoại ${cleanPhone} của bạn là: ${res.otp_code}. Có hiệu lực trong 5 phút.`,
+              });
+            } else if (Notification.permission !== 'denied') {
+              Notification.requestPermission().then((perm) => {
+                if (perm === 'granted') {
+                  new Notification('Vibe Messenger - Mã xác thực OTP', {
+                    body: `Mã OTP xác thực số điện thoại ${cleanPhone} của bạn là: ${res.otp_code}. Có hiệu lực trong 5 phút.`,
+                  });
+                }
+              });
+            }
+          }
+        } catch (notifErr) {
+          console.warn('Notification error:', notifErr);
+        }
+      } else {
+        setErrorMsg(res.error || 'Không thể tạo mã OTP từ máy chủ!');
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Lỗi kết nối máy chủ khi yêu cầu mã OTP!');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  // Xác minh mã OTP số điện thoại
+  // Xác minh mã OTP số điện thoại với Backend Server
   const handleVerifyOtp = async () => {
-    if (!sentOtp) {
-      setErrorMsg('Vui lòng bấm "Gửi mã OTP" trước!');
-      return;
-    }
-    if (otpCode.trim() !== sentOtp) {
-      setErrorMsg('Mã OTP không chính xác! Vui lòng kiểm tra lại tin nhắn SMS.');
+    if (!otpCode.trim() || otpCode.trim().length !== 6) {
+      setErrorMsg('Mã OTP phải bao gồm đúng 6 chữ số!');
       return;
     }
     setIsSaving(true);
     setErrorMsg(null);
     try {
-      const cleanPhone = phoneNumber.trim();
-      const res = await apiService.updateProfile(currentUser.id, {
-        phone_number: cleanPhone,
-        is_phone_verified: 1,
-      });
+      const cleanPhone = phoneNumber.trim().replace(/\s+/g, '');
+      const res = await apiService.verifyPhoneOtp(currentUser.id, cleanPhone, otpCode.trim());
       if (res && res.success && res.user) {
         setCurrentUser(res.user);
         localStorage.setItem('vibe_user', JSON.stringify(res.user));
-        setSuccessMsg('🎉 Số điện thoại đã được xác minh thành công!');
+        setSuccessMsg('🎉 Số điện thoại đã được xác minh thành công trên hệ thống!');
         setOtpCode('');
         setSentOtp(null);
+        await refreshConversations();
         setTimeout(() => {
           setSuccessMsg(null);
           setSmsAlert(null);
           setActiveSubView('main');
         }, 1200);
       } else {
-        setErrorMsg(res.error || 'Lỗi khi lưu số điện thoại!');
+        setErrorMsg(res.error || 'Mã OTP không chính xác hoặc đã hết hiệu lực (5 phút)!');
       }
     } catch (e: any) {
-      setErrorMsg(e.message || 'Lỗi kết nối máy chủ!');
+      setErrorMsg(e.message || 'Lỗi kết nối máy chủ khi xác thực OTP!');
     } finally {
       setIsSaving(false);
     }
@@ -955,12 +981,12 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               <div className="p-3.5 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-slate-700 dark:text-slate-200 space-y-1">
                 <div className="flex items-center space-x-2 font-bold text-teal-600 dark:text-teal-400">
                   <Phone className="w-4 h-4" />
-                  <span>Xác thực số điện thoại di động</span>
+                  <span>Xác thực số điện thoại chính thức</span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                   {currentUser.phone_number && currentUser.is_phone_verified
-                    ? `Tài khoản đã liên kết và xác minh với số ${currentUser.phone_number}.`
-                    : 'Nhập số điện thoại để nhận mã xác minh OTP qua tin nhắn SMS, giúp tăng cường bảo mật và liên hệ với bạn bè.'}
+                    ? `Tài khoản đã liên kết và xác minh thành công với số ${currentUser.phone_number}. Người dùng khác có thể tìm thấy bạn qua số điện thoại này.`
+                    : 'Nhập số điện thoại để nhận mã xác minh OTP từ Máy chủ (phát qua Thông báo Windows Toast & SMS), giúp kích hoạt tài khoản chính chủ và tìm kiếm bạn bè.'}
                 </p>
               </div>
 
@@ -979,27 +1005,27 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   />
                   <button
                     type="button"
-                    disabled={otpCountdown > 0 || !phoneNumber.trim()}
+                    disabled={isSaving || otpCountdown > 0 || !phoneNumber.trim()}
                     onClick={handleSendOtp}
                     className="px-3.5 h-10 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap cursor-pointer shadow-sm"
                   >
-                    {otpCountdown > 0 ? `Gửi lại (${otpCountdown}s)` : 'Gửi mã OTP'}
+                    {isSaving ? 'Đang tạo...' : otpCountdown > 0 ? `Gửi lại (${otpCountdown}s)` : 'Gửi mã OTP'}
                   </button>
                 </div>
               </div>
 
-              {/* Realistic SMS Simulator Notification */}
+              {/* Server OTP Notification Alert */}
               {smsAlert && (
                 <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-teal-500/10 border border-blue-500/30 text-slate-800 dark:text-slate-100 shadow-sm animate-in fade-in slide-in-from-top-2">
                   <div className="flex items-center justify-between mb-1.5 text-[11px] font-bold text-blue-600 dark:text-blue-400">
                     <span className="flex items-center space-x-1.5">
                       <Smartphone className="w-3.5 h-3.5" />
-                      <span>TIN NHẮN SMS XÁC MINH (VIBE OTP)</span>
+                      <span>MÃ XÁC THỰC MÁY CHỦ (SERVER OTP)</span>
                     </span>
                     <span className="text-[10px] text-slate-400 font-normal">{smsAlert.time}</span>
                   </div>
                   <p className="text-xs text-slate-600 dark:text-slate-300">
-                    Mã xác thực số điện thoại của bạn là: <strong className="text-blue-600 dark:text-blue-400 font-mono text-sm tracking-widest">{smsAlert.code}</strong>. Mã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.
+                    Mã xác thực từ máy chủ cho số điện thoại của bạn là: <strong className="text-blue-600 dark:text-blue-400 font-mono text-sm tracking-widest">{smsAlert.code}</strong>. Mã đã được lưu trữ trong CSDL và có hiệu lực 5 phút.
                   </p>
                   <button
                     type="button"

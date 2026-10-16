@@ -407,9 +407,14 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
       >
         {/* Sender Name in Group Chat */}
         {!isSelf && (
-          <span className="block text-xs font-bold text-[#2481cc] mb-1">
-            {message.sender_name}
-          </span>
+          <div className="flex items-center space-x-1.5 mb-1">
+            {message.avatar_url ? (
+              <img src={message.avatar_url} alt="" className="w-4 h-4 rounded-full object-cover flex-shrink-0" />
+            ) : null}
+            <span className="block text-xs font-bold text-[#2481cc]">
+              {message.sender_name}
+            </span>
+          </div>
         )}
 
         {/* Quoted / Reply Preview */}

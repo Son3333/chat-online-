@@ -135,14 +135,23 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
         {/* Profile Card */}
         <div className="p-6 flex flex-col items-center border-b border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-[#1c2733]/40">
           <div
-            className="w-20 h-20 rounded-full flex items-center justify-center font-bold text-white text-2xl shadow-lg mb-3"
+            className="w-20 h-20 rounded-full flex items-center justify-center font-bold text-white text-2xl shadow-lg mb-3 overflow-hidden ring-4 ring-blue-500/10"
             style={{ backgroundColor: activeConv.avatar_color || (isGroup ? '#06b6d4' : '#2481cc') }}
           >
-            {getInitials(activeConv.title)}
+            {activeConv.avatar_url ? (
+              <img src={activeConv.avatar_url} alt="" className="w-full h-full object-cover" />
+            ) : (
+              getInitials(activeConv.title)
+            )}
           </div>
           <h4 className="font-bold text-lg text-slate-900 dark:text-slate-100 text-center">
             {activeConv.title}
           </h4>
+          {activeConv.partner_username && (
+            <span className="text-xs text-[#2481cc] font-medium mt-0.5">
+              @{activeConv.partner_username}
+            </span>
+          )}
           <span className="text-xs mt-1">
             {isGroup ? (
               <span className="text-slate-400 font-medium">Nhóm trò chuyện</span>
@@ -156,6 +165,30 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
             )}
           </span>
 
+          {/* Partner Info Details (Phone, etc.) */}
+          {isDirect && (
+            <div className="w-full mt-3.5 space-y-2">
+              {activeConv.phone_number ? (
+                <div className="px-3 py-2 rounded-xl bg-white dark:bg-[#202b36] border border-slate-200/60 dark:border-slate-700/50 flex items-center justify-between text-xs">
+                  <div className="flex items-center space-x-2.5">
+                    <Phone className="w-4 h-4 text-[#2481cc]" />
+                    <div className="text-left">
+                      <span className="font-semibold font-mono text-slate-800 dark:text-slate-200 block">
+                        {activeConv.phone_number}
+                      </span>
+                      <span className="text-[10px] text-slate-400">Số điện thoại</span>
+                    </div>
+                  </div>
+                  {Boolean(activeConv.is_phone_verified) && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10px] font-bold">
+                      ✓ Đã xác minh
+                    </span>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          )}
+
           {/* Quick call buttons */}
           {isDirect && (
             <div className="flex items-center space-x-3 mt-4">
@@ -164,7 +197,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
                   onClose();
                   startCall('voice');
                 }}
-                className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-xs font-semibold transition-colors"
+                className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-xs font-semibold transition-colors cursor-pointer"
               >
                 <Phone className="w-3.5 h-3.5" />
                 <span>Gọi thoại</span>
@@ -174,7 +207,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
                   onClose();
                   startCall('video');
                 }}
-                className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-xs font-semibold transition-colors"
+                className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-xs font-semibold transition-colors cursor-pointer"
               >
                 <Video className="w-3.5 h-3.5" />
                 <span>Gọi video</span>

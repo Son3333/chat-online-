@@ -325,6 +325,28 @@ class ChatServer:
                 })
             return {"action": "update_profile_response", **res}
 
+        # 2.3 Yêu cầu tạo mã OTP xác minh số điện thoại
+        elif action == "request_phone_otp":
+            user_id = packet.get("user_id")
+            phone_number = packet.get("phone_number")
+            res = self.db.create_phone_otp(user_id, phone_number)
+            return {"action": "request_phone_otp_response", **res}
+
+        # 2.4 Xác minh mã OTP số điện thoại
+        elif action == "verify_phone_otp":
+            user_id = packet.get("user_id")
+            phone_number = packet.get("phone_number")
+            otp_code = packet.get("otp_code")
+            res = self.db.verify_phone_otp(user_id, phone_number, otp_code)
+            if res.get("success"):
+                with self.lock:
+                    all_online = list(self.active_clients.keys())
+                self.broadcast_to_users(all_online, {
+                    "type": "profile_updated",
+                    "user": res.get("user")
+                })
+            return {"action": "verify_phone_otp_response", **res}
+
         # 3. Lấy danh sách hội thoại
         elif action == "get_conversations":
             user_id = packet.get("user_id")
