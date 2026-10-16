@@ -65,6 +65,8 @@ class PythonBridge {
             this.socket.setTimeout(5000);
             this.socket.connect(this.port, this.host, () => {
                 this.connected = true;
+                this.socket?.setTimeout(0);
+                this.socket?.setKeepAlive(true, 5000);
                 this.buffer = Buffer.alloc(0);
                 if (this.reconnectTimer) {
                     clearInterval(this.reconnectTimer);
@@ -175,11 +177,16 @@ class PythonBridge {
         // Otherwise it is a push event broadcast from server (new_message, user_status_changed, etc.)
         this.emitEvent(packet);
     }
-    sendRequest(action, payload = {}, timeoutMs = 12000) {
+    async sendRequest(action, payload = {}, timeoutMs = 12000) {
+        // Tự động thử kết nối lại ngay nếu hiện tại chưa kết nối
+        if (!this.connected || !this.socket || this.socket.destroyed) {
+            console.log(`[PythonBridge] Socket not connected for '${action}', attempting to connect to ${this.host}:${this.port}...`);
+            await this.connect();
+        }
+        if (!this.connected || !this.socket) {
+            throw new Error(`Chưa kết nối đến máy chủ (${this.host}:${this.port})! Vui lòng kiểm tra lại địa chỉ máy chủ.`);
+        }
         return new Promise((resolve, reject) => {
-            if (!this.connected || !this.socket) {
-                return reject(new Error('Chưa kết nối đến máy chủ Python!'));
-            }
             // Extended timeout for large media/file transfers over WAN
             const isFileTransfer = action === 'download_file' || action === 'upload_file';
             const actualTimeout = isFileTransfer ? 60000 : timeoutMs;
@@ -197,6 +204,11 @@ class PythonBridge {
             }, actualTimeout);
             this.pendingRequests.set(trackingKey, { resolve, reject, timeoutId });
             try {
+                if (!this.socket) {
+                    clearTimeout(timeoutId);
+                    this.pendingRequests.delete(trackingKey);
+                    return reject(new Error('Socket không khả dụng'));
+                }
                 this.socket.write(Buffer.concat([header, jsonBuffer]));
             }
             catch (err) {

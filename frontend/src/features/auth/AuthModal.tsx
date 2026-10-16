@@ -98,8 +98,11 @@ export const AuthModal: React.FC = () => {
       }
     } catch (err: any) {
       const msg = err.message || '';
+      setShowServerSettings(true); // Tự động mở bảng chọn máy chủ để người dùng bấm chọn
       if (msg.includes('quá thời gian') || msg.includes('timeout')) {
-        setErrorMsg(`Kết nối tới máy chủ (${serverConfig.host}:${serverConfig.port}) quá thời gian chờ. Bạn có thể nhấn 'Đổi máy chủ' bên dưới để chuyển sang WAN Internet hoặc Máy chủ cục bộ!`);
+        setErrorMsg(`Kết nối tới máy chủ (${serverConfig.host}:${serverConfig.port}) quá thời gian chờ. Bạn có thể bấm chọn 'WAN (bore.pub)' bên dưới để kết nối qua Internet!`);
+      } else if (msg.includes('Chưa kết nối') || msg.includes('Không thể kết nối')) {
+        setErrorMsg(`Không thể kết nối đến máy chủ (${serverConfig.host}:${serverConfig.port}). Bạn hãy bấm chọn nút 'WAN (bore.pub)' màu xanh bên dưới để kết nối qua Internet!`);
       } else {
         setErrorMsg(msg || 'Lỗi kết nối máy chủ. Hãy kiểm tra kết nối mạng!');
       }

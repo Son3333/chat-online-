@@ -44,6 +44,8 @@ export class PythonBridge {
 
       this.socket.connect(this.port, this.host, () => {
         this.connected = true;
+        this.socket?.setTimeout(0);
+        this.socket?.setKeepAlive(true, 5000);
         this.buffer = Buffer.alloc(0);
         if (this.reconnectTimer) {
           clearInterval(this.reconnectTimer);
@@ -172,11 +174,18 @@ export class PythonBridge {
     this.emitEvent(packet);
   }
 
-  public sendRequest(action: string, payload: Record<string, any> = {}, timeoutMs = 12000): Promise<PythonPacket> {
+  public async sendRequest(action: string, payload: Record<string, any> = {}, timeoutMs = 12000): Promise<PythonPacket> {
+    // Tự động thử kết nối lại ngay nếu hiện tại chưa kết nối
+    if (!this.connected || !this.socket || this.socket.destroyed) {
+      console.log(`[PythonBridge] Socket not connected for '${action}', attempting to connect to ${this.host}:${this.port}...`);
+      await this.connect();
+    }
+
+    if (!this.connected || !this.socket) {
+      throw new Error(`Chưa kết nối đến máy chủ (${this.host}:${this.port})! Vui lòng kiểm tra lại địa chỉ máy chủ.`);
+    }
+
     return new Promise((resolve, reject) => {
-      if (!this.connected || !this.socket) {
-        return reject(new Error('Chưa kết nối đến máy chủ Python!'));
-      }
 
       // Extended timeout for large media/file transfers over WAN
       const isFileTransfer = action === 'download_file' || action === 'upload_file';
@@ -200,6 +209,11 @@ export class PythonBridge {
       this.pendingRequests.set(trackingKey, { resolve, reject, timeoutId });
 
       try {
+        if (!this.socket) {
+          clearTimeout(timeoutId);
+          this.pendingRequests.delete(trackingKey);
+          return reject(new Error('Socket không khả dụng'));
+        }
         this.socket.write(Buffer.concat([header, jsonBuffer]));
       } catch (err) {
         clearTimeout(timeoutId);
