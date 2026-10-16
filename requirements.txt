@@ -10,6 +10,3 @@ sounddevice>=0.4.6
 numpy>=1.24.0
 keyboard>=0.13.5
 
-# Testing & CI/CD
-pytest>=8.0.0
-pytest-cov>=4.1.0

@@ -19,16 +19,30 @@
 
 ### Các tính năng chính:
 - **Cơ chế 1-Click Tự động hóa**: Người dùng tải về chỉ cần nhấp đúp file `.bat`, ứng dụng sẽ tự động kiểm tra, cài đặt ngầm các thư viện cần thiết, tự động khởi động máy chủ trực tuyến và mở giao diện ứng dụng.
-- **Tự động mở Server Online WAN**: Sử dụng công nghệ TCP Tunneling không giới hạn, tự động đưa máy chủ lên Internet (`bore.pub:28888`) giúp mọi máy tính ở các mạng WiFi, 4G khác nhau đều kết nối được ngay lập tức.
-- **Xác thực người dùng thực tế**: Đăng ký tài khoản, đăng nhập an toàn với mật khẩu băm SHA-256 + Salt.
-- **Tính năng Ghi nhớ tài khẩu & mật khẩu**: Tự động lưu thông tin đăng nhập cục bộ trên máy để lần sau vào chat tức thì.
-- **Nút Sao chép địa chỉ Server Online 1-Chạm**: Nằm ngay trên thanh tiêu đề ứng dụng, giúp bạn dễ dàng gửi link phòng chat cho bạn bè chỉ với 1 cú click.
-- **Nhắn tin thời gian thực (Real-time TCP Socket)**:
-  - Nhắn tin cá nhân 1-1 với bạn bè.
-  - Nhắn tin nhóm (Group Chat) nhiều thành viên.
-  - Hiển thị bong bóng chat với thời gian, trạng thái gửi `✓`.
-  - Hỗ trợ thanh biểu tượng cảm xúc (Emoji bar) nhanh: 😊, 👍, ❤️, 🎉, 🔥, 😂...
-  - Thông báo trạng thái người dùng đang soạn tin nhắn (*Typing indicator*).
+- **Tự động mở Server Online WAN**: Sử dụng công nghệ TCP Tunneling không giới hạn, tự động đưa máy chủ lên Internet (`bore.pub:38888`) giúp mọi máy tính ở các mạng WiFi, 4G khác nhau đều kết nối được ngay lập tức.
+- **Xác thực người dùng & Bảo mật**: Đăng ký tài khoản, kiểm tra độ mạnh mật khẩu (chữ hoa, chữ thường, số, ký tự đặc biệt), mật khẩu băm SHA-256 + Salt. Tự động forced logout tài khoản trên thiết bị cũ khi đăng nhập thiết bị mới.
+- **Đàm thoại trực tuyến & Chia sẻ màn hình (Voice / Video Call & Screen Sharing)**:
+  - 📞 **Gọi thoại (Voice Call)** thời gian thực với độ trễ thấp < 120ms.
+  - 📹 **Gọi Video (Video Call)** độ nét cao (20-30 FPS) hiển thị song song PIP hai khung hình camera.
+  - 🖥️ **Chia sẻ màn hình (Screen Sharing)**: Chuyển đổi linh hoạt từ camera sang chia sẻ trực tiếp toàn màn hình máy tính với đối phương.
+- **Nhắn tin thời gian thực & Tương tác chuyên sâu (Interactive Messaging)**:
+  - Nhắn tin cá nhân 1-1 và Nhắn tin nhóm (Group Chat) chống spam, kiểm soát tần suất tạo nhóm.
+  - ↩️ **Trả lời / Trích dẫn tin nhắn (Reply / Quote)**: Hiển thị khung trích dẫn tin nhắn gốc kèm tên người gửi, bấm vào tự cuộn đến tin nhắn cha.
+  - ❤️ **Thả biểu cảm tin nhắn (Message Reactions)**: Thả và gỡ cảm xúc (❤️, 👍, 😂, 😮, 😢, 😡) với huy hiệu đếm số lượng người thả.
+  - 📌 **Ghim tin nhắn quan trọng (Pin Message)**: Ghim tin nhắn lên thanh tiêu đề hội thoại cho tất cả thành viên dễ theo dõi.
+  - ☁️ **Không gian "Cloud của tôi" (Saved Messages)**: Lưu trữ tin nhắn, ghi chú, ảnh và tệp tài liệu cá nhân trên đám mây riêng biệt.
+  - 🗑️ **Thu hồi tin nhắn (Unsend / Recall)**: Thu hồi tin nhắn đã gửi ở cả hai phía người gửi và người nhận.
+  - 🚫 **Chặn người dùng (Block / Unblock)**: Chặn tài khoản gửi tin nhắn hoặc gọi điện làm phiền.
+  - 💬 **Đang soạn tin (Typing indicator)**: Báo trạng thái đối phương đang gõ phím.
+- **Bộ công cụ Desktop Chuyên nghiệp (Native Desktop Integration)**:
+  - 📥 **Khay hệ thống (System Tray)**: Bấm nút [X] ứng dụng thu nhỏ chạy ngầm dưới khay; icon tự động hiện chấm đỏ đếm số tin nhắn chưa đọc kèm tooltip tóm tắt.
+  - 📷 **Công cụ Chụp màn hình tích hợp (`Ctrl + Alt + A`)**: Kính lúp Pixel Loupe phóng đại từng điểm ảnh, thanh công cụ vẽ chú thích (Hình chữ nhật, Mũi tên, Chữ viết, Bộ đếm số bước `1-2-3`, Làm mờ nhạy cảm Mosaic/Blur). Tự lưu clipboard và gửi thẳng vào khung chat.
+  - 🔍 **Thanh tìm kiếm & Lệnh nhanh Quick Switcher (`Ctrl + K`)**: Command Palette tìm kiếm tức thời hội thoại và thực thi lệnh tắt trong tích tắc.
+  - 🔒 **Khóa bảo vệ nhanh Quick Lock (`Ctrl + L`)**: Khóa màn hình tức thời khi rời máy tính, yêu cầu mật khẩu để mở khóa.
+  - 🪟 **Tách cửa sổ chat riêng (Pop-out Window)**: Mở cuộc trò chuyện trong một cửa sổ độc lập để theo dõi song song nhiều việc.
+  - 📌 **Ghim cửa sổ luôn nổi trên cùng (Always on Top)**.
+  - 🖥️ **Tự động xử lý rút màn hình phụ (Off-screen recovery)**: Tự phát hiện và đưa cửa sổ về màn hình chính nếu tọa độ lưu bị văng ra ngoài.
+  - 🔔 **Thông báo Toast góc màn hình**: Pop-up thông báo hiện đại kèm avatar người gửi và tự đóng sau 4 giây.
 - **Truyền tải và chia sẻ tệp tin đa phương tiện**:
   - Gửi hình ảnh (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`).
   - Gửi tài liệu và tệp nén (`.pdf`, `.docx`, `.xlsx`, `.zip`, `.txt`...).
@@ -86,10 +100,20 @@
 │   └── client/
 │       ├── client_app.py     # Cửa sổ chính Desktop Client (giao diện Dark/Light Telegram-like)
 │       ├── network.py        # Tầng Socket Client đa luồng gửi/nhận thời gian thực
+│       ├── call/             # Mô-đun Đàm thoại trực tuyến Voice & Video Call
+│       │   └── call_window.py    # Giao diện gọi thoại/video, chia sẻ màn hình, phát chuông, streaming
+│       ├── desktop/          # Bộ mô-đun tích hợp sâu hệ thống Desktop
+│       │   ├── tray.py           # Quản lý System Tray, icon động, badge đếm tin chưa đọc
+│       │   ├── screenshot.py     # Chụp màn hình (Ctrl+Alt+A), Pixel loupe, thanh vẽ chú thích
+│       │   ├── quick_switcher.py # Command Palette tìm nhanh hội thoại & lệnh tắt (Ctrl+K)
+│       │   ├── quick_lock.py     # Khóa màn hình nhanh bảo vệ riêng tư (Ctrl+L)
+│       │   ├── popout_window.py  # Tách khung chat độc lập đa cửa sổ
+│       │   ├── toast.py          # Thông báo Toast hiện đại góc dưới màn hình
+│       │   └── window_manager.py # Quản lý tọa độ, Always on Top, chống văng màn hình phụ
 │       └── ui/
 │           ├── auth_frame.py         # Giao diện Đăng nhập / Đăng ký + Ghi nhớ mật khẩu
 │           ├── main_window.py        # Giao diện chính (Sidebar, Header, Danh sách đoạn chat, Nút sao chép IP)
-│           ├── chat_bubble.py        # Bong bóng chat tin nhắn, xem/tải ảnh & tệp tài liệu
+│           ├── chat_bubble.py        # Bong bóng chat tin nhắn, reply/quote, reactions, ghim tin nhắn
 │           └── create_group_dialog.py# Hộp thoại tạo nhóm chat mới
 │
 └── BÁO CÁO CÁC CHƯƠNG ĐỒ ÁN (FILE WORD .DOCX ĐỘC LẬP):
