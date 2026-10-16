@@ -296,7 +296,7 @@ class ChatServer:
         elif action == "get_conversations":
             user_id = packet.get("user_id")
             convs = self.db.get_user_conversations(user_id)
-            return {"action": "conversations_list", "conversations": convs}
+            return {"action": "conversations_list", "success": True, "conversations": convs}
 
         # 4. Lấy lịch sử tin nhắn
         elif action == "get_messages":
@@ -305,6 +305,7 @@ class ChatServer:
             members = self.db.get_conversation_members(conv_id)
             return {
                 "action": "messages_history",
+                "success": True,
                 "conversation_id": conv_id,
                 "messages": messages,
                 "members": members
@@ -432,21 +433,23 @@ class ChatServer:
 
         # 8. Tìm kiếm người dùng
         elif action == "search_users":
-            keyword = packet.get("keyword", "")
+            keyword = packet.get("keyword") or packet.get("query", "")
             current_user_id = packet.get("user_id")
             results = self.db.search_users(keyword, current_user_id)
-            return {"action": "search_results", "users": results}
+            return {"action": "search_results", "success": True, "users": results}
 
         # 9. Bắt đầu chat 1-1
         elif action == "start_direct_chat":
             user1_id = packet.get("user_id")
-            user2_id = packet.get("partner_id")
+            user2_id = packet.get("partner_id") or packet.get("target_id")
             conv_id = self.db.get_direct_conversation(user1_id, user2_id)
             convs = self.db.get_user_conversations(user1_id)
             # Thông báo cho đối phương cập nhật danh sách hội thoại nếu đang online
-            self.broadcast_to_users([user2_id], {"type": "refresh_conversations"})
+            if user2_id:
+                self.broadcast_to_users([user2_id], {"type": "refresh_conversations"})
             return {
                 "action": "direct_chat_started",
+                "success": True,
                 "conversation_id": conv_id,
                 "conversations": convs
             }

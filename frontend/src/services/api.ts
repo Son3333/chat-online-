@@ -48,7 +48,24 @@ export const apiService = {
 
   // Conversations
   async getConversations(userId: number): Promise<{ success: boolean; conversations: Conversation[] }> {
-    return await this.sendRequest('get_conversations', { user_id: userId });
+    const res = await this.sendRequest('get_conversations', { user_id: userId });
+    const rawList: any[] = res?.conversations || [];
+    const normalized: Conversation[] = rawList.map((c: any) => ({
+      ...c,
+      id: c.id,
+      title: c.title || c.name || 'Cuộc trò chuyện',
+      type: c.type || 'direct',
+      last_message: c.last_message
+        ? {
+            ...c.last_message,
+            msg_type: c.last_message.msg_type || c.last_message.message_type || 'text',
+          }
+        : null,
+    }));
+    return {
+      success: res?.success !== false,
+      conversations: normalized,
+    };
   },
 
   async getSavedConversation(userId: number): Promise<{ success: boolean; conversation_id: number }> {
@@ -56,7 +73,17 @@ export const apiService = {
   },
 
   async getMessages(convId: string | number, limit = 60): Promise<{ success: boolean; messages: Message[] }> {
-    return await this.sendRequest('get_messages', { conversation_id: convId, limit });
+    const res = await this.sendRequest('get_messages', { conversation_id: convId, limit });
+    const rawMessages: any[] = res?.messages || [];
+    const normalized: Message[] = rawMessages.map((m: any) => ({
+      ...m,
+      msg_type: m.msg_type || m.message_type || 'text',
+      original_name: m.original_name || m.file_name,
+    }));
+    return {
+      success: res?.success !== false,
+      messages: normalized,
+    };
   },
 
   async sendMessage(params: {
@@ -104,8 +131,12 @@ export const apiService = {
   },
 
   // Contacts
-  async searchUsers(query: string): Promise<{ success: boolean; users: User[] }> {
-    return await this.sendRequest('search_users', { query });
+  async searchUsers(query: string, currentUserId?: number): Promise<{ success: boolean; users: User[] }> {
+    const res = await this.sendRequest('search_users', { keyword: query, query, user_id: currentUserId });
+    return {
+      success: res?.success !== false,
+      users: res?.users || [],
+    };
   },
 
   async getFriends(userId: number): Promise<{ success: boolean; friends: Friend[] }> {

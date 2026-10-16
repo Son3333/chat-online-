@@ -23,7 +23,7 @@ export const ChatArea: React.FC = () => {
           <MessageSquare className="w-10 h-10" />
         </div>
         <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">
-          Chào mừng đến với Telegram Messenger!
+          Chào mừng đến với Vibe Người Tốt!
         </h2>
         <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
           Chọn một cuộc trò chuyện ở danh sách bên trái hoặc nhấn vào "Tạo Nhóm" để bắt đầu nhắn tin an toàn, tốc độ cao.

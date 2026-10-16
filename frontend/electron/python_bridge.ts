@@ -112,9 +112,18 @@ export class PythonBridge {
 
   private handleIncomingPacket(packet: PythonPacket) {
     const action = packet.action;
-    const type = packet.type;
 
-    // Check if there is an in-flight request waiting for this action response
+    const ACTION_RESPONSE_MAP: Record<string, string[]> = {
+      get_conversations: ['conversations_list', 'get_conversations_response', 'get_conversations'],
+      get_messages: ['messages_history', 'get_messages_response', 'get_messages'],
+      search_users: ['search_results', 'search_users_response', 'search_users'],
+      upload_file: ['upload_response', 'upload_file_response', 'upload_file'],
+      download_file: ['download_response', 'download_file_response', 'download_file'],
+      start_direct_chat: ['direct_chat_started', 'start_direct_chat_response', 'start_direct_chat'],
+      create_group: ['create_group_response', 'create_group'],
+    };
+
+    // Check if there is an in-flight request waiting for this action response directly
     if (action && this.pendingRequests.has(action)) {
       const req = this.pendingRequests.get(action)!;
       clearTimeout(req.timeoutId);
@@ -123,9 +132,14 @@ export class PythonBridge {
       return;
     }
 
-    // Also match response variants like 'login_response' for 'login'
+    // Match response variants like 'login_response' for 'login', or aliases in ACTION_RESPONSE_MAP
     for (const [reqAction, req] of this.pendingRequests.entries()) {
-      if (action === `${reqAction}_response` || action === reqAction) {
+      const aliases = ACTION_RESPONSE_MAP[reqAction] || [];
+      if (
+        action === `${reqAction}_response` ||
+        action === reqAction ||
+        (action && aliases.includes(action))
+      ) {
         clearTimeout(req.timeoutId);
         this.pendingRequests.delete(reqAction);
         req.resolve(packet);
