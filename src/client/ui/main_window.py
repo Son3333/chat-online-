@@ -512,44 +512,22 @@ class MainWindow(ctk.CTkFrame):
         )
         self.lbl_typing.pack(side="left", padx=(0, 12))
 
-        # Nút hành động bạn bè kiểu Telegram (Thêm vào danh bạ / Bạn bè)
-        self.btn_contact_action = ctk.CTkButton(
-            right_header,
-            text="➕ Thêm Bạn Bè",
-            height=30,
-            font=ctk.CTkFont(size=11, weight="bold"),
-            fg_color="#10B981",
-            hover_color="#059669",
-            corner_radius=6,
-            command=self.toggle_contact_friend
-        )
+        # Trạng thái bạn bè và chặn của đối phương trong cuộc hội thoại 1-1 đang mở
+        self.active_partner_friend_status = "none"
+        self.active_partner_blocked = False
 
-        # Nút Chặn / Bỏ chặn người dùng (Dành cho chat 1-1)
-        self.btn_block_action = ctk.CTkButton(
+        # Nút menu tùy chọn cuộc trò chuyện "..." (Ẩn gọn các tính năng Bạn bè, Chặn, Xóa chat)
+        self.btn_chat_options = ctk.CTkButton(
             right_header,
-            text="🚫 Chặn",
-            height=30,
-            width=70,
-            font=ctk.CTkFont(size=11, weight="bold"),
-            fg_color=("#FEE2E2", "#450A0A"),
-            text_color=("#DC2626", "#F87171"),
-            hover_color=("#FECACA", "#7F1D1D"),
-            corner_radius=6,
-            command=self.toggle_block_user
-        )
-
-        # Nút Xóa đoạn chat
-        self.btn_delete_chat = ctk.CTkButton(
-            right_header,
-            text="🗑️ Xóa chat",
-            height=30,
-            width=80,
-            font=ctk.CTkFont(size=11),
+            text="...",
+            width=38,
+            height=32,
+            font=ctk.CTkFont(size=16, weight="bold"),
             fg_color=("#F1F5F9", "#334155"),
             text_color=("#475569", "#94A3B8"),
             hover_color=("#E2E8F0", "#475569"),
             corner_radius=6,
-            command=self.delete_current_conversation
+            command=self._show_chat_options_menu
         )
 
         # 2. Scrollable Messages View
@@ -915,12 +893,12 @@ class MainWindow(ctk.CTkFrame):
 
         # Cập nhật Header
         self.lbl_chat_title.configure(text=conv["title"])
-        self.btn_delete_chat.pack(side="right", padx=(6, 0))
+        self.btn_chat_options.pack(side="right", padx=(6, 0))
         if conv["type"] == "group":
             count = conv.get("member_count", 2)
             self.lbl_chat_subtitle.configure(text=f"👥 Nhóm trò chuyện  •  {count} thành viên")
-            self.btn_contact_action.pack_forget()
-            self.btn_block_action.pack_forget()
+            self.active_partner_friend_status = None
+            self.active_partner_blocked = False
         else:
             is_on = conv.get("is_online", 0)
             status_text = "🟢 Trực tuyến" if is_on else "⚪ Ngoại tuyến"
@@ -929,13 +907,13 @@ class MainWindow(ctk.CTkFrame):
             # Kiểm tra trạng thái bạn bè và chặn
             partner_id = conv.get("partner_id")
             if partner_id:
-                self.btn_block_action.pack(side="right", padx=(6, 0))
-                self.btn_contact_action.pack(side="right", padx=(6, 0))
+                self.active_partner_friend_status = "friends" if any(f.get("id") == partner_id for f in self.friends) else "none"
+                self.active_partner_blocked = False
                 self._update_header_friend_status(partner_id)
                 self._update_header_block_status(partner_id)
             else:
-                self.btn_contact_action.pack_forget()
-                self.btn_block_action.pack_forget()
+                self.active_partner_friend_status = None
+                self.active_partner_blocked = False
 
         # Highlight lại list
         self._render_conversation_list()
@@ -949,40 +927,95 @@ class MainWindow(ctk.CTkFrame):
             res = self.net.check_friend(self.current_user["id"], partner_id)
             st = res.get("friendship_status", "none") if res else "none"
             def _apply():
-                if st == "friends":
-                    self.btn_contact_action.configure(
-                        text="⭐ Bạn Bè (Xóa khỏi danh bạ)",
-                        fg_color=("#E2E8F0", "#334155"),
-                        text_color=("#0F172A", "#F8FAFC"),
-                        hover_color=("#CBD5E1", "#475569"),
-                        state="normal"
-                    )
-                elif st == "sent_pending":
-                    self.btn_contact_action.configure(
-                        text="⏳ Đã gửi lời mời (Chờ duyệt)",
-                        fg_color="#F59E0B",
-                        text_color="black",
-                        hover_color="#D97706",
-                        state="disabled"
-                    )
-                elif st == "received_pending":
-                    self.btn_contact_action.configure(
-                        text="✅ Đồng ý kết bạn",
-                        fg_color="#10B981",
-                        text_color="white",
-                        hover_color="#059669",
-                        state="normal"
-                    )
-                else:
-                    self.btn_contact_action.configure(
-                        text="➕ Kết Bạn (Gửi lời mời)",
-                        fg_color="#10B981",
-                        text_color="white",
-                        hover_color="#059669",
-                        state="normal"
-                    )
+                self.active_partner_friend_status = st
             self.master.after(0, _apply)
         threading.Thread(target=_check, daemon=True).start()
+
+    def _show_chat_options_menu(self, event=None):
+        """Hiển thị menu ngữ cảnh tùy chọn cuộc trò chuyện khi bấm nút '...'"""
+        if not self.active_conv_data:
+            return
+
+        conv = self.active_conv_data
+        partner_id = conv.get("partner_id")
+
+        import tkinter as tk
+        is_dark = ctk.get_appearance_mode() == "Dark"
+        bg_color = "#1E293B" if is_dark else "#FFFFFF"
+        fg_color = "#F8FAFC" if is_dark else "#0F172A"
+        active_bg = "#334155" if is_dark else "#E2E8F0"
+        active_fg = "#38BDF8" if is_dark else "#0284C7"
+
+        menu = tk.Menu(
+            self.master,
+            tearoff=0,
+            bg=bg_color,
+            fg=fg_color,
+            activebackground=active_bg,
+            activeforeground=active_fg,
+            font=("Segoe UI", 10),
+            relief="solid",
+            bd=1
+        )
+
+        if conv.get("type") == "direct" and partner_id:
+            # 1. Trạng thái Bạn bè
+            st = getattr(self, "active_partner_friend_status", "none")
+            if st == "none" and any(f.get("id") == partner_id for f in self.friends):
+                st = "friends"
+
+            if st == "friends":
+                menu.add_command(
+                    label="⭐ Xóa khỏi danh bạ bạn bè",
+                    command=self.toggle_contact_friend
+                )
+            elif st == "sent_pending":
+                menu.add_command(
+                    label="⏳ Đã gửi lời mời (Chờ duyệt)",
+                    state="disabled"
+                )
+            elif st == "received_pending":
+                menu.add_command(
+                    label="✅ Đồng ý kết bạn",
+                    command=self.toggle_contact_friend
+                )
+            else:
+                menu.add_command(
+                    label="➕ Thêm vào danh bạ bạn bè",
+                    command=self.toggle_contact_friend
+                )
+
+            # 2. Trạng thái Chặn / Bỏ chặn
+            is_blocked = getattr(self, "active_partner_blocked", False)
+            if is_blocked:
+                menu.add_command(
+                    label="🔓 Bỏ chặn người dùng này",
+                    command=lambda: self.toggle_block_user(partner_id)
+                )
+            else:
+                menu.add_command(
+                    label="🚫 Chặn người dùng này",
+                    command=lambda: self.toggle_block_user(partner_id)
+                )
+
+            menu.add_separator()
+
+        # 3. Xóa cuộc trò chuyện
+        menu.add_command(
+            label="🗑️ Xóa cuộc trò chuyện",
+            command=self.delete_current_conversation
+        )
+
+        try:
+            if event and hasattr(event, 'x_root') and hasattr(event, 'y_root'):
+                x, y = event.x_root, event.y_root
+            else:
+                self.btn_chat_options.update_idletasks()
+                x = self.btn_chat_options.winfo_rootx()
+                y = self.btn_chat_options.winfo_rooty() + self.btn_chat_options.winfo_height() + 4
+            menu.tk_popup(x, y)
+        except Exception:
+            pass
 
     def toggle_contact_friend(self):
         if not self.active_conv_data or self.active_conv_data.get("type") != "direct":
@@ -1310,20 +1343,7 @@ class MainWindow(ctk.CTkFrame):
                 return
             is_by_me = res.get("is_blocked_by_me", False)
             def _apply():
-                if is_by_me:
-                    self.btn_block_action.configure(
-                        text="🔓 Bỏ chặn",
-                        fg_color=("#E2E8F0", "#334155"),
-                        text_color=("#0F172A", "#F8FAFC"),
-                        hover_color=("#CBD5E1", "#475569")
-                    )
-                else:
-                    self.btn_block_action.configure(
-                        text="🚫 Chặn",
-                        fg_color=("#FEE2E2", "#450A0A"),
-                        text_color=("#DC2626", "#F87171"),
-                        hover_color=("#FECACA", "#7F1D1D")
-                    )
+                self.active_partner_blocked = is_by_me
             self.master.after(0, _apply)
         threading.Thread(target=_check, daemon=True).start()
 
