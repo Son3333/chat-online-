@@ -1,0 +1,124 @@
+name: CI/CD Pipeline - Chat Messaging App
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-audit:
+    name: Code Quality & Security Audit
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install Linting & Security Tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff bandit pip-audit
+
+      - name: Install Runtime Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Ruff Linter & Syntax Check
+        run: |
+          python -m ruff check src
+
+      - name: Run Bandit Security Analysis
+        run: |
+          python -m bandit -r src -ll
+
+      - name: Run Dependency Vulnerability Audit
+        run: |
+          python -m pip_audit -r requirements.txt
+
+  test-suite:
+    name: Automated Unit & Integration Tests
+    needs: lint-and-audit
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install Test Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run Full Pytest Suite with Coverage
+        run: |
+          python -m pytest tests/ --cov=src --cov-report=xml --cov-report=term -v
+
+      - name: Upload Test Coverage Artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 7
+
+  package-and-smoke:
+    name: Build Windows Application Artifact
+    needs: test-suite
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install Packaging Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Package Standalone Windows App
+        run: |
+          pyinstaller --noconfirm --onedir --windowed --name "ChatApp_Nhom05" --add-data "src;src" run_client.py
+
+      - name: Smoke Test Packaged Executable
+        run: |
+          if (Test-Path "dist/ChatApp_Nhom05/ChatApp_Nhom05.exe") {
+            Write-Host "Build verified: dist/ChatApp_Nhom05/ChatApp_Nhom05.exe generated successfully."
+          } else {
+            Write-Error "Packaged executable not found!"
+            exit 1
+          }
+
+      - name: Upload Packaged Application
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChatApp_Windows_Artifact
+          path: dist/ChatApp_Nhom05/
+          retention-days: 14
