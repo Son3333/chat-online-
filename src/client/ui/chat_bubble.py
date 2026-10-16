@@ -5,6 +5,7 @@ import os
 import io
 import re
 import threading
+from typing import Optional, Callable, Dict, List, Any
 from PIL import Image
 
 # Thư mục lưu đệm ảnh thu nhỏ để xem trực tiếp
