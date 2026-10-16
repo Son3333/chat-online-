@@ -57,8 +57,8 @@ start "CHAT SERVER - LOCAL" "%PY_CMD%" "%~dp0run_server.py"
 ping 127.0.0.1 -n 3 >nul
 
 :launch_app
-:: 2. Khoi chay ung dung Desktop duy nhat
-echo [*] Dang khoi chay Ung Dung Messenger Desktop...
+:: 2. Khoi chay ung dung Desktop Vibe Nguoi Tot duy nhat
+echo [*] Dang khoi chay Ung Dung Vibe Nguoi Tot...
 
 if exist "%~dp0frontend\node_modules\electron\dist\electron.exe" (
     start "" /d "%~dp0frontend" "%~dp0frontend\node_modules\electron\dist\electron.exe" .
@@ -70,5 +70,4 @@ if exist "%~dp0frontend\node_modules\.bin\electron.cmd" (
     exit /b 0
 )
 
-start "" "%PY_CMD%" "%~dp0launch.pyw"
 exit /b 0
