@@ -1,10 +1,12 @@
-import React from 'react';
-import { Phone, Video, Users, MoreVertical, Search } from 'lucide-react';
+import React, { useState } from 'react';
+import { Phone, Video, Users, MoreVertical, Search, Info } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { getInitials } from '../../lib/utils';
+import { ChatInfoModal } from './ChatInfoModal';
 
 export const ChatHeader: React.FC = () => {
   const { activeConv, typingUser, startCall } = useChat();
+  const [showInfo, setShowInfo] = useState(false);
 
   if (!activeConv) return null;
 
@@ -13,9 +15,14 @@ export const ChatHeader: React.FC = () => {
   const isDirect = activeConv.type === 'direct';
 
   return (
-    <div className="h-14 px-4 bg-white dark:bg-[#17212b] border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between select-none">
-      {/* Left: Avatar & Title & Status */}
-      <div className="flex items-center space-x-3">
+    <>
+      <div className="h-14 px-4 bg-white dark:bg-[#17212b] border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between select-none">
+        {/* Left: Avatar & Title & Status (Clickable to view info) */}
+        <div
+          onClick={() => setShowInfo(true)}
+          className="flex items-center space-x-3 cursor-pointer hover:opacity-90 transition-opacity p-1 -ml-1 rounded-lg"
+          title="Xem thông tin hội thoại"
+        >
         <div
           className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-sm"
           style={{ backgroundColor: activeConv.avatar_color || (isGroup ? '#06b6d4' : '#2481cc') }}
@@ -81,14 +88,26 @@ export const ChatHeader: React.FC = () => {
           <Search className="w-4 h-4" />
         </button>
 
-        <button
-          title="Tùy chọn khác"
-          className="p-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-300 transition-colors"
-        >
-          <MoreVertical className="w-4 h-4" />
-        </button>
+          <button
+            onClick={() => setShowInfo(true)}
+            title="Xem thông tin hội thoại"
+            className="p-2 rounded-lg text-slate-500 hover:text-[#2481cc] hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-300 transition-colors"
+          >
+            <Info className="w-4 h-4" />
+          </button>
+
+          <button
+            title="Tùy chọn khác"
+            className="p-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-300 transition-colors"
+          >
+            <MoreVertical className="w-4 h-4" />
+          </button>
+        </div>
       </div>
-    </div>
+
+      {/* Popout Info Modal */}
+      <ChatInfoModal isOpen={showInfo} onClose={() => setShowInfo(false)} />
+    </>
   );
 };
 
