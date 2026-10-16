@@ -1815,8 +1815,19 @@ class MainWindow(ctk.CTkFrame):
         self.master.after(2500, lambda: threading.Thread(target=_sync_loop, daemon=True).start())
 
     def open_create_group_dialog(self):
-        CreateGroupDialog(self.master, self.current_user, self.net, on_group_created=self._on_group_created)
+        # Tránh người dùng bấm spam nút tạo nhóm mở nhiều modal đè nhau
+        if getattr(self, "_group_dialog", None) and self._group_dialog.winfo_exists():
+            return
+        self._group_dialog = CreateGroupDialog(self, self.current_user, self.net, on_group_created=self._on_group_created)
 
     def _on_group_created(self, conv_id):
         self.load_conversations()
+        self._show_toast("👥 Đã tạo nhóm trò chuyện mới thành công!")
+        if conv_id:
+            def _select_new():
+                for c in self.conversations:
+                    if c.get("id") == conv_id:
+                        self.select_conversation(c)
+                        break
+            self.after(300, _select_new)
 

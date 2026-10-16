@@ -423,14 +423,50 @@ class ChatServer:
                 "conversations": convs
             }
 
-        # 10. Tạo nhóm chat
+        # 10. Tạo nhóm chat (Có chống spam & kiểm tra hợp lệ)
         elif action == "create_group":
             creator_id = packet.get("creator_id")
             name = packet.get("name", "").strip()
-            member_ids = packet.get("member_ids", [])
+            raw_member_ids = packet.get("member_ids", [])
+            
             if not name:
                 return {"action": "create_group_response", "success": False, "message": "Tên nhóm không được để trống!"}
+            if len(name) > 60:
+                return {"action": "create_group_response", "success": False, "message": "Tên nhóm quá dài (tối đa 60 ký tự)!"}
             
+            # Lọc thành viên hợp lệ (không bao gồm chính người tạo)
+            try:
+                member_ids = list(set([int(m) for m in raw_member_ids if int(m) != int(creator_id)]))
+            except Exception:
+                member_ids = []
+                
+            if not member_ids:
+                return {"action": "create_group_response", "success": False, "message": "Nhóm phải có ít nhất 1 thành viên khác!"}
+            if len(member_ids) > 100:
+                return {"action": "create_group_response", "success": False, "message": "Số lượng thành viên vượt quá giới hạn (tối đa 100)!"}
+
+            # 1. Chống spam: Giới hạn tần suất tạo nhóm (tối thiểu cách nhau 3 giây)
+            import time
+            now = time.time()
+            if not hasattr(self, "_group_create_cooldown"):
+                self._group_create_cooldown = {}
+            last_create = self._group_create_cooldown.get(creator_id, 0)
+            if now - last_create < 3.0:
+                wait_sec = int(3.0 - (now - last_create)) + 1
+                return {"action": "create_group_response", "success": False, "message": f"Bạn đang tạo nhóm quá nhanh! Vui lòng chờ {wait_sec} giây."}
+
+            # 2. Chống tạo nhóm trùng lặp trong 15 giây gần nhất
+            if not hasattr(self, "_recent_created_groups"):
+                self._recent_created_groups = []
+            self._recent_created_groups = [g for g in self._recent_created_groups if now - g[0] < 15.0]
+            mems_tuple = tuple(sorted(member_ids))
+            for _, c_id, prev_name, prev_mems in self._recent_created_groups:
+                if c_id == creator_id and prev_name.lower() == name.lower() and prev_mems == mems_tuple:
+                    return {"action": "create_group_response", "success": False, "message": "Nhóm với tên và các thành viên này vừa mới được tạo!"}
+
+            self._group_create_cooldown[creator_id] = now
+            self._recent_created_groups.append((now, creator_id, name, mems_tuple))
+
             conv_id = self.db.create_group_conversation(name, creator_id, member_ids)
             
             # Gửi tin nhắn tạo nhóm
