@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapPin, X, Navigation, Check, Send, Search, Loader2, Info } from 'lucide-react';
+import { MapPin, X, Navigation, Check, Send, Search, Loader2 } from 'lucide-react';
 
 interface LocationModalProps {
   isOpen: boolean;
@@ -271,14 +271,6 @@ export const LocationModal: React.FC<LocationModalProps> = ({
           >
             <Navigation className={`w-4 h-4 ${isGettingGPS ? 'animate-spin text-rose-500' : ''}`} />
           </button>
-        </div>
-
-        {/* Explain PC limitation */}
-        <div className="mb-2.5 px-2 py-1.5 rounded-lg bg-blue-50/70 dark:bg-blue-950/30 text-[11px] text-blue-700 dark:text-blue-300 flex items-start space-x-1.5">
-          <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-[#2481cc]" />
-          <span>
-            Máy tính không có chip vệ tinh GPS như điện thoại nên định vị tự động ước lượng theo IP mạng. Bạn có thể <strong>tìm kiếm địa chỉ</strong> ở trên để ghim chính xác 100%.
-          </span>
         </div>
 
         {/* Quick Presets */}
