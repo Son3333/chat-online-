@@ -67,10 +67,11 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [theme]);
 
-  // Persist session
+  // Persist session & Auto-identify on socket connection
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('vibe_user', JSON.stringify(currentUser));
+      apiService.sendRequest('identify', { user_id: currentUser.id }).catch(() => {});
     } else {
       localStorage.removeItem('vibe_user');
       localStorage.removeItem('telegram_user');
@@ -178,12 +179,13 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const startCall = async (callType: 'voice' | 'video') => {
     if (!activeConv || !currentUser) return;
-    const partnerId =
+    const rawPartnerId =
       activeConv.partner_id ||
       (typeof activeConv.id === 'string' && activeConv.id.startsWith('direct_')
         ? Number(activeConv.id.replace('direct_', ''))
         : undefined);
-    if (!partnerId) return;
+    if (!rawPartnerId) return;
+    const partnerId = Number(rawPartnerId);
 
     // Immediately show outgoing ringing screen
     setActiveCall({
@@ -195,7 +197,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     const res = await apiService.sendRequest('call_invite', {
-      caller_id: currentUser.id,
+      caller_id: Number(currentUser.id),
       receiver_id: partnerId,
       call_type: callType,
       conversation_id: activeConv.id,
@@ -315,7 +317,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           break;
 
         case 'call_connected':
-          setActiveCall((prev) => (prev ? { ...prev, isConnected: true } : null));
+          setActiveCall((prev) => (prev ? { ...prev, isConnected: true, channelId: event.channel_id || prev.channelId } : null));
           break;
 
         case 'call_rejected':

@@ -151,6 +151,9 @@ export class PythonBridge {
       const req = this.pendingRequests.get(action)!;
       clearTimeout(req.timeoutId);
       this.pendingRequests.delete(action);
+      if (packet.success && packet.user?.id) {
+        this.currentUserId = Number(packet.user.id);
+      }
       req.resolve(packet);
       return;
     }
@@ -165,6 +168,9 @@ export class PythonBridge {
       ) {
         clearTimeout(req.timeoutId);
         this.pendingRequests.delete(reqAction);
+        if (packet.success && packet.user?.id) {
+          this.currentUserId = Number(packet.user.id);
+        }
         req.resolve(packet);
         return;
       }

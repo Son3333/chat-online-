@@ -15,19 +15,24 @@ import {
   Radio
 } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
+import { apiService } from '../../services/api';
 import { getInitials } from '../../lib/utils';
 
 export const CallModal: React.FC = () => {
-  const { incomingCall, activeCall, acceptCall, rejectCall, endCall } = useChat();
+  const { currentUser, incomingCall, activeCall, acceptCall, rejectCall, endCall } = useChat();
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [hasRemoteStream, setHasRemoteStream] = useState(false);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
 
   // Timer for active call duration
   useEffect(() => {
@@ -62,6 +67,13 @@ export const CallModal: React.FC = () => {
           if (localVideoRef.current) {
             localVideoRef.current.srcObject = stream;
           }
+
+          // If peer connection is already active, attach tracks
+          if (pcRef.current) {
+            stream.getTracks().forEach((track) => {
+              pcRef.current?.addTrack(track, stream);
+            });
+          }
         } catch (err) {
           console.warn('[VideoCall] Could not access real camera, falling back to simulated preview:', err);
         }
@@ -77,7 +89,120 @@ export const CallModal: React.FC = () => {
         }
       };
     }
-  }, [activeCall]);
+  }, [activeCall?.callType]);
+
+  // Setup WebRTC PeerConnection when call is connected
+  useEffect(() => {
+    if (!activeCall || !activeCall.isConnected || !activeCall.channelId) {
+      setHasRemoteStream(false);
+      if (pcRef.current) {
+        pcRef.current.close();
+        pcRef.current = null;
+      }
+      return;
+    }
+
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:global.stun.twilio.com:3478' },
+      ],
+    });
+    pcRef.current = pc;
+
+    // Attach local stream tracks if already captured
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => {
+        pc.addTrack(track, localStreamRef.current!);
+      });
+    }
+
+    // Handle incoming remote media tracks (Video & Audio)
+    pc.ontrack = (event) => {
+      if (event.streams && event.streams[0]) {
+        const stream = event.streams[0];
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = stream;
+        }
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = stream;
+        }
+        setHasRemoteStream(true);
+      }
+    };
+
+    // Forward local ICE candidates through Python server bridge
+    pc.onicecandidate = (event) => {
+      if (event.candidate && activeCall.partnerId) {
+        apiService.sendRequest('webrtc_signal', {
+          target_id: activeCall.partnerId,
+          sender_id: currentUser?.id,
+          channel_id: activeCall.channelId,
+          signal: { type: 'candidate', candidate: event.candidate.toJSON() },
+        }).catch(() => {});
+      }
+    };
+
+    // Caller generates SDP offer
+    if (activeCall.isOutgoing) {
+      const initiateOffer = async () => {
+        try {
+          const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+          await pc.setLocalDescription(offer);
+          apiService.sendRequest('webrtc_signal', {
+            target_id: activeCall.partnerId,
+            sender_id: currentUser?.id,
+            channel_id: activeCall.channelId,
+            signal: { type: 'offer', sdp: offer.sdp },
+          }).catch(() => {});
+        } catch (err) {
+          console.warn('[WebRTC] Error initiating offer:', err);
+        }
+      };
+      setTimeout(initiateOffer, 500);
+    }
+
+    // Listen for WebRTC signals (offer, answer, candidate)
+    const unsubscribe = apiService.onServerEvent(async (event: any) => {
+      if (event.type !== 'webrtc_signal' || event.channel_id !== activeCall.channelId) return;
+      const { signal } = event;
+      if (!signal || !pcRef.current) return;
+
+      try {
+        if (signal.type === 'offer' && !activeCall.isOutgoing) {
+          await pcRef.current.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signal.sdp }));
+          const answer = await pcRef.current.createAnswer();
+          await pcRef.current.setLocalDescription(answer);
+          apiService.sendRequest('webrtc_signal', {
+            target_id: activeCall.partnerId,
+            sender_id: currentUser?.id,
+            channel_id: activeCall.channelId,
+            signal: { type: 'answer', sdp: answer.sdp },
+          }).catch(() => {});
+        } else if (signal.type === 'answer' && activeCall.isOutgoing) {
+          if (pcRef.current.signalingState !== 'stable') {
+            await pcRef.current.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: signal.sdp }));
+          }
+        } else if (signal.type === 'candidate' && signal.candidate) {
+          await pcRef.current.addIceCandidate(new RTCIceCandidate(signal.candidate));
+        }
+      } catch (err) {
+        console.warn('[WebRTC] Signaling handling error:', err);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      if (pcRef.current) {
+        pcRef.current.close();
+        pcRef.current = null;
+      }
+      setHasRemoteStream(false);
+    };
+  }, [activeCall?.isConnected, activeCall?.channelId]);
 
   const toggleMute = () => {
     if (localStreamRef.current) {
@@ -168,6 +293,11 @@ export const CallModal: React.FC = () => {
   };
 
   const handleEndCall = () => {
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+    setHasRemoteStream(false);
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
@@ -328,29 +458,41 @@ export const CallModal: React.FC = () => {
 
             {/* Main Stage: Remote Video Screen */}
             <div className="flex-1 w-full h-full relative flex items-center justify-center bg-slate-950 overflow-hidden">
-              {/* Partner Video Mock/Stream */}
-              <div className="w-full h-full flex flex-col items-center justify-center relative">
-                {/* Background ambient lighting */}
-                <div className="absolute inset-0 bg-gradient-to-tr from-cyan-950/40 via-slate-950 to-blue-950/30" />
+              {/* Remote Live Video Stream (WebRTC) */}
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className={`w-full h-full object-cover transition-opacity duration-300 ${hasRemoteStream ? 'opacity-100' : 'opacity-0 absolute pointer-events-none'}`}
+              />
+              <audio ref={remoteAudioRef} autoPlay playsInline />
 
-                {/* Simulated Remote Webcam Display */}
-                <div className="relative z-10 flex flex-col items-center text-center p-6">
-                  <div className="relative mb-6">
-                    <div className="w-32 h-32 rounded-full bg-gradient-to-tr from-emerald-600 via-teal-500 to-cyan-500 p-1 shadow-2xl shadow-emerald-500/20 animate-pulse">
-                      <div className="w-full h-full rounded-full bg-[#17212b] flex items-center justify-center text-white text-3xl font-bold">
-                        {getInitials(activeCall.partnerName)}
+              {/* Partner Video Mock / Connecting Avatar (Shown when remote video is connecting) */}
+              {!hasRemoteStream && (
+                <div className="w-full h-full flex flex-col items-center justify-center relative animate-in fade-in duration-300">
+                  {/* Background ambient lighting */}
+                  <div className="absolute inset-0 bg-gradient-to-tr from-cyan-950/40 via-slate-950 to-blue-950/30" />
+
+                  {/* Simulated Remote Webcam Display */}
+                  <div className="relative z-10 flex flex-col items-center text-center p-6">
+                    <div className="relative mb-6">
+                      <div className="w-32 h-32 rounded-full bg-gradient-to-tr from-emerald-600 via-teal-500 to-cyan-500 p-1 shadow-2xl shadow-emerald-500/20 animate-pulse">
+                        <div className="w-full h-full rounded-full bg-[#17212b] flex items-center justify-center text-white text-3xl font-bold">
+                          {getInitials(activeCall.partnerName)}
+                        </div>
+                      </div>
+                      <div className="absolute bottom-1 right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-[#0e1621] flex items-center justify-center text-white">
+                        <Video className="w-3.5 h-3.5" />
                       </div>
                     </div>
-                    <div className="absolute bottom-1 right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-[#0e1621] flex items-center justify-center text-white">
-                      <Video className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
 
-                  <h4 className="text-lg font-bold text-white mb-1">{activeCall.partnerName}</h4>
-                  <p className="text-xs text-slate-400 max-w-sm">
-                    Đang truyền phát Video HD thời gian thực qua giao thức đường hầm bảo mật.
-                  </p>
+                    <h4 className="text-lg font-bold text-white mb-1">{activeCall.partnerName}</h4>
+                    <p className="text-xs text-slate-400 max-w-sm">
+                      Đang kết nối luồng Video HD thời gian thực qua giao thức đường hầm bảo mật...
+                    </p>
+                  </div>
                 </div>
+              )}
 
                 {/* Floating Self Camera View (Picture-In-Picture) */}
                 <div className="absolute bottom-20 right-6 w-48 h-36 bg-slate-900 border-2 border-emerald-500/50 rounded-2xl shadow-2xl overflow-hidden z-30 group">
@@ -371,7 +513,6 @@ export const CallModal: React.FC = () => {
                     Bạn {isMuted ? '(Đã tắt mic)' : ''}
                   </div>
                 </div>
-              </div>
             </div>
 
             {/* Bottom Floating Control Bar */}

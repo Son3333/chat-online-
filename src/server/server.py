@@ -147,12 +147,22 @@ class ChatServer:
             return None
 
     def broadcast_to_users(self, user_ids: list, payload: dict):
-        """Gửi thông báo tới danh sách các user_id đang online."""
+        """Gửi thông báo tới danh sách các user_id đang online (hỗ trợ cả int và str)."""
         sockets = []
         with self.lock:
             for uid in user_ids:
-                if uid in self.active_clients:
-                    sockets.append(self.active_clients[uid])
+                if uid is None:
+                    continue
+                sock = self.active_clients.get(uid)
+                if not sock:
+                    try:
+                        sock = self.active_clients.get(int(uid))
+                    except Exception:
+                        pass
+                if not sock:
+                    sock = self.active_clients.get(str(uid))
+                if sock and sock not in sockets:
+                    sockets.append(sock)
         for sock in sockets:
             self.send_packet(sock, payload)
 
@@ -165,6 +175,19 @@ class ChatServer:
                     break
 
                 action = packet.get("action")
+
+                # Tự động liên kết socket với user_id nếu packet có kèm ID người gửi
+                cand_uid = packet.get("user_id") or packet.get("caller_id") or packet.get("sender_id") or packet.get("creator_id")
+                if cand_uid and action not in ["login", "register"]:
+                    try:
+                        c_uid = int(cand_uid)
+                        with self.lock:
+                            if self.active_clients.get(c_uid) != client_sock:
+                                self.active_clients[c_uid] = client_sock
+                                self.socket_to_user[client_sock] = c_uid
+                    except Exception:
+                        pass
+
                 response = self.process_action(client_sock, packet)
 
                 if response:
@@ -793,8 +816,13 @@ class ChatServer:
 
         # 26. Yêu cầu cuộc gọi (Voice Call / Video Call Signaling)
         elif action == "call_invite":
-            caller_id = packet.get("caller_id")
-            receiver_id = packet.get("receiver_id")
+            try:
+                caller_id = int(packet.get("caller_id"))
+                receiver_id = int(packet.get("receiver_id"))
+            except Exception:
+                caller_id = packet.get("caller_id")
+                receiver_id = packet.get("receiver_id")
+
             call_type = packet.get("call_type", "voice") # 'voice' hoặc 'video'
             conv_id = packet.get("conversation_id")
 
@@ -817,6 +845,8 @@ class ChatServer:
                 "status": "ringing"
             }
 
+            log(f"[Call] call_invite: caller={caller_id} -> receiver={receiver_id} ({call_type}), channel={channel_id}")
+
             # Gửi thông báo chuông đến người nhận
             self.broadcast_to_users([receiver_id], {
                 "type": "call_incoming",
@@ -836,11 +866,14 @@ class ChatServer:
             if call:
                 call["status"] = "connected"
                 call["start_time"] = time.time()
+                log(f"[Call] call_accept: channel={channel_id}. Broadcasting call_connected to caller={call['caller_id']} & receiver={call['receiver_id']}")
                 self.broadcast_to_users([call["caller_id"], call["receiver_id"]], {
                     "type": "call_connected",
                     "channel_id": channel_id,
                     "call_type": call["call_type"]
                 })
+            else:
+                log(f"[Call] call_accept warning: channel_id '{channel_id}' not found in active_calls!")
             return {"action": "call_accept_response", "success": True}
 
         # 28. Từ chối cuộc gọi (Reject Call)
@@ -848,6 +881,7 @@ class ChatServer:
             channel_id = packet.get("channel_id")
             call = getattr(self, "active_calls", {}).pop(channel_id, None)
             if call:
+                log(f"[Call] call_reject: channel={channel_id}")
                 self.broadcast_to_users([call["caller_id"]], {
                     "type": "call_rejected",
                     "channel_id": channel_id,
@@ -855,7 +889,22 @@ class ChatServer:
                 })
             return {"action": "call_reject_response", "success": True}
 
-        # 29. Kết thúc cuộc gọi (End Call)
+        # 29. WebRTC Signaling Relay (Offer, Answer, ICE Candidate)
+        elif action == "webrtc_signal":
+            target_id = packet.get("target_id")
+            sender_id = packet.get("sender_id")
+            signal = packet.get("signal")
+            channel_id = packet.get("channel_id")
+            if target_id and signal:
+                self.broadcast_to_users([target_id], {
+                    "type": "webrtc_signal",
+                    "channel_id": channel_id,
+                    "sender_id": sender_id,
+                    "signal": signal
+                })
+            return {"action": "webrtc_signal_response", "success": True}
+
+        # 30. Kết thúc cuộc gọi (End Call)
         elif action == "call_end":
             channel_id = packet.get("channel_id")
             call = getattr(self, "active_calls", {}).pop(channel_id, None)
