@@ -1,7 +1,9 @@
-import React, { useState, useMemo } from 'react';
-import { Search, Plus, Cloud, Users, User as UserIcon, LogOut, Shield } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Search, Plus, Cloud, Users, User as UserIcon, LogOut, Shield, MessageCircle } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { getInitials, formatDate } from '../../lib/utils';
+import { apiService } from '../../services/api';
+import { User } from '../../types';
 
 interface SidebarProps {
   onOpenCreateGroup: () => void;
@@ -9,10 +11,57 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenContacts }) => {
-  const { currentUser, conversations, activeConv, selectConversation, openSavedMessages, logout, setIsLocked } = useChat();
+  const { currentUser, conversations, activeConv, selectConversation, openSavedMessages, logout, setIsLocked, refreshConversations } = useChat();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'direct' | 'group'>('all');
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [globalUsers, setGlobalUsers] = useState<User[]>([]);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+
+  // Debounced global user search
+  useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      setGlobalUsers([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsSearchingUsers(true);
+      try {
+        const res = await apiService.searchUsers(trimmed);
+        if (res && res.success && res.users) {
+          setGlobalUsers(res.users.filter((u) => u.id !== currentUser?.id));
+        } else {
+          setGlobalUsers([]);
+        }
+      } catch {
+        setGlobalUsers([]);
+      } finally {
+        setIsSearchingUsers(false);
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [searchQuery, currentUser?.id]);
+
+  const handleStartChatWithUser = async (u: User) => {
+    if (!currentUser) return;
+    const res = await apiService.sendRequest('start_direct_chat', {
+      user_id: currentUser.id,
+      target_id: u.id,
+    });
+    if (res && res.success && res.conversation_id) {
+      await refreshConversations();
+      selectConversation({
+        id: res.conversation_id,
+        title: u.full_name,
+        type: 'direct',
+        avatar_color: u.avatar_color,
+        partner_id: u.id,
+        is_online: u.is_online,
+      });
+      setSearchQuery('');
+    }
+  };
 
   // Filter conversations
   const filteredConversations = useMemo(() => {
@@ -188,7 +237,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
 
       {/* Conversations Scroll List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {filteredConversations.length === 0 ? (
+        {filteredConversations.length === 0 && globalUsers.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 text-center text-slate-400 text-xs px-4">
             <UserIcon className="w-8 h-8 mb-2 opacity-40" />
             <span>Không tìm thấy cuộc trò chuyện nào</span>
@@ -262,6 +311,50 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
               </div>
             );
           })
+        )}
+
+        {/* Global User Search Results */}
+        {searchQuery.trim() && globalUsers.length > 0 && (
+          <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+            <div className="px-2 pb-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center justify-between">
+              <span>Người dùng tìm thấy ({globalUsers.length})</span>
+              {isSearchingUsers && <span className="text-[#2481cc] normal-case animate-pulse">Đang tìm...</span>}
+            </div>
+            {globalUsers.map((u) => (
+              <div
+                key={u.id}
+                onClick={() => handleStartChatWithUser(u)}
+                className="p-2.5 rounded-xl flex items-center justify-between hover:bg-slate-100 dark:hover:bg-[#202b36] cursor-pointer transition-colors group mb-1"
+              >
+                <div className="flex items-center space-x-2.5 overflow-hidden">
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs text-white shadow-sm flex-shrink-0"
+                    style={{ backgroundColor: u.avatar_color || '#2563eb' }}
+                  >
+                    {getInitials(u.full_name)}
+                  </div>
+                  <div className="flex flex-col truncate">
+                    <span className="font-semibold text-xs text-slate-800 dark:text-slate-100 truncate">
+                      {u.full_name}
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      @{u.username} • #{u.id}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleStartChatWithUser(u);
+                  }}
+                  className="px-2 py-1 rounded-lg bg-[#2481cc]/15 text-[#2481cc] hover:bg-[#2481cc] hover:text-white text-xs font-semibold transition-colors flex items-center space-x-1 flex-shrink-0"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  <span>Nhắn tin</span>
+                </button>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </aside>

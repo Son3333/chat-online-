@@ -28,11 +28,11 @@ export const TitleBar: React.FC = () => {
     <div className="h-9 w-full bg-slate-100 dark:bg-[#17212b] border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between select-none app-drag-region px-3 z-50">
       {/* Left: App Title and Connection info */}
       <div className="flex items-center space-x-2.5">
-        <div className="w-5 h-5 rounded-full bg-[#2481cc] flex items-center justify-center text-white text-xs font-bold shadow-sm">
-          T
+        <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white text-xs font-extrabold shadow-sm">
+          V
         </div>
         <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 tracking-wide">
-          Telegram Messenger
+          Vibe Người Tốt
         </span>
         <div className="hidden sm:flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium">
           <Radio className="w-2.5 h-2.5 animate-pulse" />

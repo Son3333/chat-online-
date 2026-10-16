@@ -41,7 +41,7 @@
   },
   "build": {
     "appId": "com.messenger.telegram.desktop",
-    "productName": "Telegram Style Messenger",
+    "productName": "Vibe Người Tốt",
     "directories": {
       "output": "dist-package"
     },

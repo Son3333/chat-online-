@@ -249,3 +249,4 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
     </div>
   );
 };
+
