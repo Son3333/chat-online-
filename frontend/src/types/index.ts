@@ -3,6 +3,9 @@ export interface User {
   username: string;
   full_name: string;
   avatar_color?: string;
+  avatar_url?: string;
+  phone_number?: string;
+  is_phone_verified?: number | boolean;
   status?: string;
   pin_code?: string;
   is_online?: number | boolean;
@@ -24,6 +27,7 @@ export interface Conversation {
   title: string;
   type: 'direct' | 'group' | 'saved';
   avatar_color?: string;
+  avatar_url?: string;
   partner_id?: number | null;
   is_online?: number | boolean;
   member_count?: number;
@@ -66,6 +70,9 @@ export interface Friend {
   username: string;
   full_name: string;
   avatar_color?: string;
+  avatar_url?: string;
+  phone_number?: string;
+  is_phone_verified?: number | boolean;
   is_online?: number | boolean;
 }
 
@@ -74,6 +81,8 @@ export interface FriendRequest {
   sender_id: number;
   sender_username: string;
   sender_full_name: string;
+  avatar_color?: string;
+  avatar_url?: string;
   created_at: string;
 }
 

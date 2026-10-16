@@ -303,7 +303,19 @@ class ChatServer:
             avatar_color = packet.get("avatar_color")
             new_password = packet.get("new_password")
             pin_code = packet.get("pin_code")
-            res = self.db.update_user_profile(user_id, full_name, avatar_color, new_password, pin_code)
+            avatar_url = packet.get("avatar_url")
+            phone_number = packet.get("phone_number")
+            is_phone_verified = packet.get("is_phone_verified")
+            res = self.db.update_user_profile(
+                user_id,
+                full_name=full_name,
+                avatar_color=avatar_color,
+                new_password=new_password,
+                pin_code=pin_code,
+                avatar_url=avatar_url,
+                phone_number=phone_number,
+                is_phone_verified=is_phone_verified
+            )
             if res.get("success"):
                 with self.lock:
                     all_online = list(self.active_clients.keys())

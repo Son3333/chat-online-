@@ -53,7 +53,15 @@ export const apiService = {
     return await this.sendRequest('register', { username, password, full_name });
   },
 
-  async updateProfile(userId: number, data: { full_name?: string; avatar_color?: string; new_password?: string; pin_code?: string }): Promise<{ success: boolean; user?: User; error?: string }> {
+  async updateProfile(userId: number, data: {
+    full_name?: string;
+    avatar_color?: string;
+    avatar_url?: string;
+    phone_number?: string;
+    is_phone_verified?: number | boolean;
+    new_password?: string;
+    pin_code?: string;
+  }): Promise<{ success: boolean; user?: User; error?: string }> {
     return await this.sendRequest('update_profile', { user_id: userId, ...data });
   },
 

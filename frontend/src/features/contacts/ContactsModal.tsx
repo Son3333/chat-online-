@@ -235,10 +235,14 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
                   <div className="flex items-center space-x-3">
                     <div className="relative">
                       <div
-                        className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-xs shadow-sm"
+                        className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-xs shadow-sm overflow-hidden"
                         style={{ backgroundColor: friend.avatar_color || '#2563eb' }}
                       >
-                        {getInitials(friend.full_name)}
+                        {friend.avatar_url ? (
+                          <img src={friend.avatar_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          getInitials(friend.full_name)
+                        )}
                       </div>
                       {Boolean(friend.is_online) && (
                         <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white dark:border-[#202b36] bg-emerald-500" />
@@ -304,10 +308,14 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
                 >
                   <div className="flex items-center space-x-3">
                     <div
-                      className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-xs shadow-sm"
+                      className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-xs shadow-sm overflow-hidden"
                       style={{ backgroundColor: req.avatar_color || '#2563eb' }}
                     >
-                      {getInitials(req.full_name)}
+                      {req.avatar_url ? (
+                        <img src={req.avatar_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        getInitials(req.full_name)
+                      )}
                     </div>
                     <div>
                       <span className="font-semibold block text-slate-800 dark:text-slate-100">
@@ -385,10 +393,14 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
                       <div className="flex items-center space-x-3">
                         <div className="relative">
                           <div
-                            className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-xs"
+                            className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-xs overflow-hidden"
                             style={{ backgroundColor: user.avatar_color || '#2563eb' }}
                           >
-                            {getInitials(user.full_name)}
+                            {user.avatar_url ? (
+                              <img src={user.avatar_url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              getInitials(user.full_name)
+                            )}
                           </div>
                           {Boolean(user.is_online) && (
                             <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-[#202b36] bg-emerald-500" />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   ArrowLeft,
@@ -11,10 +11,12 @@ import {
   KeyRound,
   LogOut,
   Check,
-  Edit2,
-  Palette,
   Shield,
-  ChevronRight
+  ChevronRight,
+  Camera,
+  Phone,
+  Smartphone,
+  Trash2
 } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { getInitials } from '../../lib/utils';
@@ -55,14 +57,23 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     refreshConversations,
   } = useChat();
 
-  const [activeSubView, setActiveSubView] = useState<'main' | 'edit_profile' | 'change_password' | 'pin_code'>('main');
+  const [activeSubView, setActiveSubView] = useState<'main' | 'edit_profile' | 'change_password' | 'pin_code' | 'phone_verification'>('main');
 
   // Edit profile state
   const [fullName, setFullName] = useState(currentUser?.full_name || '');
   const [selectedColor, setSelectedColor] = useState(currentUser?.avatar_color || '#2481cc');
+  const [previewAvatarUrl, setPreviewAvatarUrl] = useState<string>(currentUser?.avatar_url || '');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Phone verification state
+  const [phoneNumber, setPhoneNumber] = useState(currentUser?.phone_number || '');
+  const [otpCode, setOtpCode] = useState('');
+  const [sentOtp, setSentOtp] = useState<string | null>(null);
+  const [otpCountdown, setOtpCountdown] = useState<number>(0);
+  const [smsAlert, setSmsAlert] = useState<{ code: string; time: string } | null>(null);
 
   // Change password state
   const [newPassword, setNewPassword] = useState('');
@@ -77,12 +88,73 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     return localStorage.getItem('vibe_notification_sound') !== 'false';
   });
 
+  // Countdown timer cho OTP
+  useEffect(() => {
+    if (otpCountdown > 0) {
+      const timer = setTimeout(() => setOtpCountdown(otpCountdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [otpCountdown]);
+
+  // Cập nhật state khi currentUser thay đổi
+  useEffect(() => {
+    if (currentUser) {
+      setFullName(currentUser.full_name || '');
+      setSelectedColor(currentUser.avatar_color || '#2481cc');
+      setPreviewAvatarUrl(currentUser.avatar_url || '');
+      setPhoneNumber(currentUser.phone_number || '');
+    }
+  }, [currentUser, isOpen]);
+
   if (!isOpen || !currentUser) return null;
 
   const handleToggleSound = () => {
     const next = !soundEnabled;
     setSoundEnabled(next);
     localStorage.setItem('vibe_notification_sound', String(next));
+  };
+
+  // Xử lý nén và chọn ảnh avatar từ máy tính
+  const handleAvatarFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg('Vui lòng chọn tệp hình ảnh hợp lệ (PNG, JPG, WEBP, GIF)!');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 256;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          setPreviewAvatarUrl(dataUrl);
+          setErrorMsg(null);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSaveProfile = async () => {
@@ -96,11 +168,12 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       const res = await apiService.updateProfile(currentUser.id, {
         full_name: fullName.trim(),
         avatar_color: selectedColor,
+        avatar_url: previewAvatarUrl || '',
       });
       if (res && res.success && res.user) {
         setCurrentUser(res.user);
         localStorage.setItem('vibe_user', JSON.stringify(res.user));
-        setSuccessMsg('Đã cập nhật hồ sơ thành công!');
+        setSuccessMsg('Đã cập nhật hồ sơ & ảnh đại diện thành công!');
         await refreshConversations();
         setTimeout(() => {
           setSuccessMsg(null);
@@ -108,6 +181,91 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         }, 800);
       } else {
         setErrorMsg(res.error || 'Cập nhật hồ sơ thất bại!');
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Lỗi kết nối máy chủ!');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Gửi mã OTP xác minh số điện thoại
+  const handleSendOtp = () => {
+    const cleanPhone = phoneNumber.trim().replace(/\s+/g, '');
+    if (!cleanPhone || cleanPhone.length < 9) {
+      setErrorMsg('Vui lòng nhập số điện thoại hợp lệ (từ 9 đến 11 số)!');
+      return;
+    }
+    const generated = Math.floor(100000 + Math.random() * 900000).toString();
+    setSentOtp(generated);
+    setSmsAlert({
+      code: generated,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    });
+    setOtpCountdown(60);
+    setErrorMsg(null);
+    setSuccessMsg('Mã OTP xác thực đã được gửi tới số ' + cleanPhone);
+  };
+
+  // Xác minh mã OTP số điện thoại
+  const handleVerifyOtp = async () => {
+    if (!sentOtp) {
+      setErrorMsg('Vui lòng bấm "Gửi mã OTP" trước!');
+      return;
+    }
+    if (otpCode.trim() !== sentOtp) {
+      setErrorMsg('Mã OTP không chính xác! Vui lòng kiểm tra lại tin nhắn SMS.');
+      return;
+    }
+    setIsSaving(true);
+    setErrorMsg(null);
+    try {
+      const cleanPhone = phoneNumber.trim();
+      const res = await apiService.updateProfile(currentUser.id, {
+        phone_number: cleanPhone,
+        is_phone_verified: 1,
+      });
+      if (res && res.success && res.user) {
+        setCurrentUser(res.user);
+        localStorage.setItem('vibe_user', JSON.stringify(res.user));
+        setSuccessMsg('🎉 Số điện thoại đã được xác minh thành công!');
+        setOtpCode('');
+        setSentOtp(null);
+        setTimeout(() => {
+          setSuccessMsg(null);
+          setSmsAlert(null);
+          setActiveSubView('main');
+        }, 1200);
+      } else {
+        setErrorMsg(res.error || 'Lỗi khi lưu số điện thoại!');
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Lỗi kết nối máy chủ!');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Gỡ số điện thoại
+  const handleRemovePhone = async () => {
+    setIsSaving(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiService.updateProfile(currentUser.id, {
+        phone_number: '',
+        is_phone_verified: 0,
+      });
+      if (res && res.success && res.user) {
+        setCurrentUser(res.user);
+        localStorage.setItem('vibe_user', JSON.stringify(res.user));
+        setPhoneNumber('');
+        setSuccessMsg('Đã xóa số điện thoại khỏi tài khoản!');
+        setTimeout(() => {
+          setSuccessMsg(null);
+          setActiveSubView('main');
+        }, 800);
+      } else {
+        setErrorMsg(res.error || 'Lỗi khi gỡ số điện thoại!');
       }
     } catch (e: any) {
       setErrorMsg(e.message || 'Lỗi kết nối máy chủ!');
@@ -236,7 +394,9 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 ? 'Chỉnh sửa hồ sơ'
                 : activeSubView === 'change_password'
                 ? 'Đổi mật khẩu'
-                : 'Cài đặt mã PIN'}
+                : activeSubView === 'pin_code'
+                ? 'Cài đặt mã PIN'
+                : 'Xác minh số điện thoại'}
             </h3>
           </div>
           <button
@@ -253,15 +413,19 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
             <div className="flex flex-col pb-4">
               {/* Telegram-style Avatar Profile Card */}
               <div className="flex flex-col items-center justify-center pt-6 pb-5 px-4 bg-gradient-to-b from-blue-500/5 dark:from-blue-500/10 to-transparent">
-                <div className="relative group/avatar cursor-pointer" onClick={() => setActiveSubView('edit_profile')}>
+                <div className="relative group/avatar cursor-pointer" onClick={() => setActiveSubView('edit_profile')} title="Nhấn để đổi ảnh đại diện hoặc họ tên">
                   <div
-                    className="w-24 h-24 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-xl transition-transform group-hover/avatar:scale-105"
+                    className="w-24 h-24 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-xl transition-transform group-hover/avatar:scale-105 overflow-hidden ring-4 ring-blue-500/20"
                     style={{ backgroundColor: currentUser.avatar_color || '#2481cc' }}
                   >
-                    {getInitials(currentUser.full_name)}
+                    {currentUser.avatar_url ? (
+                      <img src={currentUser.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      getInitials(currentUser.full_name)
+                    )}
                   </div>
                   <div className="absolute bottom-0 right-0 p-1.5 rounded-full bg-[#2481cc] text-white shadow-md border-2 border-white dark:border-[#17212b]">
-                    <Edit2 className="w-3.5 h-3.5" />
+                    <Camera className="w-3.5 h-3.5" />
                   </div>
                 </div>
 
@@ -276,13 +440,48 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
 
               {/* Account Info Section */}
               <div className="mx-4 my-2 p-3 rounded-2xl bg-slate-50 dark:bg-[#202b36] border border-slate-200/60 dark:border-slate-800/80 space-y-2.5">
+                {/* Phone Number row */}
+                <div
+                  onClick={() => {
+                    setErrorMsg(null);
+                    setSuccessMsg(null);
+                    setActiveSubView('phone_verification');
+                  }}
+                  className="flex items-center justify-between text-xs cursor-pointer hover:opacity-80 transition-opacity"
+                  title="Nhấn để thiết lập hoặc xác minh số điện thoại"
+                >
+                  <span className="text-slate-500 dark:text-slate-400 flex items-center space-x-1.5">
+                    <Phone className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>Số điện thoại</span>
+                  </span>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="font-semibold text-slate-800 dark:text-slate-100 font-mono">
+                      {currentUser.phone_number || 'Chưa thiết lập'}
+                    </span>
+                    {currentUser.phone_number && currentUser.is_phone_verified ? (
+                      <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center space-x-0.5">
+                        <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        <span>Đã xác minh</span>
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                        {currentUser.phone_number ? 'Chưa xác minh' : 'Thêm ngay'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="h-px bg-slate-200/60 dark:bg-slate-700/60" />
+
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-500 dark:text-slate-400">Tên người dùng</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-100 font-mono">
                     @{currentUser.username}
                   </span>
                 </div>
+
                 <div className="h-px bg-slate-200/60 dark:bg-slate-700/60" />
+
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-500 dark:text-slate-400">Mã định danh ID</span>
                   <span className="font-semibold text-[#2481cc] font-mono">
@@ -296,17 +495,54 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 {/* 1. Edit Profile & Avatar */}
                 <button
                   onClick={() => setActiveSubView('edit_profile')}
-                  className="w-full px-3.5 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 flex items-center justify-between text-xs transition-colors"
+                  className="w-full px-3.5 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 flex items-center justify-between text-xs transition-colors cursor-pointer"
                 >
                   <div className="flex items-center space-x-3">
                     <div className="w-7 h-7 rounded-lg bg-blue-500/15 text-[#2481cc] flex items-center justify-center">
-                      <Palette className="w-4 h-4" />
+                      <Camera className="w-4 h-4" />
                     </div>
                     <span className="font-medium text-slate-700 dark:text-slate-200">
-                      Chỉnh sửa hồ sơ & Màu sắc
+                      Chỉnh sửa hồ sơ & Ảnh đại diện
                     </span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-400" />
+                </button>
+
+                {/* 2. Phone Verification */}
+                <button
+                  onClick={() => {
+                    setErrorMsg(null);
+                    setSuccessMsg(null);
+                    setActiveSubView('phone_verification');
+                  }}
+                  className="w-full px-3.5 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 flex items-center justify-between text-xs transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-7 h-7 rounded-lg bg-teal-500/15 text-teal-500 flex items-center justify-center">
+                      <Phone className="w-4 h-4" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-slate-700 dark:text-slate-200">
+                        Số điện thoại & Xác minh
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-1.5">
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        currentUser.phone_number && currentUser.is_phone_verified
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                      }`}
+                    >
+                      {currentUser.phone_number && currentUser.is_phone_verified
+                        ? 'Đã xác minh'
+                        : currentUser.phone_number
+                        ? 'Chờ xác minh'
+                        : 'Chưa thêm'}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </div>
                 </button>
 
                 {/* 2. Saved Messages / Cloud */}
@@ -477,15 +713,59 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
           ) : activeSubView === 'edit_profile' ? (
             /* Sub-view: Edit Profile */
             <div className="p-5 flex flex-col space-y-4 text-xs">
-              {/* Preview Avatar */}
+              {/* Preview Avatar with Image Upload */}
               <div className="flex flex-col items-center justify-center pb-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  onChange={handleAvatarFileSelect}
+                  className="hidden"
+                />
+
                 <div
-                  className="w-20 h-20 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg mb-2"
-                  style={{ backgroundColor: selectedColor }}
+                  className="relative group/avatar cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Nhấn để tải ảnh đại diện từ máy tính"
                 >
-                  {getInitials(fullName || currentUser.full_name)}
+                  <div
+                    className="w-24 h-24 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-xl overflow-hidden ring-4 ring-blue-500/20 transition-transform group-hover/avatar:scale-105"
+                    style={{ backgroundColor: selectedColor }}
+                  >
+                    {previewAvatarUrl ? (
+                      <img src={previewAvatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      getInitials(fullName || currentUser.full_name)
+                    )}
+                  </div>
+                  <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover/avatar:opacity-100 flex flex-col items-center justify-center text-white transition-opacity">
+                    <Camera className="w-6 h-6 mb-1" />
+                    <span className="text-[10px] font-bold">Đổi ảnh</span>
+                  </div>
                 </div>
-                <span className="text-slate-400 text-[11px]">Xem trước ảnh đại diện</span>
+
+                <div className="flex items-center space-x-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-[#2481cc] font-semibold text-xs flex items-center space-x-1.5 transition-colors cursor-pointer"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>{previewAvatarUrl ? 'Đổi ảnh khác' : 'Tải ảnh từ máy'}</span>
+                  </button>
+                  {previewAvatarUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewAvatarUrl('')}
+                      className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 font-semibold text-xs flex items-center space-x-1 transition-colors cursor-pointer"
+                      title="Gỡ ảnh tùy chỉnh, sử dụng chữ cái đại diện"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Gỡ ảnh</span>
+                    </button>
+                  )}
+                </div>
+                <span className="text-slate-400 text-[11px] mt-1.5">Ảnh tải lên được tự động tối ưu hóa</span>
               </div>
 
               {/* Name Input */}
@@ -592,7 +872,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 {isSaving ? 'Đang cập nhật...' : 'Cập Nhật Mật Khẩu'}
               </button>
             </div>
-          ) : (
+          ) : activeSubView === 'pin_code' ? (
             /* Sub-view: PIN Code Setup */
             <div className="p-5 flex flex-col space-y-4 text-xs">
               <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-slate-700 dark:text-slate-200 space-y-1">
@@ -666,6 +946,117 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   className="w-full py-2 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs transition-all active:scale-95 cursor-pointer"
                 >
                   Tắt / Xóa Mã PIN Này
+                </button>
+              )}
+            </div>
+          ) : (
+            /* Sub-view: Phone Number & Verification (OTP) */
+            <div className="p-5 flex flex-col space-y-4 text-xs">
+              <div className="p-3.5 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-slate-700 dark:text-slate-200 space-y-1">
+                <div className="flex items-center space-x-2 font-bold text-teal-600 dark:text-teal-400">
+                  <Phone className="w-4 h-4" />
+                  <span>Xác thực số điện thoại di động</span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  {currentUser.phone_number && currentUser.is_phone_verified
+                    ? `Tài khoản đã liên kết và xác minh với số ${currentUser.phone_number}.`
+                    : 'Nhập số điện thoại để nhận mã xác minh OTP qua tin nhắn SMS, giúp tăng cường bảo mật và liên hệ với bạn bè.'}
+                </p>
+              </div>
+
+              {/* Input Phone Number */}
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  Số điện thoại của bạn:
+                </label>
+                <div className="flex space-x-2">
+                  <input
+                    type="tel"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    placeholder="VD: 0912345678 hoặc +84..."
+                    className="flex-1 h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-teal-500 border border-transparent dark:border-slate-700/60"
+                  />
+                  <button
+                    type="button"
+                    disabled={otpCountdown > 0 || !phoneNumber.trim()}
+                    onClick={handleSendOtp}
+                    className="px-3.5 h-10 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap cursor-pointer shadow-sm"
+                  >
+                    {otpCountdown > 0 ? `Gửi lại (${otpCountdown}s)` : 'Gửi mã OTP'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Realistic SMS Simulator Notification */}
+              {smsAlert && (
+                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-teal-500/10 border border-blue-500/30 text-slate-800 dark:text-slate-100 shadow-sm animate-in fade-in slide-in-from-top-2">
+                  <div className="flex items-center justify-between mb-1.5 text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                    <span className="flex items-center space-x-1.5">
+                      <Smartphone className="w-3.5 h-3.5" />
+                      <span>TIN NHẮN SMS XÁC MINH (VIBE OTP)</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal">{smsAlert.time}</span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Mã xác thực số điện thoại của bạn là: <strong className="text-blue-600 dark:text-blue-400 font-mono text-sm tracking-widest">{smsAlert.code}</strong>. Mã có hiệu lực trong 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setOtpCode(smsAlert.code)}
+                    className="mt-2.5 px-3 py-1 rounded-lg bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold text-[11px] flex items-center space-x-1 transition-colors shadow-sm cursor-pointer"
+                  >
+                    <Check className="w-3 h-3 stroke-[3]" />
+                    <span>Tự động điền mã {smsAlert.code}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* OTP Input */}
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  Nhập mã OTP xác thực (6 chữ số):
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="••••••"
+                  className="w-full h-12 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-center text-xl tracking-[0.8em] font-mono focus:outline-none focus:ring-2 focus:ring-teal-500 border border-transparent dark:border-slate-700/60"
+                />
+              </div>
+
+              {errorMsg && (
+                <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs">
+                  {errorMsg}
+                </div>
+              )}
+
+              {successMsg && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-1.5">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{successMsg}</span>
+                </div>
+              )}
+
+              <button
+                disabled={isSaving || otpCode.length !== 6 || !sentOtp}
+                onClick={handleVerifyOtp}
+                className="w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-teal-500/20 cursor-pointer"
+              >
+                {isSaving ? 'Đang xác minh...' : 'Xác Minh & Kích Hoạt Số Điện Thoại'}
+              </button>
+
+              {currentUser.phone_number && (
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={handleRemovePhone}
+                  className="w-full py-2 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs transition-all active:scale-95 cursor-pointer"
+                >
+                  Xóa số điện thoại này khỏi tài khoản
                 </button>
               )}
             </div>

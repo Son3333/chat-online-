@@ -193,12 +193,18 @@ class Database:
             """)
             conn.commit()
 
-            # Migration: Add pin_code to users table if not exists
-            try:
-                cursor.execute("ALTER TABLE users ADD COLUMN pin_code TEXT")
-                conn.commit()
-            except Exception:
-                pass
+            # Migration: Add pin_code, avatar_url, phone_number, is_phone_verified to users table if not exists
+            for col_def in [
+                "pin_code TEXT",
+                "avatar_url TEXT",
+                "phone_number TEXT",
+                "is_phone_verified INTEGER DEFAULT 0"
+            ]:
+                try:
+                    cursor.execute(f"ALTER TABLE users ADD COLUMN {col_def}")
+                    conn.commit()
+                except Exception:
+                    pass
 
     # --- User APIs ---
     def register_user(self, username, password, full_name):
@@ -252,7 +258,7 @@ class Database:
             cursor = conn.cursor()
             pwd_hash = hash_password(password)
             cursor.execute("""
-                SELECT id, username, full_name, avatar_color, is_online, pin_code
+                SELECT id, username, full_name, avatar_color, avatar_url, phone_number, is_phone_verified, is_online, pin_code
                 FROM users
                 WHERE username = ? AND password_hash = ?
             """, (username, pwd_hash))
@@ -279,12 +285,15 @@ class Database:
     def get_user_by_id(self, user_id):
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, username, full_name, avatar_color, is_online, last_seen, pin_code FROM users WHERE id = ?", (user_id,))
+            cursor.execute("""
+                SELECT id, username, full_name, avatar_color, avatar_url, phone_number, is_phone_verified, is_online, last_seen, pin_code
+                FROM users WHERE id = ?
+            """, (user_id,))
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def update_user_profile(self, user_id, full_name=None, avatar_color=None, new_password=None, pin_code=None):
-        """Cập nhật thông tin hồ sơ cá nhân và mã PIN."""
+    def update_user_profile(self, user_id, full_name=None, avatar_color=None, new_password=None, pin_code=None, avatar_url=None, phone_number=None, is_phone_verified=None):
+        """Cập nhật thông tin hồ sơ cá nhân, ảnh đại diện, số điện thoại và mã PIN."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             updates = []
@@ -295,6 +304,15 @@ class Database:
             if avatar_color and avatar_color.strip():
                 updates.append("avatar_color = ?")
                 params.append(avatar_color.strip())
+            if avatar_url is not None:
+                updates.append("avatar_url = ?")
+                params.append(avatar_url.strip() if avatar_url.strip() else None)
+            if phone_number is not None:
+                updates.append("phone_number = ?")
+                params.append(phone_number.strip() if phone_number.strip() else None)
+            if is_phone_verified is not None:
+                updates.append("is_phone_verified = ?")
+                params.append(1 if is_phone_verified else 0)
             if new_password and new_password.strip():
                 is_valid, msg = validate_password_strength(new_password)
                 if not is_valid:
@@ -353,7 +371,7 @@ class Database:
             id_query = clean_keyword.replace("id:", "").strip()
             if id_query.isdigit():
                 cursor.execute("""
-                    SELECT id, username, full_name, avatar_color, is_online
+                    SELECT id, username, full_name, avatar_color, avatar_url, phone_number, is_phone_verified, is_online
                     FROM users
                     WHERE (id = ? OR CAST(id AS TEXT) LIKE ?) AND id != ?
                 """, (int(id_query), f"{id_query}%", curr_id))
@@ -363,7 +381,7 @@ class Database:
 
             # 2. Tìm kiếm thông minh hỗ trợ cả tiếng Việt có dấu, không dấu, username và họ tên
             cursor.execute("""
-                SELECT id, username, full_name, avatar_color, is_online
+                SELECT id, username, full_name, avatar_color, avatar_url, phone_number, is_phone_verified, is_online
                 FROM users
                 WHERE id != ?
             """, (curr_id,))
@@ -536,7 +554,7 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT DISTINCT u.id, u.username, u.full_name, u.avatar_color, u.is_online, u.last_seen
+                SELECT DISTINCT u.id, u.username, u.full_name, u.avatar_color, u.avatar_url, u.phone_number, u.is_phone_verified, u.is_online, u.last_seen
                 FROM users u
                 JOIN friends f ON (
                     (f.user_id = ? AND f.friend_id = u.id AND f.status = 'accepted')
@@ -553,7 +571,7 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT u.id, u.username, u.full_name, u.avatar_color, u.is_online, f.created_at
+                SELECT u.id, u.username, u.full_name, u.avatar_color, u.avatar_url, u.phone_number, u.is_phone_verified, u.is_online, f.created_at
                 FROM friends f
                 JOIN users u ON f.user_id = u.id
                 WHERE f.friend_id = ? AND f.status = 'pending'
@@ -651,7 +669,7 @@ class Database:
                 elif conv["type"] == 'direct':
                     # Tìm đối phương
                     cursor.execute("""
-                        SELECT u.id, u.full_name, u.avatar_color, u.is_online
+                        SELECT u.id, u.full_name, u.avatar_color, u.avatar_url, u.is_online
                         FROM users u
                         JOIN conversation_members m ON u.id = m.user_id
                         WHERE m.conversation_id = ? AND u.id != ?
@@ -660,6 +678,7 @@ class Database:
                     if partner:
                         conv["title"] = partner["full_name"]
                         conv["avatar_color"] = partner["avatar_color"]
+                        conv["avatar_url"] = partner["avatar_url"]
                         conv["is_online"] = partner["is_online"]
                         conv["partner_id"] = partner["id"]
                     else:

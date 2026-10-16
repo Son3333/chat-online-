@@ -195,10 +195,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
           title="Xem hồ sơ & Cài đặt cá nhân"
         >
           <div
-            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-transparent group-hover:ring-[#2481cc]/40 transition-all"
+            className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm ring-2 ring-transparent group-hover:ring-[#2481cc]/40 transition-all overflow-hidden flex-shrink-0"
             style={{ backgroundColor: currentUser?.avatar_color || '#2481cc' }}
           >
-            {getInitials(currentUser?.full_name)}
+            {currentUser?.avatar_url ? (
+              <img src={currentUser.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              getInitials(currentUser?.full_name)
+            )}
           </div>
           <div className="flex flex-col">
             <span className="font-semibold text-sm text-slate-800 dark:text-slate-100 leading-tight group-hover:text-[#2481cc] transition-colors">
@@ -425,10 +429,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
                 {/* Avatar */}
                 <div className="relative flex-shrink-0">
                   <div
-                    className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm text-white shadow-sm"
+                    className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm text-white shadow-sm overflow-hidden"
                     style={{ backgroundColor: conv.avatar_color || (isGroup ? '#06b6d4' : '#2563eb') }}
                   >
-                    {isGroup ? <Users className="w-5 h-5" /> : getInitials(conv.title)}
+                    {conv.avatar_url && !isGroup ? (
+                      <img src={conv.avatar_url} alt="" className="w-full h-full object-cover" />
+                    ) : isGroup ? (
+                      <Users className="w-5 h-5" />
+                    ) : (
+                      getInitials(conv.title)
+                    )}
                   </div>
                   {!isGroup && isOnline && (
                     <span
@@ -497,10 +507,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
               >
                 <div className="flex items-center space-x-2.5 overflow-hidden">
                   <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs text-white shadow-sm flex-shrink-0"
+                    className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs text-white shadow-sm flex-shrink-0 overflow-hidden"
                     style={{ backgroundColor: u.avatar_color || '#2563eb' }}
                   >
-                    {getInitials(u.full_name)}
+                    {u.avatar_url ? (
+                      <img src={u.avatar_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      getInitials(u.full_name)
+                    )}
                   </div>
                   <div className="flex flex-col truncate">
                     <span className="font-semibold text-xs text-slate-800 dark:text-slate-100 truncate">

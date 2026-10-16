@@ -114,10 +114,16 @@ export const ChatHeader: React.FC = () => {
           title="Xem thông tin hội thoại"
         >
           <div
-            className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-sm"
+            className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-sm overflow-hidden"
             style={{ backgroundColor: activeConv.avatar_color || (isGroup ? '#06b6d4' : '#2481cc') }}
           >
-            {isGroup ? <Users className="w-5 h-5" /> : getInitials(activeConv.title)}
+            {activeConv.avatar_url && !isGroup ? (
+              <img src={activeConv.avatar_url} alt="" className="w-full h-full object-cover" />
+            ) : isGroup ? (
+              <Users className="w-5 h-5" />
+            ) : (
+              getInitials(activeConv.title)
+            )}
           </div>
 
           <div className="flex flex-col">
