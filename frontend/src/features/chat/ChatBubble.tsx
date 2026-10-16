@@ -89,8 +89,10 @@ const VideoBubbleContent: React.FC<{
   originalName?: string;
   onDownload: () => void;
 }> = ({ fileId, originalName, onDownload }) => {
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const blobUrlRef = React.useRef<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -105,13 +107,30 @@ const VideoBubbleContent: React.FC<{
             else if (fn.endsWith('.mkv')) mime = 'video/x-matroska';
             else mime = 'video/mp4';
           }
-          setDataUrl(`data:${mime};base64,${res.file_data}`);
+
+          try {
+            const binaryString = atob(res.file_data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            const blob = new Blob([bytes], { type: mime });
+            const url = URL.createObjectURL(blob);
+            blobUrlRef.current = url;
+            setVideoSrc(url);
+          } catch {
+            setVideoSrc(`data:${mime};base64,${res.file_data}`);
+          }
         }
         setLoading(false);
       }
     });
+
     return () => {
       mounted = false;
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+      }
     };
   }, [fileId]);
 
@@ -122,15 +141,17 @@ const VideoBubbleContent: React.FC<{
           <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin mb-2" />
           <span className="text-[11px]">Đang tải video...</span>
         </div>
-      ) : dataUrl ? (
+      ) : videoSrc && !hasError ? (
         <div className="flex flex-col">
           <video
             controls
-            src={dataUrl}
+            preload="metadata"
+            src={videoSrc}
+            onError={() => setHasError(true)}
             className="max-h-72 w-full rounded-t-xl object-contain bg-black"
           />
           <div className="p-2 bg-black/40 flex items-center justify-between text-xs text-white">
-            <span className="truncate pr-2">{originalName || 'Video'}</span>
+            <span className="truncate pr-2 font-medium">{originalName || 'Video'}</span>
             <button
               onClick={onDownload}
               title="Tải video về máy"
@@ -141,14 +162,79 @@ const VideoBubbleContent: React.FC<{
           </div>
         </div>
       ) : (
-        <div className="p-4 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Video className="w-5 h-5 text-indigo-500" />
-            <span className="text-xs">{originalName || 'Video'}</span>
+        <div className="p-4 flex flex-col space-y-2">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+              <Video className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-xs font-semibold block truncate text-slate-700 dark:text-slate-200">
+                {originalName || 'Video clip'}
+              </span>
+              <span className="text-[10px] text-slate-400 block">
+                {hasError ? 'Định dạng đặc biệt • Tải về để phát' : 'Video tệp đính kèm'}
+              </span>
+            </div>
           </div>
-          <button onClick={onDownload} className="p-1.5 rounded-lg bg-[#2481cc] text-white">
+          <button
+            onClick={onDownload}
+            className="w-full py-1.5 px-3 rounded-lg bg-[#2481cc] hover:bg-[#1d6fa5] text-white text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+          >
             <Download className="w-3.5 h-3.5" />
+            <span>Tải video về máy</span>
           </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const LinkifiedText: React.FC<{ text: string }> = ({ text }) => {
+  // Regex matching http/https URLs and www. links
+  const urlRegex = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s]|www\.[^\s<]+[^<.,:;"')\]\s])/gi;
+  const parts = text.split(urlRegex);
+
+  // Check for YouTube video link
+  const ytMatch = text.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i);
+  const ytVideoId = ytMatch ? ytMatch[1] : null;
+
+  return (
+    <div>
+      <p className="leading-relaxed whitespace-pre-wrap select-text">
+        {parts.map((part, i) => {
+          if (urlRegex.test(part)) {
+            const href = part.startsWith('www.') ? `https://${part}` : part;
+            return (
+              <a
+                key={i}
+                href={href}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  apiService.openExternal(href);
+                }}
+                title={`Mở liên kết: ${href}`}
+                className="text-[#2481cc] hover:text-[#1d73b8] dark:text-[#52a6eb] hover:underline font-semibold break-all inline-flex items-center space-x-0.5 cursor-pointer"
+              >
+                <span>{part}</span>
+                <ExternalLink className="w-3 h-3 inline-block ml-0.5 opacity-70 flex-shrink-0" />
+              </a>
+            );
+          }
+          return <span key={i}>{part}</span>;
+        })}
+      </p>
+
+      {/* Embedded YouTube preview if message has a YouTube URL */}
+      {ytVideoId && (
+        <div className="mt-2 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 aspect-video w-full max-w-sm shadow-md">
+          <iframe
+            src={`https://www.youtube.com/embed/${ytVideoId}`}
+            title="YouTube video player"
+            className="w-full h-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
         </div>
       )}
     </div>
@@ -403,7 +489,11 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
 
         {/* 5. Text Message Content */}
         {message.content && (!isImage && !isVideo && !isLocation || isDeleted) && (
-          <p className="leading-relaxed whitespace-pre-wrap select-text">{message.content}</p>
+          isDeleted ? (
+            <p className="leading-relaxed whitespace-pre-wrap select-text">{message.content}</p>
+          ) : (
+            <LinkifiedText text={message.content} />
+          )
         )}
 
         {/* Metadata: Time & Tick */}
