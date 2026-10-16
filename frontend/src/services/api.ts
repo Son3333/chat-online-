@@ -23,6 +23,7 @@ declare global {
 // Fallback in-memory mock for web testing when running directly in browser without Electron
 const isElectron = typeof window !== 'undefined' && Boolean(window.api);
 const imageCache = new Map<string, string>();
+const inFlightImageRequests = new Map<string, Promise<string | null>>();
 
 export const apiService = {
   isElectron,
@@ -149,31 +150,46 @@ export const apiService = {
     return await this.sendRequest('download_file', { file_id: fileId });
   },
 
+  cacheImage(fileId: string | number, dataUrl: string) {
+    imageCache.set(String(fileId), dataUrl);
+  },
+
   async getImageUrl(fileId: string | number): Promise<string | null> {
     if (!fileId) return null;
     const key = String(fileId);
     if (imageCache.has(key)) {
       return imageCache.get(key)!;
     }
-    try {
-      const res = await this.downloadFile(key);
-      if (res && res.file_data) {
-        let mime = res.file_type || 'image/png';
-        if (!mime.startsWith('image/')) {
-          const fn = (res.filename || res.original_name || '').toLowerCase();
-          if (fn.endsWith('.jpg') || fn.endsWith('.jpeg')) mime = 'image/jpeg';
-          else if (fn.endsWith('.gif')) mime = 'image/gif';
-          else if (fn.endsWith('.webp')) mime = 'image/webp';
-          else mime = 'image/png';
-        }
-        const dataUrl = `data:${mime};base64,${res.file_data}`;
-        imageCache.set(key, dataUrl);
-        return dataUrl;
-      }
-    } catch (err) {
-      console.error('[API] Error loading image thumbnail:', err);
+    if (inFlightImageRequests.has(key)) {
+      return inFlightImageRequests.get(key)!;
     }
-    return null;
+
+    const promise = (async () => {
+      try {
+        const res = await this.downloadFile(key);
+        if (res && res.file_data) {
+          let mime = res.file_type || 'image/png';
+          if (!mime.startsWith('image/')) {
+            const fn = (res.filename || res.original_name || '').toLowerCase();
+            if (fn.endsWith('.jpg') || fn.endsWith('.jpeg')) mime = 'image/jpeg';
+            else if (fn.endsWith('.gif')) mime = 'image/gif';
+            else if (fn.endsWith('.webp')) mime = 'image/webp';
+            else mime = 'image/png';
+          }
+          const dataUrl = `data:${mime};base64,${res.file_data}`;
+          imageCache.set(key, dataUrl);
+          return dataUrl;
+        }
+      } catch (err) {
+        console.error('[API] Error loading image thumbnail:', err);
+      } finally {
+        inFlightImageRequests.delete(key);
+      }
+      return null;
+    })();
+
+    inFlightImageRequests.set(key, promise);
+    return promise;
   },
 
   // Contacts

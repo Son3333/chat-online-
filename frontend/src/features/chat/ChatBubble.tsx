@@ -20,17 +20,16 @@ const ImageBubbleContent: React.FC<{
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let mounted = true;
+  const fetchImage = () => {
+    setLoading(true);
     apiService.getImageUrl(fileId).then((url) => {
-      if (mounted) {
-        setDataUrl(url);
-        setLoading(false);
-      }
+      setDataUrl(url);
+      setLoading(false);
     });
-    return () => {
-      mounted = false;
-    };
+  };
+
+  useEffect(() => {
+    fetchImage();
   }, [fileId]);
 
   return (
@@ -52,7 +51,16 @@ const ImageBubbleContent: React.FC<{
       ) : (
         <div className="flex flex-col items-center justify-center p-6 text-slate-400">
           <span className="text-2xl mb-1">🖼️</span>
-          <span className="text-xs">{originalName || 'Hình ảnh'}</span>
+          <span className="text-xs mb-2 font-medium text-slate-500 dark:text-slate-300">{originalName || 'Hình ảnh'}</span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              fetchImage();
+            }}
+            className="px-2.5 py-1 text-[11px] rounded-lg bg-[#2481cc]/20 text-[#2481cc] hover:bg-[#2481cc]/30 transition-colors font-medium"
+          >
+            Tải lại ảnh
+          </button>
         </div>
       )}
 

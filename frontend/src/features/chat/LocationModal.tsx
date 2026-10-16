@@ -170,3 +170,4 @@ export const LocationModal: React.FC<LocationModalProps> = ({
     </div>
   );
 };
+

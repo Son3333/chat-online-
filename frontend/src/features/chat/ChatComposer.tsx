@@ -65,12 +65,14 @@ export const ChatComposer: React.FC = () => {
         fileName,
         base64Data,
         fileSize,
-        fileType,
-        activeConv.id,
-        currentUser.id
+        fileType
       );
 
       if (uploadRes && uploadRes.file_id) {
+        if (isImg) {
+          apiService.cacheImage(uploadRes.file_id, `data:image/png;base64,${base64Data}`);
+        }
+
         const defaultCaption = isImg
           ? 'Đã gửi một hình ảnh'
           : isVid

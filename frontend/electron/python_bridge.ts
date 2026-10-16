@@ -113,6 +113,18 @@ export class PythonBridge {
   private handleIncomingPacket(packet: PythonPacket) {
     const action = packet.action;
 
+    // 1. Precise match by file_id for file downloads (prevents concurrent download race conditions)
+    if (packet.file_id !== undefined) {
+      const fileKey = `download_file_${packet.file_id}`;
+      if (this.pendingRequests.has(fileKey)) {
+        const req = this.pendingRequests.get(fileKey)!;
+        clearTimeout(req.timeoutId);
+        this.pendingRequests.delete(fileKey);
+        req.resolve(packet);
+        return;
+      }
+    }
+
     const ACTION_RESPONSE_MAP: Record<string, string[]> = {
       get_conversations: ['conversations_list', 'get_conversations_response', 'get_conversations'],
       get_messages: ['messages_history', 'get_messages_response', 'get_messages'],
@@ -151,11 +163,20 @@ export class PythonBridge {
     this.emitEvent(packet);
   }
 
-  public sendRequest(action: string, payload: Record<string, any> = {}, timeoutMs = 8000): Promise<PythonPacket> {
+  public sendRequest(action: string, payload: Record<string, any> = {}, timeoutMs = 12000): Promise<PythonPacket> {
     return new Promise((resolve, reject) => {
       if (!this.connected || !this.socket) {
         return reject(new Error('Chưa kết nối đến máy chủ Python!'));
       }
+
+      // Extended timeout for large media/file transfers over WAN
+      const isFileTransfer = action === 'download_file' || action === 'upload_file';
+      const actualTimeout = isFileTransfer ? 60000 : timeoutMs;
+
+      // Unique tracking key for download_file by file_id
+      const trackingKey = (action === 'download_file' && payload.file_id !== undefined)
+        ? `download_file_${payload.file_id}`
+        : action;
 
       const reqPayload = { action, ...payload };
       const jsonBuffer = Buffer.from(JSON.stringify(reqPayload), 'utf-8');
@@ -163,17 +184,17 @@ export class PythonBridge {
       header.writeUInt32BE(jsonBuffer.length, 0);
 
       const timeoutId = setTimeout(() => {
-        this.pendingRequests.delete(action);
-        reject(new Error(`Yêu cầu '${action}' quá thời gian chờ (${timeoutMs}ms)`));
-      }, timeoutMs);
+        this.pendingRequests.delete(trackingKey);
+        reject(new Error(`Yêu cầu '${action}' quá thời gian chờ (${actualTimeout}ms)`));
+      }, actualTimeout);
 
-      this.pendingRequests.set(action, { resolve, reject, timeoutId });
+      this.pendingRequests.set(trackingKey, { resolve, reject, timeoutId });
 
       try {
         this.socket.write(Buffer.concat([header, jsonBuffer]));
       } catch (err) {
         clearTimeout(timeoutId);
-        this.pendingRequests.delete(action);
+        this.pendingRequests.delete(trackingKey);
         reject(err);
       }
     });
