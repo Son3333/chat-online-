@@ -3,11 +3,13 @@ import { Paperclip, Smile, Send, X, MapPin } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { EmojiPicker } from '../../components/EmojiPicker';
 import { apiService } from '../../services/api';
+import { LocationModal } from './LocationModal';
 
 export const ChatComposer: React.FC = () => {
   const { replyTo, setReplyTo, sendMessage, activeConv, currentUser } = useChat();
   const [text, setText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const lastTypingRef = useRef<number>(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -47,28 +49,7 @@ export const ChatComposer: React.FC = () => {
 
   const handleShareLocation = () => {
     if (!activeConv || !currentUser) return;
-
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const lat = pos.coords.latitude.toFixed(6);
-          const lng = pos.coords.longitude.toFixed(6);
-          await sendMessage(`📍 Vị trí hiện tại: ${lat}, ${lng}`, 'location');
-        },
-        async () => {
-          const custom = prompt('Nhập tên địa điểm hoặc tọa độ bạn muốn chia sẻ:', 'Hà Nội, Việt Nam');
-          if (custom && custom.trim()) {
-            await sendMessage(`📍 Vị trí: ${custom.trim()}`, 'location');
-          }
-        },
-        { timeout: 7000, enableHighAccuracy: true }
-      );
-    } else {
-      const custom = prompt('Nhập tên địa điểm bạn muốn chia sẻ:', 'Hà Nội, Việt Nam');
-      if (custom && custom.trim()) {
-        sendMessage(`📍 Vị trí: ${custom.trim()}`, 'location');
-      }
-    }
+    setShowLocationModal(true);
   };
 
   const processFileAttachment = async (fileName: string, base64Data: string, fileSize: number) => {
@@ -236,6 +217,13 @@ export const ChatComposer: React.FC = () => {
           <Send className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Location Sharing Interactive Modal */}
+      <LocationModal
+        isOpen={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+        onSendLocation={(loc) => sendMessage(loc, 'location')}
+      />
     </div>
   );
 };

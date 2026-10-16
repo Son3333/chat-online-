@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, session, desktopCapturer } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as net from 'net';
@@ -228,7 +228,42 @@ ipcMain.handle('app:get-server-info', () => {
   return { isWan: false, address: `${HOST}:${PORT}` };
 });
 
+// Media permissions and Screen Sharing Handlers
+ipcMain.handle('media:get-screen-source-id', async () => {
+  try {
+    const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] });
+    if (sources.length > 0) {
+      return sources[0].id;
+    }
+  } catch (err) {
+    console.error('[Main] desktopCapturer getSources error:', err);
+  }
+  return null;
+});
+
 app.whenReady().then(async () => {
+  // Grant all media permissions (Microphone, Camera, Screen Share, Geolocation)
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(true);
+  });
+
+  // Setup display media request handler for getDisplayMedia screen sharing
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    desktopCapturer
+      .getSources({ types: ['screen', 'window'] })
+      .then((sources) => {
+        if (sources.length > 0) {
+          callback({ video: sources[0] });
+        } else {
+          callback({});
+        }
+      })
+      .catch((err) => {
+        console.error('[Main] setDisplayMediaRequestHandler error:', err);
+        callback({});
+      });
+  });
+
   await startPythonBackendIfNeeded();
 
   // Setup 2-second Git update listener

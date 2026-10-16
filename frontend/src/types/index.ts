@@ -76,10 +76,29 @@ export interface FriendRequest {
   created_at: string;
 }
 
+export interface ActiveCallState {
+  partnerId: number;
+  partnerName: string;
+  callType: 'voice' | 'video';
+  channelId?: string;
+  isOutgoing?: boolean;
+  isConnected?: boolean;
+}
+
+export interface IncomingCallState {
+  channelId: string;
+  callerId: number;
+  callerName: string;
+  callType: 'voice' | 'video';
+}
+
 export interface CallPacket {
-  action: 'call_request' | 'call_response' | 'call_end' | 'call_media';
+  action: 'call_invite' | 'call_accept' | 'call_reject' | 'call_end' | 'call_media' | 'call_request' | 'call_response';
   caller_id?: number;
+  receiver_id?: number;
   target_id?: number;
+  conversation_id?: string | number;
+  channel_id?: string;
   call_type?: 'voice' | 'video';
   accepted?: boolean;
   reason?: string;
@@ -94,11 +113,14 @@ export interface ServerEvent {
   user_id?: number;
   is_online?: number;
   conv_id?: string | number;
+  conversation_id?: string | number;
   reaction?: string;
   msg_id?: number;
   caller_id?: number;
   caller_name?: string;
   call_type?: 'voice' | 'video';
+  channel_id?: string;
+  duration?: string;
   target_id?: number;
 }
 

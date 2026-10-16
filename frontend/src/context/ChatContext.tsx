@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { User, Conversation, Message, Friend, ServerEvent, MessageType } from '../types';
+import { User, Conversation, Message, Friend, ServerEvent, MessageType, ActiveCallState, IncomingCallState } from '../types';
 import { apiService } from '../services/api';
 
 interface ChatContextType {
@@ -16,8 +16,8 @@ interface ChatContextType {
   theme: 'dark' | 'light';
   setTheme: (theme: 'dark' | 'light') => void;
   typingUser: string | null;
-  incomingCall: { callerId: number; callerName: string; callType: 'voice' | 'video' } | null;
-  activeCall: { partnerId: number; partnerName: string; callType: 'voice' | 'video' } | null;
+  incomingCall: IncomingCallState | null;
+  activeCall: ActiveCallState | null;
   pinnedMessage: Message | null;
   replyTo: Message | null;
   setReplyTo: (msg: Message | null) => void;
@@ -53,8 +53,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [typingUser, setTypingUser] = useState<string | null>(null);
-  const [incomingCall, setIncomingCall] = useState<{ callerId: number; callerName: string; callType: 'voice' | 'video' } | null>(null);
-  const [activeCall, setActiveCall] = useState<{ partnerId: number; partnerName: string; callType: 'voice' | 'video' } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<IncomingCallState | null>(null);
+  const [activeCall, setActiveCall] = useState<ActiveCallState | null>(null);
   const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
 
@@ -177,57 +177,70 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const startCall = async (callType: 'voice' | 'video') => {
-    if (!activeConv || !activeConv.partner_id || !currentUser) return;
+    if (!activeConv || !currentUser) return;
+    const partnerId =
+      activeConv.partner_id ||
+      (typeof activeConv.id === 'string' && activeConv.id.startsWith('direct_')
+        ? Number(activeConv.id.replace('direct_', ''))
+        : undefined);
+    if (!partnerId) return;
+
+    // Immediately show outgoing ringing screen
     setActiveCall({
-      partnerId: activeConv.partner_id,
+      partnerId,
       partnerName: activeConv.title,
       callType,
+      isOutgoing: true,
+      isConnected: false,
     });
-    await apiService.sendCallPacket({
-      action: 'call_request',
+
+    const res = await apiService.sendRequest('call_invite', {
       caller_id: currentUser.id,
-      target_id: activeConv.partner_id,
+      receiver_id: partnerId,
       call_type: callType,
+      conversation_id: activeConv.id,
     });
+
+    if (res && res.channel_id) {
+      setActiveCall((prev) => (prev ? { ...prev, channelId: res.channel_id } : null));
+    } else if (res && res.success === false) {
+      alert(res.message || 'Không thể thực hiện cuộc gọi vào lúc này.');
+      setActiveCall(null);
+    }
   };
 
   const acceptCall = async () => {
     if (!incomingCall || !currentUser) return;
+    const channelId = incomingCall.channelId;
     setActiveCall({
       partnerId: incomingCall.callerId,
       partnerName: incomingCall.callerName,
       callType: incomingCall.callType,
+      channelId,
+      isOutgoing: false,
+      isConnected: true,
     });
     setIncomingCall(null);
-    await apiService.sendCallPacket({
-      action: 'call_response',
-      caller_id: incomingCall.callerId,
-      target_id: currentUser.id,
-      accepted: true,
-      call_type: incomingCall.callType,
+    await apiService.sendRequest('call_accept', {
+      channel_id: channelId,
     });
   };
 
   const rejectCall = async () => {
-    if (!incomingCall || !currentUser) return;
-    await apiService.sendCallPacket({
-      action: 'call_response',
-      caller_id: incomingCall.callerId,
-      target_id: currentUser.id,
-      accepted: false,
-      reason: 'Bận',
-      call_type: incomingCall.callType,
+    if (!incomingCall) return;
+    await apiService.sendRequest('call_reject', {
+      channel_id: incomingCall.channelId,
     });
     setIncomingCall(null);
   };
 
   const endCall = async () => {
-    if (!activeCall || !currentUser) return;
-    await apiService.sendCallPacket({
-      action: 'call_end',
-      caller_id: currentUser.id,
-      target_id: activeCall.partnerId,
-    });
+    if (!activeCall) return;
+    if (activeCall.channelId) {
+      await apiService.sendRequest('call_end', {
+        channel_id: activeCall.channelId,
+      });
+    }
     setActiveCall(null);
   };
 
@@ -291,13 +304,23 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           break;
 
         case 'call_incoming':
-          if (event.caller_id && event.caller_name) {
+          if (event.caller_id && event.channel_id) {
             setIncomingCall({
+              channelId: event.channel_id,
               callerId: event.caller_id,
-              callerName: event.caller_name,
+              callerName: event.caller_name || 'Người dùng',
               callType: event.call_type || 'voice',
             });
           }
+          break;
+
+        case 'call_connected':
+          setActiveCall((prev) => (prev ? { ...prev, isConnected: true } : null));
+          break;
+
+        case 'call_rejected':
+          setActiveCall(null);
+          setIncomingCall(null);
           break;
 
         case 'call_ended':

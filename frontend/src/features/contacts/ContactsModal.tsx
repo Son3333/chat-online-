@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Search, UserPlus, MessageCircle, Ban, Check, Users, UserMinus, UserCheck, Bell, Clock, Info } from 'lucide-react';
+import { X, Search, UserPlus, MessageCircle, Ban, Check, Users, UserMinus, UserCheck, Bell, Clock } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { apiService } from '../../services/api';
 import { User, Friend } from '../../types';
@@ -353,14 +353,6 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
                 <Search className="w-3.5 h-3.5" />
                 <span>{isSearching ? 'Đang tìm...' : 'Tìm'}</span>
               </button>
-            </div>
-
-            {/* Explanatory Notice */}
-            <div className="mb-2 px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/40 text-[11px] text-blue-700 dark:text-blue-300 flex items-start space-x-2">
-              <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-500" />
-              <span>
-                <strong>Quy trình kết bạn 2 chiều:</strong> Tìm thấy người dùng <strong>KHÔNG</strong> tự động kết bạn. Bạn cần bấm <strong>"Kết bạn"</strong> (gửi lời mời) và người nhận phải bấm <strong>"Đồng ý"</strong> thì hai bên mới chính thức là bạn bè.
-              </span>
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">

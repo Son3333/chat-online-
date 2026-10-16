@@ -100,19 +100,64 @@ export const CallModal: React.FC = () => {
   const toggleScreenShare = async () => {
     if (!isScreenSharing) {
       try {
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = screenStream;
-        }
-        setIsScreenSharing(true);
-        screenStream.getVideoTracks()[0].onended = () => {
-          setIsScreenSharing(false);
-          if (localStreamRef.current && localVideoRef.current) {
-            localVideoRef.current.srcObject = localStreamRef.current;
+        let screenStream: MediaStream | null = null;
+
+        // Method 1: Try getDisplayMedia (supported by Electron setDisplayMediaRequestHandler)
+        if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+          try {
+            screenStream = await navigator.mediaDevices.getDisplayMedia({
+              video: true,
+              audio: false,
+            });
+          } catch (e1) {
+            console.warn('[ScreenShare] getDisplayMedia error, falling back to desktopCapturer:', e1);
           }
-        };
-      } catch (err) {
-        console.warn('Screen share canceled or failed:', err);
+        }
+
+        // Method 2: Try desktopCapturer via Electron IPC
+        if (!screenStream && (window as any).api?.getScreenSourceId) {
+          try {
+            const sourceId = await (window as any).api.getScreenSourceId();
+            if (sourceId) {
+              screenStream = await (navigator.mediaDevices as any).getUserMedia({
+                audio: false,
+                video: {
+                  mandatory: {
+                    chromeMediaSource: 'desktop',
+                    chromeMediaSourceId: sourceId,
+                    minWidth: 1280,
+                    maxWidth: 1920,
+                    minHeight: 720,
+                    maxHeight: 1080,
+                  },
+                },
+              });
+            }
+          } catch (e2) {
+            console.warn('[ScreenShare] getUserMedia desktop error:', e2);
+          }
+        }
+
+        if (screenStream) {
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = screenStream;
+          }
+          setIsScreenSharing(true);
+          const videoTrack = screenStream.getVideoTracks()[0];
+          if (videoTrack) {
+            videoTrack.onended = () => {
+              setIsScreenSharing(false);
+              if (localStreamRef.current && localVideoRef.current) {
+                localVideoRef.current.srcObject = localStreamRef.current;
+              }
+            };
+          }
+        } else {
+          alert('Không thể bắt luồng chia sẻ màn hình. Hãy đảm bảo bạn đã cấp quyền chia sẻ màn hình!');
+        }
+      } catch (err: any) {
+        console.warn('Screen share error:', err);
+        alert('Lỗi chia sẻ màn hình: ' + (err?.message || err));
       }
     } else {
       setIsScreenSharing(false);
@@ -189,6 +234,47 @@ export const CallModal: React.FC = () => {
               <span className="text-[11px] font-semibold text-emerald-500">Trả lời</span>
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 1.5. OUTGOING CALL RINGING PROMPT
+  if (activeCall && activeCall.isOutgoing && !activeCall.isConnected) {
+    const isVideo = activeCall.callType === 'video';
+    return (
+      <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 select-none animate-in fade-in duration-200">
+        <div className="w-full max-w-sm bg-white dark:bg-[#17212b] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-7 flex flex-col items-center animate-in zoom-in-95 duration-200">
+          <div className="relative mb-6">
+            <div className="absolute inset-0 rounded-full bg-blue-500/20 animate-ping opacity-60" />
+            <div className="absolute -inset-4 rounded-full border border-blue-500/25 animate-pulse" />
+            <div
+              className={`w-28 h-28 rounded-full flex items-center justify-center text-white text-3xl font-bold shadow-2xl relative z-10 ${
+                isVideo
+                  ? 'bg-gradient-to-tr from-emerald-600 to-teal-400 shadow-emerald-500/30'
+                  : 'bg-gradient-to-tr from-blue-600 to-cyan-500 shadow-blue-500/30'
+              }`}
+            >
+              {getInitials(activeCall.partnerName)}
+            </div>
+          </div>
+
+          <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 text-center mb-1">
+            {activeCall.partnerName}
+          </h3>
+          <div className="flex items-center space-x-1.5 text-xs text-[#2481cc] dark:text-cyan-400 font-medium mb-8">
+            <Radio className="w-3.5 h-3.5 animate-ping" />
+            <span>Đang đổ chuông {isVideo ? 'Video Call' : 'Thoại'}...</span>
+          </div>
+
+          <button
+            onClick={handleEndCall}
+            title="Hủy cuộc gọi"
+            className="px-6 py-3 rounded-full bg-red-600 hover:bg-red-700 active:scale-95 text-white font-bold text-xs flex items-center space-x-2 shadow-lg shadow-red-600/30 transition-transform cursor-pointer"
+          >
+            <PhoneOff className="w-5 h-5" />
+            <span>Hủy cuộc gọi</span>
+          </button>
         </div>
       </div>
     );
