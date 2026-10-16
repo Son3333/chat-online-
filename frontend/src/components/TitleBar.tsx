@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Minus, Square, X, Pin, Lock, Sun, Moon, RefreshCw, Radio, Sparkles } from 'lucide-react';
+import { Minus, Square, X, Pin, Lock, Sun, Moon, RefreshCw, Sparkles } from 'lucide-react';
 import { useChat } from '../context/ChatContext';
 import { apiService } from '../services/api';
 import APP_LOGO from '../assets/logo';
@@ -13,15 +13,9 @@ export const TitleBar: React.FC<TitleBarProps> = ({ hasUpdateAvailable, onOpenUp
   const { currentUser, isLocked, setIsLocked, theme, setTheme, refreshConversations } = useChat();
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [serverAddress, setServerAddress] = useState<string>('127.0.0.1:8888');
-  const [isWan, setIsWan] = useState<boolean>(false);
 
   useEffect(() => {
     apiService.isAlwaysOnTop().then(setIsAlwaysOnTop);
-    apiService.getServerInfo().then((info) => {
-      setServerAddress(info.address);
-      setIsWan(info.isWan);
-    });
   }, []);
 
   const toggleAlwaysOnTop = async () => {
@@ -40,7 +34,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({ hasUpdateAvailable, onOpenUp
 
   return (
     <div className="h-9 w-full bg-slate-100 dark:bg-[#17212b] border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between select-none app-drag-region px-3 z-50">
-      {/* Left: App Title, Connection info, and Update notification */}
+      {/* Left: App Title and Pulsing Update Notification */}
       <div className="flex items-center space-x-2.5 app-no-drag">
         {logoError ? (
           <div className="w-5 h-5 rounded-full bg-[#2481cc] text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 shadow-sm">
@@ -57,22 +51,19 @@ export const TitleBar: React.FC<TitleBarProps> = ({ hasUpdateAvailable, onOpenUp
         <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 tracking-wide">
           Vibe Người Tốt
         </span>
-        <div
-          title={isWan ? `Máy chủ WAN Internet: ${serverAddress}` : `Máy chủ Cục bộ: ${serverAddress}`}
-          className="hidden sm:flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium"
-        >
-          <Radio className="w-2.5 h-2.5 animate-pulse" />
-          <span>{isWan ? `WAN: ${serverAddress}` : serverAddress}</span>
-        </div>
 
         {hasUpdateAvailable && (
           <button
             onClick={onOpenUpdateModal}
-            title="Nhấn để xem hoặc cập nhật phiên bản mới"
-            className="flex items-center space-x-1 px-2 py-0.5 rounded-full bg-blue-500/15 text-[#2481cc] hover:bg-blue-500/25 text-[10px] font-bold animate-pulse transition-all app-no-drag cursor-pointer"
+            title="Có bản cập nhật mới - Nhấn để xem & nâng cấp"
+            className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-blue-500/20 to-sky-500/20 hover:from-blue-500/30 hover:to-sky-500/30 text-[#2481cc] dark:text-sky-400 text-[10px] font-bold border border-blue-500/30 shadow-xs transition-all app-no-drag cursor-pointer active:scale-95"
           >
-            <Sparkles className="w-2.5 h-2.5 text-[#2481cc]" />
-            <span>Có bản mới</span>
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+            </span>
+            <Sparkles className="w-2.5 h-2.5 text-[#2481cc] dark:text-sky-400" />
+            <span className="animate-pulse">Có bản mới</span>
           </button>
         )}
       </div>

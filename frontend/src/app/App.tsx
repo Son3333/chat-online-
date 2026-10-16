@@ -16,27 +16,17 @@ export const App: React.FC = () => {
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [isUpdateDismissed, setIsUpdateDismissed] = useState(false);
-  const [snoozedHash, setSnoozedHash] = useState<string | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
 
   // Listen to 2-second Git updates
   useEffect(() => {
     const unsub = apiService.onUpdateAvailable((info) => {
       setUpdateInfo(info);
-      // Auto show modal if not snoozed
-      if (snoozedHash !== info.remoteHash) {
-        setIsUpdateDismissed(false);
-      }
+      // Không tự ý bật modal đè lên màn hình để tránh làm gián đoạn người dùng
+      // Chỉ kích hoạt biểu tượng nháy nháy thông báo trên thanh tiêu đề TitleBar
     });
     return () => unsub();
-  }, [snoozedHash]);
-
-  const handleDismissUpdate = () => {
-    if (updateInfo) {
-      setSnoozedHash(updateInfo.remoteHash);
-    }
-    setIsUpdateDismissed(true);
-  };
+  }, []);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -59,7 +49,7 @@ export const App: React.FC = () => {
       {/* 1. Custom Frameless Titlebar */}
       <TitleBar
         hasUpdateAvailable={Boolean(updateInfo)}
-        onOpenUpdateModal={() => setIsUpdateDismissed(false)}
+        onOpenUpdateModal={() => setShowUpdateModal(true)}
       />
 
       {/* 2. Main Workspace Layout */}
@@ -84,11 +74,11 @@ export const App: React.FC = () => {
         <ContactsModal onClose={() => setShowContacts(false)} />
       )}
 
-      {/* 4. Git Auto-Update Modal */}
-      {updateInfo && !isUpdateDismissed && (
+      {/* 4. Git Auto-Update Modal (chỉ hiện khi người dùng click vào nút nháy nháy) */}
+      {updateInfo && showUpdateModal && (
         <UpdateModal
           updateInfo={updateInfo}
-          onDismiss={handleDismissUpdate}
+          onDismiss={() => setShowUpdateModal(false)}
         />
       )}
     </div>
