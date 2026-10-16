@@ -95,14 +95,18 @@ export const apiService = {
     conversation_id: string | number;
     sender_id: number;
     content: string;
-    msg_type?: 'text' | 'image' | 'file';
+    msg_type?: 'text' | 'image' | 'video' | 'file' | 'location';
     file_id?: string | null;
     original_name?: string;
     file_size?: number;
     reply_to_id?: number | null;
     reply_preview?: string | null;
   }): Promise<{ success: boolean; message?: Message; error?: string }> {
-    return await this.sendRequest('send_message', params);
+    return await this.sendRequest('send_message', {
+      ...params,
+      message_type: params.msg_type,
+      msg_type: params.msg_type,
+    });
   },
 
   async recallMessage(messageId: number, userId: number): Promise<{ success: boolean; error?: string }> {
@@ -122,12 +126,22 @@ export const apiService = {
   },
 
   // Files
-  async uploadFile(originalName: string, fileData: string, fileSize: number, fileType: string): Promise<{ success: boolean; file_id?: string }> {
+  async uploadFile(
+    originalName: string,
+    fileData: string,
+    fileSize: number,
+    fileType: string,
+    conversationId?: string | number,
+    senderId?: number
+  ): Promise<{ success: boolean; file_id?: string; error?: string }> {
     return await this.sendRequest('upload_file', {
       original_name: originalName,
+      filename: originalName,
       file_data: fileData,
       file_size: fileSize,
       file_type: fileType,
+      conversation_id: conversationId,
+      sender_id: senderId,
     });
   },
 

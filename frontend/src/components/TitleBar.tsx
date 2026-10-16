@@ -30,6 +30,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({ hasUpdateAvailable, onOpenUp
     setIsAlwaysOnTop(res);
   };
 
+  const [logoError, setLogoError] = useState(false);
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await refreshConversations();
@@ -40,11 +42,18 @@ export const TitleBar: React.FC<TitleBarProps> = ({ hasUpdateAvailable, onOpenUp
     <div className="h-9 w-full bg-slate-100 dark:bg-[#17212b] border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between select-none app-drag-region px-3 z-50">
       {/* Left: App Title, Connection info, and Update notification */}
       <div className="flex items-center space-x-2.5 app-no-drag">
-        <img
-          src={APP_LOGO}
-          alt="Logo"
-          className="w-5 h-5 rounded-full object-cover shadow-sm border border-amber-400/80 bg-amber-300 flex-shrink-0"
-        />
+        {logoError ? (
+          <div className="w-5 h-5 rounded-full bg-[#2481cc] text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 shadow-sm">
+            V
+          </div>
+        ) : (
+          <img
+            src={APP_LOGO}
+            alt="Logo"
+            onError={() => setLogoError(true)}
+            className="w-5 h-5 rounded-full object-cover shadow-sm border border-amber-400/80 bg-amber-300 flex-shrink-0"
+          />
+        )}
         <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 tracking-wide">
           Vibe Người Tốt
         </span>

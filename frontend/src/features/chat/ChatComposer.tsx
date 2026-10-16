@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Paperclip, Smile, Send, X } from 'lucide-react';
+import { Paperclip, Smile, Send, X, MapPin } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { EmojiPicker } from '../../components/EmojiPicker';
 import { apiService } from '../../services/api';
@@ -11,6 +11,7 @@ export const ChatComposer: React.FC = () => {
   const [isSending, setIsSending] = useState(false);
   const lastTypingRef = useRef<number>(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -44,29 +45,100 @@ export const ChatComposer: React.FC = () => {
     setIsSending(false);
   };
 
-  const handlePickFile = async () => {
-    const fileRes = await apiService.selectLocalFile();
-    if (fileRes.canceled || !fileRes.fileData || !fileRes.fileName) return;
+  const handleShareLocation = () => {
+    if (!activeConv || !currentUser) return;
 
-    const isImg = /\.(png|jpe?g|gif|webp)$/i.test(fileRes.fileName);
-    const fileType = isImg ? 'image' : 'file';
-
-    const uploadRes = await apiService.uploadFile(
-      fileRes.fileName,
-      fileRes.fileData,
-      fileRes.fileSize || 0,
-      fileType
-    );
-
-    if (uploadRes && uploadRes.file_id) {
-      await sendMessage(
-        isImg ? 'Đã gửi một hình ảnh' : `Đã gửi tài liệu: ${fileRes.fileName}`,
-        fileType,
-        uploadRes.file_id,
-        fileRes.fileName,
-        fileRes.fileSize
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const lat = pos.coords.latitude.toFixed(6);
+          const lng = pos.coords.longitude.toFixed(6);
+          await sendMessage(`📍 Vị trí hiện tại: ${lat}, ${lng}`, 'location');
+        },
+        async () => {
+          const custom = prompt('Nhập tên địa điểm hoặc tọa độ bạn muốn chia sẻ:', 'Hà Nội, Việt Nam');
+          if (custom && custom.trim()) {
+            await sendMessage(`📍 Vị trí: ${custom.trim()}`, 'location');
+          }
+        },
+        { timeout: 7000, enableHighAccuracy: true }
       );
+    } else {
+      const custom = prompt('Nhập tên địa điểm bạn muốn chia sẻ:', 'Hà Nội, Việt Nam');
+      if (custom && custom.trim()) {
+        sendMessage(`📍 Vị trí: ${custom.trim()}`, 'location');
+      }
     }
+  };
+
+  const processFileAttachment = async (fileName: string, base64Data: string, fileSize: number) => {
+    if (!activeConv || !currentUser) return;
+    setIsSending(true);
+
+    try {
+      const isImg = /\.(png|jpe?g|gif|webp)$/i.test(fileName);
+      const isVid = /\.(mp4|webm|mov|mkv|avi)$/i.test(fileName);
+      const fileType = isImg ? 'image' : isVid ? 'video' : 'file';
+
+      const uploadRes = await apiService.uploadFile(
+        fileName,
+        base64Data,
+        fileSize,
+        fileType,
+        activeConv.id,
+        currentUser.id
+      );
+
+      if (uploadRes && uploadRes.file_id) {
+        const defaultCaption = isImg
+          ? 'Đã gửi một hình ảnh'
+          : isVid
+          ? `Đã gửi video: ${fileName}`
+          : `Đã gửi tài liệu: ${fileName}`;
+
+        await sendMessage(
+          defaultCaption,
+          fileType,
+          uploadRes.file_id,
+          fileName,
+          fileSize
+        );
+      }
+    } catch (err) {
+      console.error('Error uploading file:', err);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handlePickFile = async () => {
+    // Try native Electron file picker first if available
+    try {
+      const fileRes = await apiService.selectLocalFile();
+      if (!fileRes.canceled && fileRes.fileData && fileRes.fileName) {
+        await processFileAttachment(fileRes.fileName, fileRes.fileData, fileRes.fileSize || 0);
+        return;
+      }
+    } catch {
+      // Fallback to browser input
+    }
+
+    // Fallback: trigger HTML5 input
+    fileInputRef.current?.click();
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const result = reader.result as string;
+      const b64 = result.includes(',') ? result.split(',')[1] : result;
+      await processFileAttachment(file.name, b64, file.size);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleEmojiSelect = (emoji: string) => {
@@ -76,6 +148,15 @@ export const ChatComposer: React.FC = () => {
 
   return (
     <div className="bg-white dark:bg-[#17212b] border-t border-slate-200 dark:border-slate-800/80 p-3 relative select-none">
+      {/* Hidden File Input Fallback for all environments */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileInputChange}
+        className="hidden"
+        accept="*/*"
+      />
+
       {/* Quoted Message / Reply Banner */}
       {replyTo && (
         <div className="mb-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-[#202b36] border-l-4 border-[#2481cc] flex items-center justify-between animate-in fade-in slide-in-from-bottom-2 duration-150">
@@ -93,14 +174,23 @@ export const ChatComposer: React.FC = () => {
       )}
 
       {/* Main Composer Row */}
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-1.5">
         {/* Attach File Button */}
         <button
           onClick={handlePickFile}
-          title="Đính kèm tệp tin hoặc hình ảnh"
+          title="Đính kèm tệp tin, hình ảnh hoặc video"
           className="p-2 rounded-xl text-slate-400 hover:text-[#2481cc] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         >
           <Paperclip className="w-5 h-5" />
+        </button>
+
+        {/* Share Location Button */}
+        <button
+          onClick={handleShareLocation}
+          title="Chia sẻ vị trí thời gian thực"
+          className="p-2 rounded-xl text-slate-400 hover:text-emerald-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+        >
+          <MapPin className="w-5 h-5" />
         </button>
 
         {/* Text Input */}
@@ -149,4 +239,3 @@ export const ChatComposer: React.FC = () => {
     </div>
   );
 };
-

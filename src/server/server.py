@@ -321,14 +321,15 @@ class ChatServer:
                 "members": members
             }
 
-        # 5. Gửi tin nhắn văn bản / emoji
+        # 5. Gửi tin nhắn văn bản / emoji / tệp / vị trí
         elif action == "send_message":
             conv_id = packet.get("conversation_id")
             sender_id = packet.get("sender_id")
             content = packet.get("content", "").strip()
-            msg_type = packet.get("message_type", "text")
+            msg_type = packet.get("msg_type") or packet.get("message_type") or "text"
+            file_id = packet.get("file_id")
 
-            if not content:
+            if not content and not file_id:
                 return {"action": "send_message_response", "success": False, "message": "Nội dung rỗng"}
 
             # Kiểm tra xem cuộc trò chuyện có bị chặn không (đối với chat 1-1)
@@ -345,7 +346,7 @@ class ChatServer:
                         }
 
             reply_to_id = packet.get("reply_to_id")
-            saved_msg = self.db.save_message(conv_id, sender_id, msg_type, content, reply_to_id=reply_to_id)
+            saved_msg = self.db.save_message(conv_id, sender_id, msg_type, content, file_id=file_id, reply_to_id=reply_to_id)
             if saved_msg:
                 # Gửi cho tất cả thành viên trong nhóm đang online
                 members = self.db.get_conversation_members(conv_id)
@@ -357,34 +358,35 @@ class ChatServer:
                     "message": saved_msg
                 }
                 self.broadcast_to_users(member_ids, broadcast_packet)
-                log(f"[+] Tin nhan moi trong Hoi thoai #{conv_id} tu User #{sender_id}: {content[:30]}")
+                log(f"[+] Tin nhan moi ({msg_type}) trong Hoi thoai #{conv_id} tu User #{sender_id}: {content[:30]}")
                 return {"action": "send_message_response", "success": True, "message": saved_msg}
             return {"action": "send_message_response", "success": False, "message": "Lưu tin nhắn thất bại"}
 
-        # 6. Tải lên tệp tin / hình ảnh
+        # 6. Tải lên tệp tin / hình ảnh / video
         elif action == "upload_file":
             conv_id = packet.get("conversation_id")
             sender_id = packet.get("sender_id")
-            filename = packet.get("filename", "file.dat")
+            filename = packet.get("filename") or packet.get("original_name") or "file.dat"
             file_base64 = packet.get("file_data", "")
             file_size = packet.get("file_size", 0)
-            file_type = packet.get("file_type", "file") # 'image' hoặc 'file'
+            file_type = packet.get("file_type") or packet.get("msg_type") or "file"
 
             if not file_base64:
                 return {"action": "upload_response", "success": False, "message": "Dữ liệu tệp rỗng!"}
 
-            # Kiểm tra xem cuộc trò chuyện có bị chặn không (đối với chat 1-1)
-            members = self.db.get_conversation_members(conv_id)
-            if len(members) == 2:
-                other_members = [m for m in members if m["id"] != sender_id]
-                if other_members:
-                    other_id = other_members[0]["id"]
-                    if self.db.is_blocked(sender_id, other_id):
-                        return {
-                            "action": "upload_response",
-                            "success": False,
-                            "message": "Không thể gửi tệp vì cuộc trò chuyện đã bị chặn!"
-                        }
+            # Kiểm tra xem cuộc trò chuyện có bị chặn không nếu có conv_id
+            if conv_id and sender_id:
+                members = self.db.get_conversation_members(conv_id)
+                if len(members) == 2:
+                    other_members = [m for m in members if m["id"] != sender_id]
+                    if other_members:
+                        other_id = other_members[0]["id"]
+                        if self.db.is_blocked(sender_id, other_id):
+                            return {
+                                "action": "upload_response",
+                                "success": False,
+                                "message": "Không thể gửi tệp vì cuộc trò chuyện đã bị chặn!"
+                            }
 
             try:
                 # Lưu file vào thư mục uploads
@@ -396,23 +398,24 @@ class ChatServer:
 
                 # Lưu vào database
                 actual_size = file_size if file_size else len(file_bytes)
-                file_id = self.db.save_file_record(filename, unique_name, actual_size, file_type, sender_id)
+                file_id = self.db.save_file_record(filename, unique_name, actual_size, file_type, sender_id or 0)
 
-                # Tạo tin nhắn kèm file
-                caption = packet.get("caption", "") or f"Đã gửi tệp: {filename}"
-                reply_to_id = packet.get("reply_to_id")
-                saved_msg = self.db.save_message(conv_id, sender_id, file_type, caption, file_id, reply_to_id=reply_to_id)
+                # Nếu truyền kèm conv_id -> Lưu luôn tin nhắn kèm file và broadcast
+                if conv_id and sender_id:
+                    caption = packet.get("caption", "") or f"Đã gửi tệp: {filename}"
+                    reply_to_id = packet.get("reply_to_id")
+                    saved_msg = self.db.save_message(conv_id, sender_id, file_type, caption, file_id, reply_to_id=reply_to_id)
 
-                # Broadcast tin nhắn kèm tệp tin
-                members = self.db.get_conversation_members(conv_id)
-                member_ids = [m["id"] for m in members]
+                    members = self.db.get_conversation_members(conv_id)
+                    member_ids = [m["id"] for m in members]
 
-                broadcast_packet = {
-                    "type": "new_message",
-                    "conversation_id": conv_id,
-                    "message": saved_msg
-                }
-                self.broadcast_to_users(member_ids, broadcast_packet)
+                    broadcast_packet = {
+                        "type": "new_message",
+                        "conversation_id": conv_id,
+                        "message": saved_msg
+                    }
+                    self.broadcast_to_users(member_ids, broadcast_packet)
+
                 return {"action": "upload_response", "success": True, "file_id": file_id}
             except Exception as e:
                 return {"action": "upload_response", "success": False, "message": str(e)}

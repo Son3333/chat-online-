@@ -167,9 +167,10 @@ ipcMain.handle('dialog:select-file', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
     filters: [
-      { name: 'Mọi tệp tin & Hình ảnh', extensions: ['*'] },
+      { name: 'Mọi tệp tin & Đa phương tiện', extensions: ['*'] },
       { name: 'Hình ảnh', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
-      { name: 'Tài liệu', extensions: ['pdf', 'docx', 'xlsx', 'txt', 'zip'] },
+      { name: 'Video & Clip', extensions: ['mp4', 'webm', 'mov', 'mkv', 'avi'] },
+      { name: 'Tài liệu', extensions: ['pdf', 'docx', 'xlsx', 'txt', 'zip', 'rar'] },
     ],
   });
 

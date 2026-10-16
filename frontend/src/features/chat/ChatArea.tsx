@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Pin, X, Download } from 'lucide-react';
+import { Pin, X, Download, MessageCircle } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { apiService } from '../../services/api';
 import APP_LOGO from '../../assets/logo';
@@ -11,6 +11,7 @@ export const ChatArea: React.FC = () => {
   const { activeConv, messages, currentUser, pinnedMessage } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [previewImage, setPreviewImage] = useState<{ fileId: string; name: string; url?: string } | null>(null);
+  const [logoError, setLogoError] = useState(false);
 
   // Auto scroll to bottom on new messages
   useEffect(() => {
@@ -21,11 +22,18 @@ export const ChatArea: React.FC = () => {
   if (!activeConv) {
     return (
       <div className="flex-1 h-full flex flex-col items-center justify-center bg-slate-50 dark:bg-[#0e1621] p-6 text-center select-none">
-        <img
-          src={APP_LOGO}
-          alt="Vibe Người Tốt Logo"
-          className="w-24 h-24 rounded-2xl object-cover mb-4 shadow-xl border-2 border-amber-300 dark:border-amber-400 bg-amber-300 animate-in zoom-in-95 duration-200"
-        />
+        {logoError ? (
+          <div className="w-24 h-24 rounded-2xl bg-gradient-to-tr from-[#2481cc] to-indigo-600 flex items-center justify-center text-white shadow-xl mb-4 border-2 border-blue-400">
+            <MessageCircle className="w-12 h-12" />
+          </div>
+        ) : (
+          <img
+            src={APP_LOGO}
+            alt="Vibe Người Tốt Logo"
+            onError={() => setLogoError(true)}
+            className="w-24 h-24 rounded-2xl object-cover mb-4 shadow-xl border-2 border-amber-300 dark:border-amber-400 bg-amber-300 animate-in zoom-in-95 duration-200"
+          />
+        )}
         <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">
           Chào mừng đến với Vibe Người Tốt!
         </h2>

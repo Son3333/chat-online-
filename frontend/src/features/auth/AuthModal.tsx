@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, User, AtSign, Eye, EyeOff } from 'lucide-react';
+import { Lock, User, AtSign, Eye, EyeOff, MessageCircle } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { useChat } from '../../context/ChatContext';
 import APP_LOGO from '../../assets/logo';
@@ -53,16 +53,25 @@ export const AuthModal: React.FC = () => {
     }
   };
 
+  const [logoError, setLogoError] = useState(false);
+
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 select-none">
       <div className="w-full max-w-sm bg-white dark:bg-[#17212b] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-6 flex flex-col animate-in zoom-in-95 duration-150">
         {/* Brand Icon */}
         <div className="flex flex-col items-center mb-6">
-          <img
-            src={APP_LOGO}
-            alt="Vibe Người Tốt"
-            className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-amber-300 dark:border-amber-400 bg-amber-300 mb-3"
-          />
+          {logoError ? (
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#2481cc] to-indigo-600 flex items-center justify-center text-white shadow-lg mb-3">
+              <MessageCircle className="w-8 h-8" />
+            </div>
+          ) : (
+            <img
+              src={APP_LOGO}
+              alt="Vibe Người Tốt"
+              onError={() => setLogoError(true)}
+              className="w-16 h-16 rounded-2xl object-cover shadow-lg border-2 border-amber-300 dark:border-amber-400 bg-amber-300 mb-3"
+            />
+          )}
           <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">
             {isRegister ? 'Tạo Tài Khoản Mới' : 'Đăng Nhập Vibe Người Tốt'}
           </h1>

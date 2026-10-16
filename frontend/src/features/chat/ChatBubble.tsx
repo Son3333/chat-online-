@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Pin, Reply, Trash2, Copy, FileText, Download, ExternalLink, Heart } from 'lucide-react';
+import { Check, Pin, Reply, Trash2, Copy, FileText, Download, ExternalLink, Heart, Video, MapPin } from 'lucide-react';
 import { Message } from '../../types';
 import { formatTime, formatFileSize } from '../../lib/utils';
 import { useChat } from '../../context/ChatContext';
@@ -76,6 +76,119 @@ const ImageBubbleContent: React.FC<{
   );
 };
 
+const VideoBubbleContent: React.FC<{
+  fileId: string | number;
+  originalName?: string;
+  onDownload: () => void;
+}> = ({ fileId, originalName, onDownload }) => {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    apiService.downloadFile(fileId).then((res) => {
+      if (mounted) {
+        if (res && res.file_data) {
+          let mime = res.file_type || 'video/mp4';
+          if (!mime.startsWith('video/')) {
+            const fn = (res.filename || res.original_name || '').toLowerCase();
+            if (fn.endsWith('.webm')) mime = 'video/webm';
+            else if (fn.endsWith('.mov')) mime = 'video/quicktime';
+            else if (fn.endsWith('.mkv')) mime = 'video/x-matroska';
+            else mime = 'video/mp4';
+          }
+          setDataUrl(`data:${mime};base64,${res.file_data}`);
+        }
+        setLoading(false);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [fileId]);
+
+  return (
+    <div className="relative overflow-hidden rounded-xl bg-black/20 dark:bg-black/50 min-w-[260px] max-w-sm">
+      {loading ? (
+        <div className="flex flex-col items-center justify-center p-8 text-slate-400 animate-pulse">
+          <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin mb-2" />
+          <span className="text-[11px]">Đang tải video...</span>
+        </div>
+      ) : dataUrl ? (
+        <div className="flex flex-col">
+          <video
+            controls
+            src={dataUrl}
+            className="max-h-72 w-full rounded-t-xl object-contain bg-black"
+          />
+          <div className="p-2 bg-black/40 flex items-center justify-between text-xs text-white">
+            <span className="truncate pr-2">{originalName || 'Video'}</span>
+            <button
+              onClick={onDownload}
+              title="Tải video về máy"
+              className="p-1 rounded-lg bg-white/20 hover:bg-white/30 transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="p-4 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Video className="w-5 h-5 text-indigo-500" />
+            <span className="text-xs">{originalName || 'Video'}</span>
+          </div>
+          <button onClick={onDownload} className="p-1.5 rounded-lg bg-[#2481cc] text-white">
+            <Download className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const LocationBubbleContent: React.FC<{
+  content: string;
+}> = ({ content }) => {
+  // Extract coordinates if present (e.g., "21.0285, 105.8542")
+  const coordMatch = content.match(/(-?\d+\.\d+),\s*(-?\d+\.\d+)/);
+  const lat = coordMatch ? coordMatch[1] : null;
+  const lng = coordMatch ? coordMatch[2] : null;
+  const mapUrl = lat && lng
+    ? `https://www.google.com/maps?q=${lat},${lng}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(content.replace(/^📍\s*Vị\s*trí:\s*/i, ''))}`;
+
+  const handleOpenMap = () => {
+    window.open(mapUrl, '_blank');
+  };
+
+  return (
+    <div className="my-1 p-3 rounded-xl bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-blue-500/10 border border-emerald-500/30 min-w-[220px] max-w-sm">
+      <div className="flex items-center space-x-2.5 mb-2">
+        <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-md animate-bounce">
+          <MapPin className="w-4 h-4" />
+        </div>
+        <div>
+          <span className="font-bold text-xs text-emerald-600 dark:text-emerald-400 block">
+            Vị Trí Được Chia Sẻ
+          </span>
+          <span className="text-[10px] text-slate-400">Tọa độ thời gian thực</span>
+        </div>
+      </div>
+      <p className="text-xs text-slate-700 dark:text-slate-200 font-medium mb-2.5 break-words">
+        {content}
+      </p>
+      <button
+        onClick={handleOpenMap}
+        className="w-full py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-sm transition-colors"
+      >
+        <ExternalLink className="w-3.5 h-3.5" />
+        <span>Xem trên Google Maps</span>
+      </button>
+    </div>
+  );
+};
+
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🔥'];
 
 export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenImage }) => {
@@ -88,6 +201,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
 
   const isDeleted = Boolean(message.is_deleted);
   const isImage = message.msg_type === 'image';
+  const isVideo = message.msg_type === 'video';
+  const isLocation = message.msg_type === 'location';
   const isFile = message.msg_type === 'file';
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -157,7 +272,27 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
           </div>
         )}
 
-        {/* 2. File / Document Message */}
+        {/* 2. Video Message */}
+        {isVideo && !isDeleted && (
+          <div className="my-1 overflow-hidden rounded-xl border border-black/5 dark:border-white/5">
+            {message.file_id ? (
+              <VideoBubbleContent
+                fileId={message.file_id}
+                originalName={message.original_name}
+                onDownload={handleDownloadFile}
+              />
+            ) : (
+              <div className="p-4 bg-slate-100 dark:bg-slate-800 text-xs">🎬 Video</div>
+            )}
+          </div>
+        )}
+
+        {/* 3. Location Message */}
+        {isLocation && !isDeleted && (
+          <LocationBubbleContent content={message.content} />
+        )}
+
+        {/* 4. File / Document Message */}
         {isFile && !isDeleted && (
           <div className="my-1 p-2.5 rounded-xl bg-black/5 dark:bg-black/25 flex items-center space-x-3">
             <div className="w-9 h-9 rounded-lg bg-[#2481cc]/15 text-[#2481cc] flex items-center justify-center">
@@ -177,8 +312,8 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
           </div>
         )}
 
-        {/* 3. Text Message Content */}
-        {message.content && (!isImage || isDeleted) && (
+        {/* 5. Text Message Content */}
+        {message.content && (!isImage && !isVideo && !isLocation || isDeleted) && (
           <p className="leading-relaxed whitespace-pre-wrap select-text">{message.content}</p>
         )}
 
@@ -356,4 +491,3 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
     </div>
   );
 };
-

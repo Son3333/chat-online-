@@ -8,11 +8,13 @@ export interface User {
   created_at?: string;
 }
 
+export type MessageType = 'text' | 'image' | 'video' | 'file' | 'location';
+
 export interface LastMessage {
   id?: number;
   sender_name?: string;
   content: string;
-  msg_type?: 'text' | 'image' | 'file';
+  msg_type?: MessageType;
   created_at?: string;
 }
 
@@ -46,7 +48,7 @@ export interface Message {
   sender_id: number;
   sender_name: string;
   content: string;
-  msg_type: 'text' | 'image' | 'file';
+  msg_type: MessageType;
   file_id?: string | null;
   file_size?: number;
   original_name?: string;

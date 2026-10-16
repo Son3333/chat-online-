@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { User, Conversation, Message, Friend, ServerEvent } from '../types';
+import { User, Conversation, Message, Friend, ServerEvent, MessageType } from '../types';
 import { apiService } from '../services/api';
 
 interface ChatContextType {
@@ -21,7 +21,7 @@ interface ChatContextType {
   replyTo: Message | null;
   setReplyTo: (msg: Message | null) => void;
   selectConversation: (conv: Conversation) => Promise<void>;
-  sendMessage: (content: string, type?: 'text' | 'image' | 'file', fileId?: string, origName?: string, fileSize?: number) => Promise<boolean>;
+  sendMessage: (content: string, type?: MessageType, fileId?: string, origName?: string, fileSize?: number) => Promise<boolean>;
   openSavedMessages: () => Promise<void>;
   refreshConversations: () => Promise<void>;
   refreshFriends: () => Promise<void>;
@@ -130,7 +130,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const sendMessage = async (content: string, type: 'text' | 'image' | 'file' = 'text', fileId?: string, origName?: string, fileSize?: number) => {
+  const sendMessage = async (content: string, type: MessageType = 'text', fileId?: string, origName?: string, fileSize?: number) => {
     if (!activeConv || !currentUser) return false;
     const res = await apiService.sendMessage({
       conversation_id: activeConv.id,
