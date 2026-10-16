@@ -1,8 +1,11 @@
 @echo off
 chcp 65001 >nul
-title TRUNG TAM KHOI DONG - HE THONG CHAT
+title KHOI DONG UNG DUNG CHAT - NHOM 05
 color 0B
 cd /d "%~dp0"
+
+:: Xoa bien moi truong tranh xung dot Electron
+set "ELECTRON_RUN_AS_NODE="
 
 :: Them duong dan Node.js neu co
 if exist "C:\Users\admin\tools\node-v20.18.0-win-x64" (
@@ -14,12 +17,12 @@ set "PY_CMD="
 python --version >nul 2>&1
 if %errorlevel% equ 0 (
     set "PY_CMD=python"
-    goto :menu
+    goto :check_server
 )
 py --version >nul 2>&1
 if %errorlevel% equ 0 (
     set "PY_CMD=py"
-    goto :menu
+    goto :check_server
 )
 for %%D in (
     "%LOCALAPPDATA%\Programs\Python\Python314\python.exe"
@@ -40,175 +43,64 @@ for %%D in (
 ) do (
     if exist %%D (
         set "PY_CMD=%%~fD"
-        goto :menu
+        goto :check_server
     )
 )
 set "PY_CMD=python"
 
-:menu
-cls
+:check_server
 echo ===================================================================
 echo     DO AN CHUYEN NGANH CONG NGHE PHAN MEM - KHOA CNTT DCNHA
-echo            TRUNG TAM DIEU KHIEN UNG DUNG NHAN TIN
+echo            KHOI DONG UNG DUNG NHAN TIN VA TRUYEN THONG TIN
 echo ===================================================================
 echo.
-echo   [1] KHOI DONG APP TELEGRAM DESKTOP (Tu dong bat Server + Mo App)
-echo   [2] Khoi dong Server WAN (bore.pub) + Mo Telegram Desktop
-echo   [3] Mo ung dung Python cu (CustomTkinter)
-echo   [4] Chi khoi dong Server (Local / WAN)
-echo   [5] Cap nhat ma nguon moi nhat tu GitHub
-echo   [6] Tao loi tat (Shortcut) ra ngoai man hinh Desktop
-echo   [7] Dung tat ca Server dang chay ngam tren cong 8888
-echo   [0] Thoat
+
+:: 1. Kiem tra va khoi dong Server neu chua bat
+netstat -ano | findstr :8888 | findstr LISTENING >nul 2>&1
+if %errorlevel% equ 0 goto :server_already_up
+
+echo [*] Dang khoi dong Chat Server cong 8888...
+start "CHAT SERVER - LOCAL" "%PY_CMD%" "%~dp0run_server.py"
+ping 127.0.0.1 -n 3 >nul
+goto :select_app
+
+:server_already_up
+echo [*] May chu Chat Server da san sang tren cong 8888.
+
+:select_app
+echo.
+echo   [1] Ung dung moi phong cach Telegram Desktop (Mac dinh sau 3s)
+echo   [2] Ung dung giao dien Python goc (CustomTkinter)
+echo.
+choice /c 12 /t 3 /d 1 /m "Chon giao dien khoi chay [1 hoac 2]: "
+if %errorlevel% equ 2 goto :launch_python
+
+:launch_telegram
+echo.
+echo [*] Dang mo ung dung Telegram Desktop...
+if exist "%~dp0frontend\dist-package\win-unpacked\Telegram Style Messenger.exe" (
+    start "" /d "%~dp0frontend\dist-package\win-unpacked" "Telegram Style Messenger.exe"
+    goto :done
+)
+if exist "%~dp0frontend\dist-package\Telegram Style Messenger 1.0.0.exe" (
+    start "" "%~dp0frontend\dist-package\Telegram Style Messenger 1.0.0.exe"
+    goto :done
+)
+if exist "%~dp0frontend\node_modules\.bin\electron.cmd" (
+    start "" /d "%~dp0frontend" .\node_modules\.bin\electron.cmd .
+    goto :done
+)
+
+:launch_python
+echo.
+echo [*] Dang mo ung dung Python Client...
+start "" "%PY_CMD%" "%~dp0launch.pyw"
+goto :done
+
+:done
 echo.
 echo ===================================================================
-set /p "CHOICE=Nhap lua chon cua ban [Mac dinh: 1]: "
-
-if "%CHOICE%"=="" set "CHOICE=1"
-if "%CHOICE%"=="1" goto :opt_telegram
-if "%CHOICE%"=="2" goto :opt_wan_telegram
-if "%CHOICE%"=="3" goto :opt_python_gui
-if "%CHOICE%"=="4" goto :opt_server_only
-if "%CHOICE%"=="5" goto :opt_update
-if "%CHOICE%"=="6" goto :opt_shortcut
-if "%CHOICE%"=="7" goto :opt_stop_server
-if "%CHOICE%"=="0" exit /b 0
-
-echo [!] Lua chon khong hop le, vui long chon lai!
-timeout /t 2 >nul
-goto :menu
-
-:: ---------------------------------------------------------------------
-:: 1. KHOI DONG TELEGRAM DESKTOP + SERVER LOCAL
-:: ---------------------------------------------------------------------
-:opt_telegram
-cls
-echo [*] Dang kiem tra Chat Server...
-netstat -ano | findstr :8888 | findstr LISTENING >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [+] Server da dang chay tren cong 8888.
-) else (
-    echo [*] Dang khoi dong Chat Server (127.0.0.1:8888)...
-    start "CHAT SERVER - LOCAL" "%PY_CMD%" "%~dp0run_server.py"
-    timeout /t 2 /nobreak >nul
-)
-
-echo [*] Dang mo ung dung Telegram Desktop...
-if exist "frontend\dist-package\Telegram Style Messenger 1.0.0.exe" (
-    start "" "frontend\dist-package\Telegram Style Messenger 1.0.0.exe"
-    exit /b 0
-)
-if exist "frontend\dist-package\win-unpacked\Telegram Style Messenger.exe" (
-    start "" "frontend\dist-package\win-unpacked\Telegram Style Messenger.exe"
-    exit /b 0
-)
-cd /d "%~dp0frontend"
-start "" npx electron .
-exit /b 0
-
-:: ---------------------------------------------------------------------
-:: 2. KHOI DONG TELEGRAM DESKTOP + SERVER WAN (BORE)
-:: ---------------------------------------------------------------------
-:opt_wan_telegram
-cls
-echo [*] Dang kiem tra Chat Server WAN...
-netstat -ano | findstr :8888 | findstr LISTENING >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [+] Server da dang chay san sang tren cong 8888.
-) else (
-    echo [*] Dang khoi dong Chat Server WAN (bore.pub)...
-    start "CHAT SERVER WAN - NHOM 05" "%PY_CMD%" "%~dp0run_server_wan.py"
-    timeout /t 3 /nobreak >nul
-)
-
-echo [*] Dang mo ung dung Telegram Desktop...
-if exist "frontend\dist-package\Telegram Style Messenger 1.0.0.exe" (
-    start "" "frontend\dist-package\Telegram Style Messenger 1.0.0.exe"
-    exit /b 0
-)
-if exist "frontend\dist-package\win-unpacked\Telegram Style Messenger.exe" (
-    start "" "frontend\dist-package\win-unpacked\Telegram Style Messenger.exe"
-    exit /b 0
-)
-cd /d "%~dp0frontend"
-start "" npx electron .
-exit /b 0
-
-:: ---------------------------------------------------------------------
-:: 3. MO UNG DUNG GIAO DIEN PYTHON CU
-:: ---------------------------------------------------------------------
-:opt_python_gui
-cls
-echo [*] Dang kiem tra Chat Server...
-netstat -ano | findstr :8888 | findstr LISTENING >nul 2>&1
-if not %errorlevel% equ 0 (
-    echo [*] Dang khoi dong Chat Server...
-    start "CHAT SERVER - LOCAL" "%PY_CMD%" "%~dp0run_server.py"
-    timeout /t 2 /nobreak >nul
-)
-echo [*] Dang khoi chay Python CustomTkinter Client...
-start "" "%PY_CMD%" "%~dp0run_client.py"
-exit /b 0
-
-:: ---------------------------------------------------------------------
-:: 4. CHI CHAY SERVER
-:: ---------------------------------------------------------------------
-:opt_server_only
-cls
+echo   [OK] UNG DUNG DA DUOC BAT THANH CONG!
 echo ===================================================================
-echo   CHON CHE DO MAY CHU:
-echo   [1] Local Server (127.0.0.1:8888)
-echo   [2] WAN Server (bore.pub tunnel de chat qua Internet)
-echo ===================================================================
-set /p "SRV_MODE=Chon [1 hoac 2]: "
-if "%SRV_MODE%"=="2" (
-    start "CHAT SERVER WAN" "%PY_CMD%" "%~dp0run_server_wan.py"
-) else (
-    start "CHAT SERVER LOCAL" "%PY_CMD%" "%~dp0run_server.py"
-)
-goto :menu
-
-:: ---------------------------------------------------------------------
-:: 5. CAP NHAT MA NGUON GITHUB
-:: ---------------------------------------------------------------------
-:opt_update
-cls
-echo [*] Dang kiem tra va dong bo voi GitHub origin/main...
-if exist ".git" (
-    git fetch origin main
-    git reset --hard origin/main
-    echo [+] Da dong bo thanh cong voi GitHub!
-) else (
-    echo [-] Khong tim thay thu muc .git!
-)
-pause
-goto :menu
-
-:: ---------------------------------------------------------------------
-:: 6. TAO SHORTCUT DESKTOP
-:: ---------------------------------------------------------------------
-:opt_shortcut
-cls
-echo [*] Dang tao shortcut ngoai Desktop...
-powershell -NoProfile -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut([System.IO.Path]::Combine([System.Environment]::GetFolderPath('Desktop'),'Telegram Style Messenger.lnk')); if (Test-Path 'frontend\dist-package\Telegram Style Messenger 1.0.0.exe') { $s.TargetPath=(Get-Item 'frontend\dist-package\Telegram Style Messenger 1.0.0.exe').FullName } else { $s.TargetPath=(Get-Item 'CHAY_UNG_DUNG.bat').FullName }; $s.WorkingDirectory=(Get-Item .).FullName; $s.Save()"
-echo [+] Da tao bieu tuong loi tat thanh cong ngoai Desktop!
-pause
-goto :menu
-
-:: ---------------------------------------------------------------------
-:: 7. DUNG TAT CA SERVER DANG CHAY
-:: ---------------------------------------------------------------------
-:opt_stop_server
-cls
-color 0C
-echo [*] Dang tim va dong cac tien trinh tren cong 8888...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :8888 ^| findstr LISTENING') do (
-    echo [*] Dang tat Server PID: %%a
-    taskkill /F /PID %%a >nul 2>&1
-)
-echo [*] Dang tat duong ham bore.exe...
-taskkill /F /IM bore.exe >nul 2>&1
-echo [+] Da dung toan bo Server thanh cong!
-color 0B
-pause
-goto :menu
+ping 127.0.0.1 -n 3 >nul
+exit /b 0

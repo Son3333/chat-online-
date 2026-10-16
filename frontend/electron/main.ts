@@ -100,12 +100,16 @@ async function createWindow() {
     }
   });
 
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:5173').catch(() => {
-      mainWindow?.loadFile(path.join(__dirname, '../dist/index.html'));
-    });
+  // Load built React UI directly
+  const indexPath = path.join(__dirname, '../dist/index.html');
+  if (process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+  } else if (fs.existsSync(indexPath)) {
+    mainWindow.loadFile(indexPath);
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
+    mainWindow.loadURL('http://localhost:5173').catch((err) => {
+      console.error('[Main] Failed to load UI:', err);
+    });
   }
 
   mainWindow.on('closed', () => {
