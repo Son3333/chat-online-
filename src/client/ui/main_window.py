@@ -11,6 +11,10 @@ from typing import Optional
 
 from src.client.ui.chat_bubble import ChatBubble
 from src.client.ui.create_group_dialog import CreateGroupDialog
+from src.client.call.call_window import IncomingCallDialog, ActiveCallWindow
+from src.client.desktop.toast import ToastNotification
+from src.client.desktop.popout_window import PopoutChatWindow
+from src.client.desktop.window_manager import toggle_always_on_top
 
 class MainWindow(ctk.CTkFrame):
     def __init__(self, master, current_user: dict, network_client, on_logout):
@@ -18,6 +22,11 @@ class MainWindow(ctk.CTkFrame):
         self.current_user = current_user
         self.net = network_client
         self.on_logout = on_logout
+        
+        self.info_sidebar = None
+        self.info_sidebar_open = False
+        self.is_topmost = False
+        self.master.bind("<Escape>", self._on_escape_pressed)
         
         self.conversations = []
         self.friends = []
@@ -32,6 +41,14 @@ class MainWindow(ctk.CTkFrame):
         self.msg_bubbles = {}
         self._update_prompted = False
         self._latest_remote_sha = ""
+
+        # Trạng thái cuộc gọi thoại / video
+        self.active_call_window = None
+        self.incoming_call_dialog = None
+
+        # Trạng thái trả lời tin nhắn (Quote / Reply) & Ghim tin nhắn (Pin)
+        self.reply_target_message = None
+        self.current_pinned_message = None
         
         # Grid layout
         self.grid_columnconfigure(0, weight=0, minsize=320) # Sidebar
@@ -52,6 +69,17 @@ class MainWindow(ctk.CTkFrame):
         self.net.register_callback("refresh_friends", lambda pkt: self.master.after(0, self.load_friends))
         self.net.register_callback("on_reconnected", lambda pkt: self.master.after(0, self._on_reconnected))
         self.net.register_callback("connection_lost", lambda pkt: self.master.after(0, self._on_connection_lost))
+
+        # Đăng ký sự kiện Cuộc gọi (Voice & Video Call)
+        self.net.register_callback("call_incoming", self._on_call_incoming)
+        self.net.register_callback("call_connected", self._on_call_connected)
+        self.net.register_callback("call_rejected", self._on_call_rejected)
+        self.net.register_callback("call_ended", self._on_call_ended)
+        self.net.register_callback("call_media_relay", self._on_call_media_relay)
+
+        # Đăng ký sự kiện Tương tác Cảm xúc & Ghim tin nhắn
+        self.net.register_callback("reaction_updated", self._on_reaction_updated)
+        self.net.register_callback("pinned_updated", self._on_pinned_updated)
 
         self._build_top_bar()
         self._build_sidebar()
@@ -115,7 +143,49 @@ class MainWindow(ctk.CTkFrame):
             text_color=("#0284C7", "#38BDF8"),
             command=self.copy_server_info
         )
-        self.btn_copy_server.pack(side="left", padx=8)
+        self.btn_copy_server.pack(side="left", padx=6)
+
+        # Nút Chụp màn hình (📷)
+        self.btn_snip = ctk.CTkButton(
+            actions_frame,
+            text="📷 Chụp ảnh",
+            height=32,
+            width=90,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=("#E0F2FE", "#0369A1"),
+            text_color=("#0369A1", "#E0F2FE"),
+            hover_color=("#BAE6FD", "#0284C7"),
+            command=self.open_screenshot_tool
+        )
+        self.btn_snip.pack(side="left", padx=4)
+
+        # Nút Khóa bảo mật (🔒)
+        self.btn_lock = ctk.CTkButton(
+            actions_frame,
+            text="🔒 Khóa",
+            height=32,
+            width=65,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=("#FEF2F2", "#991B1B"),
+            text_color=("#991B1B", "#FCA5A5"),
+            hover_color=("#FEE2E2", "#B91C1C"),
+            command=self.lock_app
+        )
+        self.btn_lock.pack(side="left", padx=4)
+
+        # Nút Luôn nổi trên cùng (📌)
+        self.btn_always_on_top = ctk.CTkButton(
+            actions_frame,
+            text="📌 Ghim",
+            width=65,
+            height=32,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=("gray90", "#334155"),
+            text_color=("#0F172A", "#F8FAFC"),
+            hover_color=("gray80", "#475569"),
+            command=self.toggle_topmost
+        )
+        self.btn_always_on_top.pack(side="left", padx=4)
 
         # Nút Cập nhật phiên bản mới (Ẩn mặc định, chỉ hiện nhấp nháy cam khi có update trên GitHub)
         self.btn_update = ctk.CTkButton(
@@ -420,6 +490,20 @@ class MainWindow(ctk.CTkFrame):
         )
         self.btn_sidebar_action.pack(fill="x")
 
+        # Nút truy cập nhanh "Cloud của tôi (Saved Messages)"
+        self.btn_saved_cloud = ctk.CTkButton(
+            self.action_frame, 
+            text="☁️ Cloud của tôi (Lưu trữ cá nhân)", 
+            height=32, 
+            corner_radius=8,
+            font=ctk.CTkFont(size=12, weight="bold"),
+            fg_color=("#EEF2FF", "#1E293B"),
+            text_color=("#4F46E5", "#818CF8"),
+            hover_color=("#E0E7FF", "#334155"),
+            command=self.open_saved_messages
+        )
+        self.btn_saved_cloud.pack(fill="x", pady=(4, 0))
+
         # 4. Container chứa nội dung tab (row=3)
         # Tab A: Danh sách cuộc trò chuyện
         self.conv_scroll = ctk.CTkScrollableFrame(self.sidebar, corner_radius=0, fg_color="transparent")
@@ -499,7 +583,7 @@ class MainWindow(ctk.CTkFrame):
         self.lbl_chat_subtitle = ctk.CTkLabel(header_info, text="Trạng thái...", font=ctk.CTkFont(size=11), text_color="gray60")
         self.lbl_chat_subtitle.pack(anchor="w")
 
-        # Right header actions frame (Add friend button + Typing label)
+        # Right header actions frame (Add friend button + Typing label + Call buttons)
         right_header = ctk.CTkFrame(self.chat_header, fg_color="transparent")
         right_header.pack(side="right", padx=16, pady=8)
 
@@ -512,9 +596,65 @@ class MainWindow(ctk.CTkFrame):
         )
         self.lbl_typing.pack(side="left", padx=(0, 12))
 
+        # Nút Gọi Thoại (📞)
+        self.btn_call_voice = ctk.CTkButton(
+            right_header,
+            text="📞",
+            width=36,
+            height=32,
+            font=ctk.CTkFont(size=15),
+            fg_color=("#F1F5F9", "#334155"),
+            text_color=("#0284C7", "#38BDF8"),
+            hover_color=("#E2E8F0", "#475569"),
+            corner_radius=6,
+            command=lambda: self.start_call("voice")
+        )
+
+        # Nút Gọi Video (📹)
+        self.btn_call_video = ctk.CTkButton(
+            right_header,
+            text="📹",
+            width=36,
+            height=32,
+            font=ctk.CTkFont(size=15),
+            fg_color=("#F1F5F9", "#334155"),
+            text_color=("#10B981", "#34D399"),
+            hover_color=("#E2E8F0", "#475569"),
+            corner_radius=6,
+            command=lambda: self.start_call("video")
+        )
+
         # Trạng thái bạn bè và chặn của đối phương trong cuộc hội thoại 1-1 đang mở
         self.active_partner_friend_status = "none"
         self.active_partner_blocked = False
+
+        # Nút Tách cửa sổ chat riêng (↗️ Pop-out Chat Window)
+        self.btn_popout = ctk.CTkButton(
+            right_header,
+            text="↗️",
+            width=36,
+            height=32,
+            font=ctk.CTkFont(size=14),
+            fg_color=("#F1F5F9", "#334155"),
+            text_color=("#0284C7", "#38BDF8"),
+            hover_color=("#E2E8F0", "#475569"),
+            corner_radius=6,
+            command=self.popout_current_conversation
+        )
+
+        # Nút Thông tin cuộc hội thoại (ℹ️ 3-Column Info Sidebar)
+        self.btn_info = ctk.CTkButton(
+            right_header,
+            text="ℹ️",
+            width=36,
+            height=32,
+            font=ctk.CTkFont(size=14),
+            fg_color=("#F1F5F9", "#334155"),
+            text_color=("#475569", "#94A3B8"),
+            hover_color=("#E2E8F0", "#475569"),
+            corner_radius=6,
+            command=self.toggle_info_sidebar
+        )
 
         # Nút menu tùy chọn cuộc trò chuyện "..." (Ẩn gọn các tính năng Bạn bè, Chặn, Xóa chat)
         self.btn_chat_options = ctk.CTkButton(
@@ -530,14 +670,67 @@ class MainWindow(ctk.CTkFrame):
             command=self._show_chat_options_menu
         )
 
-        # 2. Scrollable Messages View
+        # Thanh Tin Nhắn Đã Ghim (Pinned Message Banner - Row 1)
+        self.pinned_banner = ctk.CTkFrame(self.chat_active_frame, height=36, corner_radius=0, fg_color=("#F0FDF4", "#064E3B"))
+        pin_inner = ctk.CTkFrame(self.pinned_banner, fg_color="transparent")
+        pin_inner.pack(fill="x", padx=14, pady=3)
+        ctk.CTkLabel(pin_inner, text="📌", font=ctk.CTkFont(size=13)).pack(side="left", padx=(0, 6))
+        self.lbl_pinned_text = ctk.CTkLabel(
+            pin_inner,
+            text="",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color=("#15803D", "#4ADE80"),
+            anchor="w"
+        )
+        self.lbl_pinned_text.pack(side="left", fill="x", expand=True)
+        self.btn_unpin = ctk.CTkButton(
+            pin_inner,
+            text="✕ Bỏ ghim",
+            width=65,
+            height=24,
+            font=ctk.CTkFont(size=11),
+            fg_color="transparent",
+            text_color=("#15803D", "#4ADE80"),
+            hover_color=("#DCFCE7", "#065F46"),
+            command=self.unpin_current_message
+        )
+        self.btn_unpin.pack(side="right")
+
+        # 2. Scrollable Messages View (Row 2)
+        self.chat_active_frame.grid_rowconfigure(2, weight=1)
         self.messages_scroll = ctk.CTkScrollableFrame(self.chat_active_frame, fg_color="transparent")
-        self.messages_scroll.grid(row=1, column=0, sticky="nsew", padx=12, pady=6)
+        self.messages_scroll.grid(row=2, column=0, sticky="nsew", padx=12, pady=6)
         self.messages_scroll.grid_columnconfigure(0, weight=1)
 
-        # 3. Bottom Input Bar
+        # 3. Bottom Input Bar (Row 3)
         self.input_bar = ctk.CTkFrame(self.chat_active_frame, height=65, corner_radius=0, fg_color=("white", "#1E293B"))
-        self.input_bar.grid(row=2, column=0, sticky="ew")
+        self.input_bar.grid(row=3, column=0, sticky="ew")
+
+        # Khung hiển thị Trả lời (Reply Bar - ẩn mặc định)
+        self.reply_bar = ctk.CTkFrame(self.input_bar, fg_color=("#EFF6FF", "#1E3A8A"), corner_radius=6)
+        reply_inner = ctk.CTkFrame(self.reply_bar, fg_color="transparent")
+        reply_inner.pack(fill="x", padx=10, pady=3)
+        ctk.CTkLabel(reply_inner, text="↩️", font=ctk.CTkFont(size=12)).pack(side="left", padx=(0, 6))
+        self.lbl_reply_preview = ctk.CTkLabel(
+            reply_inner,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color=("#1D4ED8", "#93C5FD"),
+            anchor="w"
+        )
+        self.lbl_reply_preview.pack(side="left", fill="x", expand=True)
+        ctk.CTkButton(
+            reply_inner,
+            text="✕",
+            width=22,
+            height=22,
+            corner_radius=11,
+            font=ctk.CTkFont(size=10, weight="bold"),
+            fg_color="transparent",
+            text_color=("#1D4ED8", "#93C5FD"),
+            hover_color=("#DBEAFE", "#1E40AF"),
+            command=self._cancel_reply
+        ).pack(side="right")
         
         # Emoji bar buttons + Nút mở bảng Emoji đầy đủ (😊+)
         self.emoji_bar = ctk.CTkFrame(self.input_bar, fg_color="transparent")
@@ -619,6 +812,7 @@ class MainWindow(ctk.CTkFrame):
         self.msg_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.msg_entry.bind("<Return>", lambda e: self.send_text_message())
         self.msg_entry.bind("<Key>", self._on_key_typing)
+        self.msg_entry.bind("<Up>", self._on_msg_entry_up_arrow)
 
         # Nút Gửi
         self.btn_send = ctk.CTkButton(
@@ -894,9 +1088,24 @@ class MainWindow(ctk.CTkFrame):
         # Cập nhật Header
         self.lbl_chat_title.configure(text=conv["title"])
         self.btn_chat_options.pack(side="right", padx=(6, 0))
+        self.btn_info.pack(side="right", padx=(0, 6))
+        self.btn_popout.pack(side="right", padx=(0, 6))
+
+        # Hiển thị hoặc ẩn nút gọi điện (chỉ áp dụng cho trò chuyện 1-1)
+        if conv.get("type") == "direct":
+            self.btn_call_voice.pack(side="right", padx=(0, 6))
+            self.btn_call_video.pack(side="right", padx=(0, 6))
+        else:
+            self.btn_call_voice.pack_forget()
+            self.btn_call_video.pack_forget()
+
         if conv["type"] == "group":
             count = conv.get("member_count", 2)
             self.lbl_chat_subtitle.configure(text=f"👥 Nhóm trò chuyện  •  {count} thành viên")
+            self.active_partner_friend_status = None
+            self.active_partner_blocked = False
+        elif conv["type"] == "saved":
+            self.lbl_chat_subtitle.configure(text="☁️ Không gian lưu trữ dữ liệu & tin nhắn cá nhân")
             self.active_partner_friend_status = None
             self.active_partner_blocked = False
         else:
@@ -914,6 +1123,23 @@ class MainWindow(ctk.CTkFrame):
             else:
                 self.active_partner_friend_status = None
                 self.active_partner_blocked = False
+
+        # Reset thanh trả lời và ẩn ghim cũ
+        self._cancel_reply()
+        self.current_pinned_message = None
+        self.pinned_banner.grid_forget()
+
+        # Tải tin nhắn đã ghim nếu có
+        conv_id = conv["id"]
+        def _fetch_pinned():
+            res = self.net.get_pinned_message(conv_id)
+            if res and res.get("pinned"):
+                def _apply():
+                    if self.active_conv_id == conv_id:
+                        self.current_pinned_message = res.get("pinned")
+                        self._render_pinned_banner()
+                self.master.after(0, _apply)
+        threading.Thread(target=_fetch_pinned, daemon=True).start()
 
         # Highlight lại list
         self._render_conversation_list()
@@ -1069,7 +1295,16 @@ class MainWindow(ctk.CTkFrame):
             m_id = msg.get("id")
             if m_id:
                 self.rendered_msg_ids.add(m_id)
-            bubble = ChatBubble(self.messages_scroll, msg, self.current_user["id"], self.net, on_recall_callback=self.recall_message)
+            bubble = ChatBubble(
+                self.messages_scroll, 
+                msg, 
+                self.current_user["id"], 
+                self.net, 
+                on_recall_callback=self.recall_message,
+                on_reply_callback=self._set_reply_target,
+                on_reaction_callback=self._on_bubble_reaction,
+                on_pin_callback=self._on_bubble_pin
+            )
             bubble.pack(fill="x")
             if m_id:
                 self.msg_bubbles[m_id] = bubble
@@ -1114,9 +1349,11 @@ class MainWindow(ctk.CTkFrame):
             return
         
         self.msg_entry.delete(0, "end")
+        reply_id = self.reply_target_message.get("id") if self.reply_target_message else None
+        self._cancel_reply()
         
         def _send():
-            ok = self.net.send_message(self.active_conv_id, self.current_user["id"], content, msg_type="text")
+            ok = self.net.send_message(self.active_conv_id, self.current_user["id"], content, msg_type="text", reply_to_id=reply_id)
             if not ok:
                 def _restore():
                     cur = self.msg_entry.get().strip()
@@ -1146,9 +1383,11 @@ class MainWindow(ctk.CTkFrame):
         # Báo gửi tệp
         self.btn_attach.configure(state="disabled", text="Đang gửi...")
         self.update_idletasks()
+        reply_id = self.reply_target_message.get("id") if self.reply_target_message else None
+        self._cancel_reply()
         
         def _upload():
-            res = self.net.upload_file(self.active_conv_id, self.current_user["id"], filepath)
+            res = self.net.upload_file(self.active_conv_id, self.current_user["id"], filepath, reply_to_id=reply_id)
             def _done():
                 self.btn_attach.configure(state="normal", text="📎 Đính Kèm")
                 if not res or not res.get("success"):
@@ -1184,7 +1423,16 @@ class MainWindow(ctk.CTkFrame):
                 self.rendered_msg_ids.add(msg_id)
                 
             def _add():
-                bubble = ChatBubble(self.messages_scroll, msg, self.current_user["id"], self.net, on_recall_callback=self.recall_message)
+                bubble = ChatBubble(
+                    self.messages_scroll, 
+                    msg, 
+                    self.current_user["id"], 
+                    self.net, 
+                    on_recall_callback=self.recall_message,
+                    on_reply_callback=self._set_reply_target,
+                    on_reaction_callback=self._on_bubble_reaction,
+                    on_pin_callback=self._on_bubble_pin
+                )
                 bubble.pack(fill="x")
                 if msg_id:
                     self.msg_bubbles[msg_id] = bubble
@@ -1193,6 +1441,29 @@ class MainWindow(ctk.CTkFrame):
         
         # Tải lại danh sách bên trái để cập nhật snippet và vị trí
         self.master.after(0, self.load_conversations)
+
+        # Thông báo Toast Desktop & Cập nhật số tin chưa đọc trên Khay hệ thống
+        sender_id = msg.get("sender_id")
+        if sender_id != self.current_user["id"]:
+            sender_name = msg.get("sender_name", "Tin nhắn mới")
+            content = msg.get("content") or msg.get("original_name") or "Đã gửi một tệp tin"
+            avatar_col = msg.get("avatar_color", "#2563EB")
+            def _toast():
+                try:
+                    ToastNotification(
+                        self.master,
+                        title=sender_name,
+                        message=content,
+                        avatar_color=avatar_col,
+                        on_click=lambda cid=conv_id: self.select_conversation(self._find_conversation_by_id(cid))
+                    )
+                except Exception:
+                    pass
+            self.master.after(0, _toast)
+
+            # Cập nhật số đếm khay hệ thống (System Tray)
+            if hasattr(self.master, "tray") and self.master.tray:
+                self.master.tray.update_tray(self.master.tray.unread_count + 1)
 
     def _on_user_status_changed(self, packet: dict):
         # Có người dùng online hoặc offline -> cập nhật danh sách
@@ -1788,7 +2059,16 @@ class MainWindow(ctk.CTkFrame):
                                     m_id = m.get("id")
                                     if m_id:
                                         self.rendered_msg_ids.add(m_id)
-                                    bubble = ChatBubble(self.messages_scroll, m, self.current_user["id"], self.net, on_recall_callback=self.recall_message)
+                                    bubble = ChatBubble(
+                                        self.messages_scroll, 
+                                        m, 
+                                        self.current_user["id"], 
+                                        self.net, 
+                                        on_recall_callback=self.recall_message,
+                                        on_reply_callback=self._set_reply_target,
+                                        on_reaction_callback=self._on_bubble_reaction,
+                                        on_pin_callback=self._on_bubble_pin
+                                    )
                                     bubble.pack(fill="x")
                                     if m_id:
                                         self.msg_bubbles[m_id] = bubble
@@ -1830,4 +2110,446 @@ class MainWindow(ctk.CTkFrame):
                         self.select_conversation(c)
                         break
             self.after(300, _select_new)
+
+    # --- TÍNH NĂNG TRẢ LỜI (REPLY), THẢ CẢM XÚC (REACTIONS) & GHIM TIN NHẮN (PIN) ---
+    def _set_reply_target(self, msg: dict):
+        self.reply_target_message = msg
+        sender = msg.get("sender_name", "Tin nhắn")
+        content = msg.get("content", "")
+        if msg.get("message_type") in ("image", "file"):
+            content = f"[{msg.get('file_name', 'Tệp đính kèm')}]"
+        snip = content[:50] + "..." if len(content) > 50 else content
+        self.lbl_reply_preview.configure(text=f"Đang trả lời {sender}: {snip}")
+        self.reply_bar.pack(fill="x", padx=14, pady=(2, 2), before=self.input_row)
+        self.msg_entry.focus_set()
+
+    def _cancel_reply(self):
+        self.reply_target_message = None
+        try:
+            self.reply_bar.pack_forget()
+        except Exception:
+            pass
+
+    def _on_bubble_reaction(self, message_id: int, reaction: str):
+        if not self.active_conv_id:
+            return
+        conv_id = self.active_conv_id
+        def _do():
+            self.net.toggle_reaction(conv_id, message_id, self.current_user["id"], reaction)
+        threading.Thread(target=_do, daemon=True).start()
+
+    def _on_reaction_updated(self, packet: dict):
+        msg_id = packet.get("message_id")
+        reactions = packet.get("reactions", [])
+        if msg_id and msg_id in self.msg_bubbles:
+            def _update():
+                if msg_id in self.msg_bubbles:
+                    self.msg_bubbles[msg_id].update_reactions(reactions)
+            self.master.after(0, _update)
+
+    def _on_bubble_pin(self, message_id: int):
+        if not self.active_conv_id:
+            return
+        conv_id = self.active_conv_id
+        is_pinned = self.current_pinned_message and self.current_pinned_message.get("id") == message_id
+        def _do():
+            if is_pinned:
+                self.net.unpin_message(conv_id)
+            else:
+                self.net.pin_message(conv_id, message_id, self.current_user["id"])
+        threading.Thread(target=_do, daemon=True).start()
+
+    def unpin_current_message(self):
+        if not self.active_conv_id:
+            return
+        conv_id = self.active_conv_id
+        threading.Thread(target=lambda: self.net.unpin_message(conv_id), daemon=True).start()
+
+    def _render_pinned_banner(self):
+        if self.current_pinned_message:
+            sender = self.current_pinned_message.get("sender_name", "")
+            content = self.current_pinned_message.get("content", "")
+            if len(content) > 60:
+                content = content[:60] + "..."
+            self.lbl_pinned_text.configure(text=f"📌 Đã ghim ({sender}): {content}")
+            self.pinned_banner.grid(row=1, column=0, sticky="ew")
+        else:
+            self.pinned_banner.grid_forget()
+
+    def _on_pinned_updated(self, packet: dict):
+        conv_id = packet.get("conversation_id")
+        if self.active_conv_id == conv_id:
+            self.current_pinned_message = packet.get("pinned")
+            self.master.after(0, self._render_pinned_banner)
+
+    # --- TÍNH NĂNG CLOUD CỦA TÔI (SAVED MESSAGES) ---
+    def open_saved_messages(self):
+        def _do():
+            res = self.net.get_saved_conversation(self.current_user["id"])
+            if res and res.get("conversation_id"):
+                conv_id = res.get("conversation_id")
+                saved_conv = next((c for c in self.conversations if c["id"] == conv_id), None)
+                if not saved_conv:
+                    saved_conv = {
+                        "id": conv_id,
+                        "title": "Cloud của tôi (Lưu trữ cá nhân)",
+                        "type": "saved",
+                        "avatar_color": "#4F46E5",
+                        "partner_id": None
+                    }
+                    self.conversations.insert(0, saved_conv)
+                def _sel():
+                    self.select_conversation(saved_conv)
+                self.master.after(0, _sel)
+        threading.Thread(target=_do, daemon=True).start()
+
+    # --- TÍNH NĂNG CUỘC GỌI THOẠI & CUỘC GỌI VIDEO (VOICE & VIDEO CALL) ---
+    def start_call(self, call_type="voice"):
+        if not self.active_conv_data:
+            self._show_toast("⚠️ Vui lòng chọn một cuộc trò chuyện để gọi!")
+            return
+        if self.active_conv_data.get("type") == "saved":
+            self._show_toast("⚠️ Không thể gọi thoại trên không gian lưu trữ Cloud của tôi!")
+            return
+        if self.active_conv_data.get("type") == "group":
+            self._show_toast("ℹ️ Chức năng gọi hiện hỗ trợ trên cuộc trò chuyện 1-1!")
+            return
+        partner_id = self.active_conv_data.get("partner_id")
+        if not partner_id:
+            self._show_toast("⚠️ Không tìm thấy đối phương để gọi!")
+            return
+        if self.active_call_window and self.active_call_window.running:
+            self._show_toast("⚠️ Bạn đang trong một cuộc gọi khác!")
+            return
+
+        type_text = "cuộc gọi video" if call_type == "video" else "cuộc gọi thoại"
+        self._show_toast(f"📞 Đang khởi tạo {type_text}...")
+
+        def _do_invite():
+            res = self.net.call_invite(
+                caller_id=self.current_user["id"],
+                receiver_id=partner_id,
+                call_type=call_type,
+                conversation_id=self.active_conv_id
+            )
+            def _apply():
+                if res and res.get("success"):
+                    channel_id = res.get("channel_id")
+                    self.active_call_window = ActiveCallWindow(
+                        master=self.master,
+                        channel_id=channel_id,
+                        current_user_id=self.current_user["id"],
+                        partner_name=self.active_conv_data.get("title", "Người dùng"),
+                        partner_avatar_color=self.active_conv_data.get("avatar_color", "#2563EB"),
+                        call_type=call_type,
+                        network_client=self.net,
+                        on_ended_cb=self._on_call_closed
+                    )
+                else:
+                    msg = res.get("message", "Khởi tạo cuộc gọi thất bại!") if res else "Không thể kết nối máy chủ!"
+                    self._show_toast(f"❌ {msg}")
+            self.master.after(0, _apply)
+        threading.Thread(target=_do_invite, daemon=True).start()
+
+    def _on_call_incoming(self, packet: dict):
+        def _handle():
+            if self.active_call_window and self.active_call_window.running:
+                self.net.call_reject(packet.get("channel_id"))
+                return
+            if self.incoming_call_dialog and self.incoming_call_dialog.winfo_exists():
+                return
+            self.incoming_call_dialog = IncomingCallDialog(
+                master=self.master,
+                call_info=packet,
+                on_accept_cb=self._accept_incoming_call,
+                on_reject_cb=self._reject_incoming_call
+            )
+        self.master.after(0, _handle)
+
+    def _accept_incoming_call(self, call_info: dict):
+        channel_id = call_info.get("channel_id")
+        self.net.call_accept(channel_id)
+        self.active_call_window = ActiveCallWindow(
+            master=self.master,
+            channel_id=channel_id,
+            current_user_id=self.current_user["id"],
+            partner_name=call_info.get("caller_name", "Người dùng"),
+            partner_avatar_color=call_info.get("avatar_color", "#2563EB"),
+            call_type=call_info.get("call_type", "voice"),
+            network_client=self.net,
+            on_ended_cb=self._on_call_closed
+        )
+        self.active_call_window.set_connected()
+
+    def _reject_incoming_call(self, call_info: dict):
+        channel_id = call_info.get("channel_id")
+        self.net.call_reject(channel_id)
+        self.incoming_call_dialog = None
+
+    def _on_call_connected(self, packet: dict):
+        def _handle():
+            if self.active_call_window and self.active_call_window.channel_id == packet.get("channel_id"):
+                self.active_call_window.set_connected()
+        self.master.after(0, _handle)
+
+    def _on_call_rejected(self, packet: dict):
+        def _handle():
+            if self.active_call_window and self.active_call_window.channel_id == packet.get("channel_id"):
+                reason = packet.get("reason", "Đối phương đã từ chối cuộc gọi.")
+                self._show_toast(f"📞 {reason}")
+                self.active_call_window.end_call()
+                self.active_call_window = None
+        self.master.after(0, _handle)
+
+    def _on_call_ended(self, packet: dict):
+        def _handle():
+            if self.incoming_call_dialog and self.incoming_call_dialog.winfo_exists():
+                self.incoming_call_dialog.destroy()
+                self.incoming_call_dialog = None
+            if self.active_call_window and self.active_call_window.running:
+                self.active_call_window.running = False
+                self.active_call_window.destroy()
+                self.active_call_window = None
+                self._show_toast("📞 Cuộc gọi đã kết thúc.")
+        self.master.after(0, _handle)
+
+    def _on_call_media_relay(self, packet: dict):
+        if self.active_call_window and self.active_call_window.running:
+            self.active_call_window.receive_media(packet)
+
+    def _on_call_closed(self, channel_id: str):
+        self.active_call_window = None
+
+    # --- TÍNH NĂNG DESKTOP CHUYÊN SÂU ---
+    def _find_conversation_by_id(self, conv_id: int):
+        for c in self.conversations:
+            if c.get("id") == conv_id:
+                return c
+        return {"id": conv_id, "title": f"Hội thoại #{conv_id}"}
+
+    def _on_escape_pressed(self, event=None):
+        if self.info_sidebar_open:
+            self.toggle_info_sidebar()
+            return "break"
+        if self.reply_target_message:
+            self._cancel_reply()
+            return "break"
+        if hasattr(self, "search_entry") and self.search_entry.get():
+            self.search_entry.delete(0, "end")
+            self._on_search_change("")
+            return "break"
+
+    def _on_msg_entry_up_arrow(self, event=None):
+        """Bấm phím mũi tên Lên khi ô nhập trống để sửa hoặc thu hồi tin nhắn gần nhất."""
+        if self.msg_entry.get().strip():
+            return
+        if not self.active_conv_id:
+            return
+        
+        my_bubbles = [b for b in self.msg_bubbles.values() if b.is_self and not b.message.get("is_deleted")]
+        if my_bubbles:
+            last_bubble = my_bubbles[-1]
+            last_msg = last_bubble.message
+            content = last_msg.get("content", "")
+            if content:
+                self.msg_entry.insert(0, content)
+                self.msg_entry.select_range(0, "end")
+                self._show_toast("✏️ Nhấn Enter để gửi lại nội dung, hoặc chuột phải vào tin để thu hồi!")
+        return "break"
+
+    def send_image_file(self, filepath: str):
+        """Gửi trực tiếp hình ảnh (chụp màn hình hoặc kéo thả) vào hội thoại hiện tại."""
+        if not self.active_conv_id:
+            self._show_toast("⚠️ Vui lòng chọn một cuộc trò chuyện trước khi gửi ảnh!")
+            return
+        reply_id = self.reply_target_message.get("id") if self.reply_target_message else None
+        self._cancel_reply()
+        def _upload():
+            self.net.upload_file(self.active_conv_id, self.current_user["id"], filepath, reply_to_id=reply_id)
+        threading.Thread(target=_upload, daemon=True).start()
+
+    def open_screenshot_tool(self):
+        if hasattr(self.master, "trigger_screenshot"):
+            self.master.trigger_screenshot()
+
+    def lock_app(self):
+        if hasattr(self.master, "trigger_lock"):
+            self.master.trigger_lock()
+
+    def toggle_topmost(self):
+        if hasattr(self.master, "toggle_topmost"):
+            is_top = self.master.toggle_topmost()
+            if is_top:
+                self.btn_always_on_top.configure(fg_color="#3B82F6", text_color="white", text="📌 Đã ghim")
+            else:
+                self.btn_always_on_top.configure(fg_color=("gray90", "#334155"), text_color=("#0F172A", "#F8FAFC"), text="📌 Ghim")
+
+    def popout_current_conversation(self):
+        """Tách cuộc trò chuyện đang xem ra một cửa sổ độc lập (Pop-out Window)."""
+        if not self.active_conv_id or not self.active_conv_data:
+            return
+        popout = PopoutChatWindow(
+            self.master,
+            self.current_user,
+            self.net,
+            self.active_conv_id,
+            self.active_conv_data
+        )
+
+    def toggle_info_sidebar(self):
+        """Bật / tắt cột thứ 3 hiển thị thông tin hội thoại, ảnh, tệp đính kèm."""
+        if self.info_sidebar_open:
+            if self.info_sidebar:
+                self.info_sidebar.grid_forget()
+            self.info_sidebar_open = False
+            self.btn_info.configure(fg_color=("#F1F5F9", "#334155"), text_color=("#475569", "#94A3B8"))
+        else:
+            if not self.info_sidebar:
+                self._build_info_sidebar()
+            self.grid_columnconfigure(2, weight=0, minsize=290)
+            self.info_sidebar.grid(row=1, column=2, sticky="nsew")
+            self.info_sidebar_open = True
+            self.btn_info.configure(fg_color="#3B82F6", text_color="white")
+            self._populate_info_sidebar()
+
+    def _build_info_sidebar(self):
+        self.info_sidebar = ctk.CTkFrame(self, width=290, corner_radius=0, fg_color=("white", "#1E293B"))
+        
+        # Header info sidebar
+        sb_header = ctk.CTkFrame(self.info_sidebar, height=45, fg_color="transparent")
+        sb_header.pack(fill="x", padx=12, pady=10)
+        
+        ctk.CTkLabel(sb_header, text="Thông tin hội thoại", font=ctk.CTkFont(size=14, weight="bold")).pack(side="left")
+        
+        btn_close = ctk.CTkButton(
+            sb_header, text="✕", width=26, height=26,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="transparent", text_color="gray60", hover_color=("gray85", "#334155"),
+            command=self.toggle_info_sidebar
+        )
+        btn_close.pack(side="right")
+        
+        # Scrollable Content
+        self.info_scroll = ctk.CTkScrollableFrame(self.info_sidebar, fg_color="transparent")
+        self.info_scroll.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+    def _populate_info_sidebar(self):
+        if not self.info_sidebar or not self.active_conv_data:
+            return
+            
+        for w in self.info_scroll.winfo_children():
+            w.destroy()
+            
+        conv = self.active_conv_data
+        title = conv.get("title", "Hội thoại")
+        avatar_col = conv.get("avatar_color", "#2563EB")
+        
+        # Profile Header in Sidebar
+        avatar_btn = ctk.CTkButton(
+            self.info_scroll,
+            text=title[:1].upper(),
+            width=70, height=70,
+            corner_radius=35,
+            fg_color=avatar_col,
+            text_color="white",
+            font=ctk.CTkFont(size=26, weight="bold"),
+            state="disabled"
+        )
+        avatar_btn.pack(pady=(10, 6))
+        
+        ctk.CTkLabel(self.info_scroll, text=title, font=ctk.CTkFont(size=15, weight="bold")).pack()
+        
+        st_text = self.lbl_chat_subtitle.cget("text")
+        ctk.CTkLabel(self.info_scroll, text=st_text, font=ctk.CTkFont(size=11), text_color="gray60").pack(pady=(2, 12))
+        
+        # Quick Actions Row in Info Sidebar
+        act_row = ctk.CTkFrame(self.info_scroll, fg_color="transparent")
+        act_row.pack(fill="x", pady=(0, 10))
+        
+        btn_pop = ctk.CTkButton(act_row, text="↗️ Tách cửa sổ", height=30, font=ctk.CTkFont(size=11),
+                                fg_color=("#F1F5F9", "#334155"), text_color=("#0F172A", "#F8FAFC"),
+                                command=self.popout_current_conversation)
+        btn_pop.pack(side="left", fill="x", expand=True, padx=2)
+
+        # Tabview for Media, Files & Pinned
+        tabs = ctk.CTkTabview(self.info_scroll, height=360)
+        tabs.pack(fill="both", expand=True, pady=6)
+        
+        tab_media = tabs.add("🖼️ Ảnh")
+        tab_files = tabs.add("📁 Tệp tin")
+        tab_pinned = tabs.add("📌 Ghim")
+        
+        # Fetch messages to populate media and files
+        conv_id = self.active_conv_id
+        def _load_data():
+            res = self.net.get_messages(conv_id)
+            if not res or "messages" not in res:
+                return
+            msgs = res["messages"]
+            img_msgs = [m for m in msgs if m.get("message_type") == "image"]
+            file_msgs = [m for m in msgs if m.get("message_type") == "file"]
+            
+            def _render():
+                # 1. Render Media Tab
+                if img_msgs:
+                    m_scroll = ctk.CTkScrollableFrame(tab_media, fg_color="transparent")
+                    m_scroll.pack(fill="both", expand=True)
+                    for im in reversed(img_msgs):
+                        orig_name = im.get("original_name", "Ảnh")
+                        row = ctk.CTkFrame(m_scroll, fg_color=("#F8FAFC", "#0F172A"), corner_radius=6)
+                        row.pack(fill="x", pady=2, padx=2)
+                        ctk.CTkLabel(row, text="🖼️", font=ctk.CTkFont(size=14)).pack(side="left", padx=6)
+                        ctk.CTkLabel(row, text=orig_name[:20], font=ctk.CTkFont(size=11)).pack(side="left", fill="x", expand=True)
+                        ctk.CTkButton(row, text="Tải", width=40, height=24, font=ctk.CTkFont(size=10),
+                                      command=lambda fid=im.get("file_id"), fn=orig_name: self._download_file_direct(fid, fn)).pack(side="right", padx=4)
+                else:
+                    ctk.CTkLabel(tab_media, text="Chưa có hình ảnh nào", font=ctk.CTkFont(size=11), text_color="gray60").pack(pady=20)
+                
+                # 2. Render Files Tab
+                if file_msgs:
+                    f_scroll = ctk.CTkScrollableFrame(tab_files, fg_color="transparent")
+                    f_scroll.pack(fill="both", expand=True)
+                    for fm in reversed(file_msgs):
+                        orig_name = fm.get("original_name", "Tài liệu")
+                        row = ctk.CTkFrame(f_scroll, fg_color=("#F8FAFC", "#0F172A"), corner_radius=6)
+                        row.pack(fill="x", pady=2, padx=2)
+                        ctk.CTkLabel(row, text="📄", font=ctk.CTkFont(size=14)).pack(side="left", padx=6)
+                        ctk.CTkLabel(row, text=orig_name[:18], font=ctk.CTkFont(size=11)).pack(side="left", fill="x", expand=True)
+                        ctk.CTkButton(row, text="Tải", width=40, height=24, font=ctk.CTkFont(size=10),
+                                      command=lambda fid=fm.get("file_id"), fn=orig_name: self._download_file_direct(fid, fn)).pack(side="right", padx=4)
+                else:
+                    ctk.CTkLabel(tab_files, text="Chưa có tệp tin nào", font=ctk.CTkFont(size=11), text_color="gray60").pack(pady=20)
+                
+                # 3. Render Pinned Tab
+                if self.current_pinned_message:
+                    pin_box = ctk.CTkFrame(tab_pinned, fg_color=("#F0FDF4", "#064E3B"), corner_radius=8)
+                    pin_box.pack(fill="x", padx=4, pady=8)
+                    ctk.CTkLabel(pin_box, text=f"📌 {self.current_pinned_message.get('sender_name', 'Người dùng')}:", 
+                                 font=ctk.CTkFont(size=11, weight="bold")).pack(anchor="w", padx=8, pady=(6, 2))
+                    ctk.CTkLabel(pin_box, text=self.current_pinned_message.get("content", ""), 
+                                 font=ctk.CTkFont(size=11), wraplength=220, justify="left").pack(anchor="w", padx=8, pady=(0, 6))
+                else:
+                    ctk.CTkLabel(tab_pinned, text="Chưa có tin nhắn nào được ghim", font=ctk.CTkFont(size=11), text_color="gray60").pack(pady=20)
+
+            self.master.after(0, _render)
+        threading.Thread(target=_load_data, daemon=True).start()
+
+    def _download_file_direct(self, file_id: int, default_name: str):
+        if not file_id:
+            return
+        save_path = filedialog.asksaveasfilename(initialfile=default_name, title="Lưu tệp tin", defaultextension=".*")
+        if not save_path:
+            return
+        def _task():
+            res = self.net.download_file(file_id)
+            if res and res.get("success"):
+                import base64
+                data = base64.b64decode(res.get("file_data", ""))
+                with open(save_path, "wb") as f:
+                    f.write(data)
+                self.master.after(0, lambda: messagebox.showinfo("Thành công", f"Đã lưu tệp tại:\n{save_path}"))
+            else:
+                self.master.after(0, lambda: messagebox.showerror("Lỗi", "Không thể tải tệp tin!"))
+        threading.Thread(target=_task, daemon=True).start()
+
 

@@ -62,12 +62,16 @@ def format_time(ts_str: str) -> str:
 import tkinter as tk
 
 class ChatBubble(ctk.CTkFrame):
-    def __init__(self, master, message: dict, current_user_id: int, network_client, on_recall_callback=None):
+    def __init__(self, master, message: dict, current_user_id: int, network_client, 
+                 on_recall_callback=None, on_reply_callback=None, on_reaction_callback=None, on_pin_callback=None):
         super().__init__(master, fg_color="transparent")
         self.message = message
         self.current_user_id = current_user_id
         self.net = network_client
         self.on_recall_callback = on_recall_callback
+        self.on_reply_callback = on_reply_callback
+        self.on_reaction_callback = on_reaction_callback
+        self.on_pin_callback = on_pin_callback
         self.is_self = (message.get("sender_id") == current_user_id)
         self.img_ref = None  # Giữ tham chiếu ảnh CTkImage tránh bị garbage collect
         
@@ -116,6 +120,39 @@ class ChatBubble(ctk.CTkFrame):
             corner_radius=14 if not pure_emoji else 0
         )
         bubble_card.pack(anchor=bubble_align)
+
+        # Trích dẫn trả lời tin nhắn (Reply Quote Box)
+        if not is_deleted and self.message.get("reply_to_id"):
+            reply_sender = self.message.get("reply_sender_name") or "Người dùng"
+            reply_txt = self.message.get("reply_content") or "Tệp đính kèm / Hình ảnh"
+            quote_box = ctk.CTkFrame(
+                bubble_card,
+                fg_color=("#1D4ED8" if self.is_self else ("#CBD5E1", "#1E293B")),
+                corner_radius=6
+            )
+            quote_box.pack(fill="x", padx=8, pady=(6, 2))
+
+            bar_col = "#93C5FD" if self.is_self else "#0284C7"
+            ctk.CTkFrame(quote_box, width=3, fg_color=bar_col, corner_radius=2).pack(side="left", fill="y", padx=(2, 6), pady=2)
+
+            text_col = ctk.CTkFrame(quote_box, fg_color="transparent")
+            text_col.pack(side="left", fill="x", expand=True, pady=2)
+
+            ctk.CTkLabel(
+                text_col,
+                text=f"↩️ {reply_sender}",
+                font=ctk.CTkFont(size=10, weight="bold"),
+                text_color="#93C5FD" if self.is_self else "#0284C7",
+                anchor="w"
+            ).pack(anchor="w")
+
+            ctk.CTkLabel(
+                text_col,
+                text=reply_txt[:55] + ("..." if len(reply_txt) > 55 else ""),
+                font=ctk.CTkFont(size=10),
+                text_color="#E0E7FF" if self.is_self else ("#475569", "#94A3B8"),
+                anchor="w"
+            ).pack(anchor="w")
 
         # 0. Nếu là tin nhắn đã bị thu hồi
         if is_deleted:
@@ -230,16 +267,45 @@ class ChatBubble(ctk.CTkFrame):
                 text_color=("gray40", "gray60")
             ).pack(anchor="w")
             
+            btn_row = ctk.CTkFrame(file_box, fg_color="transparent")
+            btn_row.pack(fill="x", padx=10, pady=(0, 8))
+
+            btn_open = ctk.CTkButton(
+                btn_row,
+                text="▶ Mở file",
+                height=28,
+                width=80,
+                font=ctk.CTkFont(size=11, weight="bold"),
+                fg_color="#3B82F6",
+                hover_color="#2563EB",
+                command=self.open_file
+            )
+            btn_open.pack(side="left", padx=(0, 4))
+
+            btn_folder = ctk.CTkButton(
+                btn_row,
+                text="📂 Thư mục",
+                height=28,
+                width=80,
+                font=ctk.CTkFont(size=11),
+                fg_color=("gray75", "#334155"),
+                text_color=("#0F172A", "#F8FAFC"),
+                hover_color=("gray70", "#475569"),
+                command=self.reveal_in_folder
+            )
+            btn_folder.pack(side="left", padx=(0, 4))
+
             btn_dl = ctk.CTkButton(
-                file_box, 
-                text="📥 Tải Về Máy", 
-                height=30, 
-                font=ctk.CTkFont(size=12, weight="bold"),
+                btn_row, 
+                text="💾 Lưu...", 
+                height=28, 
+                width=70,
+                font=ctk.CTkFont(size=11),
                 fg_color="#10B981",
                 hover_color="#059669",
                 command=self.download_and_save_file
             )
-            btn_dl.pack(fill="x", padx=10, pady=(0, 8))
+            btn_dl.pack(side="left")
 
         # Dòng thời gian và trạng thái gửi
         meta_row = ctk.CTkFrame(bubble_card, fg_color="transparent")
@@ -254,7 +320,30 @@ class ChatBubble(ctk.CTkFrame):
         )
         time_label.pack(side="right")
 
-        # Gắn menu chuột phải tiện lợi (Sao chép, Thu hồi tin nhắn)
+        # Thẻ biểu cảm cảm xúc (Reaction Badges)
+        if not is_deleted and self.message.get("reactions"):
+            reactions = self.message.get("reactions", [])
+            rx_frame = ctk.CTkFrame(bubble_wrapper, fg_color="transparent")
+            rx_frame.pack(anchor=bubble_align, padx=4, pady=(2, 0))
+            for r in reactions:
+                symbol = r.get("reaction")
+                cnt = r.get("count", 1)
+                my_rx = any(u.get("id") == self.current_user_id for u in r.get("users", []))
+                badge = ctk.CTkButton(
+                    rx_frame,
+                    text=f"{symbol} {cnt}",
+                    height=20,
+                    width=38,
+                    corner_radius=10,
+                    font=ctk.CTkFont(size=10, weight="bold"),
+                    fg_color="#3B82F6" if my_rx else ("#E2E8F0", "#334155"),
+                    text_color="white" if my_rx else ("#0F172A", "#F8FAFC"),
+                    hover_color="#2563EB" if my_rx else ("#CBD5E1", "#475569"),
+                    command=lambda s=symbol: self._trigger_reaction(s)
+                )
+                badge.pack(side="left", padx=2)
+
+        # Gắn menu chuột phải tiện lợi (Sao chép, Thả cảm xúc, Trả lời, Ghim, Thu hồi)
         self._bind_context_menu(bubble_card)
         self._bind_context_menu(bubble_wrapper)
 
@@ -268,20 +357,70 @@ class ChatBubble(ctk.CTkFrame):
 
     def _show_context_menu(self, event):
         try:
-            menu = tk.Menu(self, tearoff=0)
+            import tkinter as tk
+            is_dark = ctk.get_appearance_mode() == "Dark"
+            bg_color = "#1E293B" if is_dark else "#FFFFFF"
+            fg_color = "#F8FAFC" if is_dark else "#0F172A"
+            active_bg = "#334155" if is_dark else "#E2E8F0"
+            active_fg = "#38BDF8" if is_dark else "#0284C7"
+
+            menu = tk.Menu(
+                self,
+                tearoff=0,
+                bg=bg_color,
+                fg=fg_color,
+                activebackground=active_bg,
+                activeforeground=active_fg,
+                font=("Segoe UI", 10),
+                relief="solid",
+                bd=1
+            )
             content = self.message.get("content", "")
             is_deleted = self.message.get("is_deleted", 0)
-            
+
+            if not is_deleted:
+                # 1. Menu thả cảm xúc
+                rx_menu = tk.Menu(menu, tearoff=0, bg=bg_color, fg=fg_color, activebackground=active_bg, activeforeground=active_fg)
+                for emo in ["❤️ Yêu thích", "👍 Thích", "😂 Haha", "😮 Wow", "😢 Buồn", "😡 Phẫn nộ"]:
+                    symbol = emo.split()[0]
+                    rx_menu.add_command(label=emo, command=lambda s=symbol: self._trigger_reaction(s))
+                menu.add_cascade(label="💖 Thả cảm xúc...", menu=rx_menu)
+
+                # 2. Trả lời trích dẫn
+                menu.add_command(label="↩️ Trả lời tin nhắn này", command=self._trigger_reply)
+
+                # 3. Ghim tin nhắn
+                menu.add_command(label="📌 Ghim tin nhắn này", command=self._trigger_pin)
+                menu.add_separator()
+
             if not is_deleted and content:
                 menu.add_command(label="📋 Sao chép nội dung", command=self._copy_text)
-            
+
             if self.is_self and not is_deleted:
                 menu.add_separator()
                 menu.add_command(label="🗑️ Thu hồi tin nhắn", command=self._confirm_recall)
-                
+
             menu.tk_popup(event.x_root, event.y_root)
         except Exception:
             pass
+
+    def _trigger_reaction(self, reaction_symbol):
+        if self.on_reaction_callback:
+            self.on_reaction_callback(self.message.get("id"), reaction_symbol)
+
+    def _trigger_reply(self):
+        if self.on_reply_callback:
+            self.on_reply_callback(self.message)
+
+    def _trigger_pin(self):
+        if self.on_pin_callback:
+            self.on_pin_callback(self.message)
+
+    def update_reactions(self, new_reactions: list):
+        self.message["reactions"] = new_reactions
+        for w in self.winfo_children():
+            w.destroy()
+        self._build_bubble()
 
     def _copy_text(self):
         try:
@@ -419,3 +558,50 @@ class ChatBubble(ctk.CTkFrame):
             self.after(0, _done)
 
         threading.Thread(target=_do_download, daemon=True).start()
+
+    def _ensure_cached(self) -> Optional[str]:
+        """Tải tệp vào thư mục cache nếu chưa có."""
+        cache_path = self._get_cache_path()
+        if not os.path.exists(cache_path):
+            file_id = self.message.get("file_id")
+            if not file_id:
+                return None
+            res = self.net.download_file(file_id)
+            if res and res.get("success"):
+                try:
+                    data = base64.b64decode(res.get("file_data", ""))
+                    with open(cache_path, "wb") as f:
+                        f.write(data)
+                except Exception:
+                    return None
+            else:
+                return None
+        return cache_path
+
+    def open_file(self):
+        """Mở tệp tin trực tiếp bằng ứng dụng mặc định của hệ thống."""
+        def _task():
+            cache_path = self._ensure_cached()
+            if cache_path and os.path.exists(cache_path):
+                try:
+                    os.startfile(cache_path)
+                except Exception as e:
+                    self.after(0, lambda: messagebox.showerror("Lỗi mở file", f"Không thể mở tệp: {e}"))
+            else:
+                self.after(0, lambda: messagebox.showerror("Lỗi", "Không thể tải tệp để mở!"))
+        threading.Thread(target=_task, daemon=True).start()
+
+    def reveal_in_folder(self):
+        """Mở File Explorer và chọn ngay tệp tin này."""
+        def _task():
+            cache_path = self._ensure_cached()
+            if cache_path and os.path.exists(cache_path):
+                try:
+                    import subprocess
+                    subprocess.run(["explorer", f"/select,{os.path.normpath(cache_path)}"])
+                except Exception as e:
+                    self.after(0, lambda: messagebox.showerror("Lỗi", f"Không thể mở thư mục: {e}"))
+            else:
+                self.after(0, lambda: messagebox.showerror("Lỗi", "Không thể tải tệp để định vị!"))
+        threading.Thread(target=_task, daemon=True).start()
+

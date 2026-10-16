@@ -4,6 +4,7 @@ import json
 import struct
 import os
 import sys
+import time
 import base64
 import uuid
 from typing import Optional
@@ -47,8 +48,8 @@ class ChatServer:
         self.active_clients = {}
         # Mapping: client_socket -> user_id
         self.socket_to_user = {}
-        self.lock = threading.Lock()
-        self.send_lock = threading.Lock()
+        self.lock = threading.RLock()
+        self.send_lock = threading.RLock()
 
     def start(self):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -207,15 +208,16 @@ class ChatServer:
         except Exception as e:
             log(f"[-] Loi xu ly client {client_addr}: {e}")
         finally:
-            # Xử lý khi ngắt kết nối
+            uid = None
             with self.lock:
                 if client_sock in self.socket_to_user:
                     uid = self.socket_to_user.pop(client_sock)
                     if uid in self.active_clients and self.active_clients[uid] == client_sock:
                         del self.active_clients[uid]
                     self.db.set_online_status(uid, False)
-                    self.notify_status_change(uid, False)
-                    log(f"[-] Nguoi dung (ID: {uid}) da ngat ket noi.")
+            if uid:
+                self.notify_status_change(uid, False)
+                log(f"[-] Nguoi dung (ID: {uid}) da ngat ket noi.")
             try:
                 client_sock.close()
             except Exception:
@@ -308,7 +310,8 @@ class ChatServer:
                             "message": "Không thể gửi tin nhắn vì cuộc trò chuyện đã bị chặn!"
                         }
             
-            saved_msg = self.db.save_message(conv_id, sender_id, msg_type, content)
+            reply_to_id = packet.get("reply_to_id")
+            saved_msg = self.db.save_message(conv_id, sender_id, msg_type, content, reply_to_id=reply_to_id)
             if saved_msg:
                 # Gửi cho tất cả thành viên trong nhóm đang online
                 members = self.db.get_conversation_members(conv_id)
@@ -362,7 +365,8 @@ class ChatServer:
                 
                 # Tạo tin nhắn kèm file
                 caption = packet.get("caption", "") or f"Đã gửi tệp: {filename}"
-                saved_msg = self.db.save_message(conv_id, sender_id, file_type, caption, file_id)
+                reply_to_id = packet.get("reply_to_id")
+                saved_msg = self.db.save_message(conv_id, sender_id, file_type, caption, file_id, reply_to_id=reply_to_id)
                 
                 # Broadcast tin nhắn kèm tệp tin
                 members = self.db.get_conversation_members(conv_id)
@@ -446,7 +450,6 @@ class ChatServer:
                 return {"action": "create_group_response", "success": False, "message": "Số lượng thành viên vượt quá giới hạn (tối đa 100)!"}
 
             # 1. Chống spam: Giới hạn tần suất tạo nhóm (tối thiểu cách nhau 3 giây)
-            import time
             now = time.time()
             if not hasattr(self, "_group_create_cooldown"):
                 self._group_create_cooldown = {}
@@ -635,7 +638,168 @@ class ChatServer:
                 "is_blocked": (is_blocked_by_me or is_blocked_by_them)
             }
 
-        return None
+        # 21. Thả / Đổi / Gỡ cảm xúc tin nhắn (Reactions: ❤️, 👍, 😂, 😮, 😢, 😡)
+        elif action == "toggle_reaction":
+            message_id = packet.get("message_id")
+            user_id = packet.get("user_id")
+            reaction = packet.get("reaction")
+            reactions, conv_id = self.db.toggle_reaction(message_id, user_id, reaction)
+            if conv_id:
+                members = self.db.get_conversation_members(conv_id)
+                self.broadcast_to_users([m["id"] for m in members], {
+                    "type": "reaction_updated",
+                    "conversation_id": conv_id,
+                    "message_id": message_id,
+                    "reactions": reactions
+                })
+            return {"action": "toggle_reaction_response", "success": True, "message_id": message_id, "reactions": reactions}
+
+        # 22. Ghim tin nhắn (Pin Message)
+        elif action == "pin_message":
+            conv_id = packet.get("conversation_id")
+            message_id = packet.get("message_id")
+            user_id = packet.get("user_id")
+            pinned = self.db.pin_message(conv_id, message_id, user_id)
+            members = self.db.get_conversation_members(conv_id)
+            self.broadcast_to_users([m["id"] for m in members], {
+                "type": "pinned_updated",
+                "conversation_id": conv_id,
+                "pinned": pinned
+            })
+            return {"action": "pin_message_response", "success": True, "pinned": pinned}
+
+        # 23. Bỏ ghim tin nhắn (Unpin Message)
+        elif action == "unpin_message":
+            conv_id = packet.get("conversation_id")
+            self.db.unpin_message(conv_id)
+            members = self.db.get_conversation_members(conv_id)
+            self.broadcast_to_users([m["id"] for m in members], {
+                "type": "pinned_updated",
+                "conversation_id": conv_id,
+                "pinned": None
+            })
+            return {"action": "unpin_message_response", "success": True}
+
+        # 24. Lấy tin nhắn ghim hiện tại của cuộc hội thoại
+        elif action == "get_pinned_message":
+            conv_id = packet.get("conversation_id")
+            pinned = self.db.get_pinned_message(conv_id)
+            return {"action": "get_pinned_message_response", "success": True, "pinned": pinned}
+
+        # 25. Lấy hoặc tạo cuộc trò chuyện "Cloud của tôi (Saved Messages)"
+        elif action == "get_saved_conversation":
+            user_id = packet.get("user_id")
+            conv_id = self.db.get_or_create_saved_conversation(user_id)
+            return {"action": "get_saved_conversation_response", "success": True, "conversation_id": conv_id}
+
+        # 26. Yêu cầu cuộc gọi (Voice Call / Video Call Signaling)
+        elif action == "call_invite":
+            caller_id = packet.get("caller_id")
+            receiver_id = packet.get("receiver_id")
+            call_type = packet.get("call_type", "voice") # 'voice' hoặc 'video'
+            conv_id = packet.get("conversation_id")
+
+            # Kiểm tra xem có bị chặn không
+            if self.db.is_blocked(caller_id, receiver_id):
+                return {"action": "call_invite_response", "success": False, "message": "Không thể gọi vì cuộc trò chuyện đã bị chặn!"}
+
+            caller = self.db.get_user_by_id(caller_id)
+            caller_name = caller["full_name"] if caller else "Người dùng"
+            avatar_color = caller["avatar_color"] if caller else "#2563EB"
+
+            channel_id = f"call_{caller_id}_{receiver_id}_{int(time.time())}"
+            if not hasattr(self, "active_calls"):
+                self.active_calls = {}
+            self.active_calls[channel_id] = {
+                "caller_id": caller_id,
+                "receiver_id": receiver_id,
+                "call_type": call_type,
+                "conversation_id": conv_id,
+                "status": "ringing"
+            }
+
+            # Gửi thông báo chuông đến người nhận
+            self.broadcast_to_users([receiver_id], {
+                "type": "call_incoming",
+                "channel_id": channel_id,
+                "caller_id": caller_id,
+                "caller_name": caller_name,
+                "avatar_color": avatar_color,
+                "call_type": call_type,
+                "conversation_id": conv_id
+            })
+            return {"action": "call_invite_response", "success": True, "channel_id": channel_id}
+
+        # 27. Chấp nhận cuộc gọi (Accept Call)
+        elif action == "call_accept":
+            channel_id = packet.get("channel_id")
+            call = getattr(self, "active_calls", {}).get(channel_id)
+            if call:
+                call["status"] = "connected"
+                call["start_time"] = time.time()
+                self.broadcast_to_users([call["caller_id"], call["receiver_id"]], {
+                    "type": "call_connected",
+                    "channel_id": channel_id,
+                    "call_type": call["call_type"]
+                })
+            return {"action": "call_accept_response", "success": True}
+
+        # 28. Từ chối cuộc gọi (Reject Call)
+        elif action == "call_reject":
+            channel_id = packet.get("channel_id")
+            call = getattr(self, "active_calls", {}).pop(channel_id, None)
+            if call:
+                self.broadcast_to_users([call["caller_id"]], {
+                    "type": "call_rejected",
+                    "channel_id": channel_id,
+                    "reason": "Đối phương đã từ chối cuộc gọi."
+                })
+            return {"action": "call_reject_response", "success": True}
+
+        # 29. Kết thúc cuộc gọi (End Call)
+        elif action == "call_end":
+            channel_id = packet.get("channel_id")
+            call = getattr(self, "active_calls", {}).pop(channel_id, None)
+            if call:
+                duration_sec = 0
+                if "start_time" in call:
+                    duration_sec = int(time.time() - call["start_time"])
+                mins, secs = divmod(duration_sec, 60)
+                dur_str = f"{mins:02d}:{secs:02d}"
+
+                self.broadcast_to_users([call["caller_id"], call["receiver_id"]], {
+                    "type": "call_ended",
+                    "channel_id": channel_id,
+                    "duration": dur_str
+                })
+
+                # Ghi lịch sử cuộc gọi vào hội thoại
+                icon = "📞 Cuộc gọi thoại" if call["call_type"] == "voice" else "📹 Cuộc gọi video"
+                msg_text = f"{icon} ({dur_str})" if duration_sec > 0 else f"{icon} nhỡ"
+                if call.get("conversation_id"):
+                    saved_m = self.db.save_message(call["conversation_id"], call["caller_id"], "text", msg_text)
+                    members = self.db.get_conversation_members(call["conversation_id"])
+                    self.broadcast_to_users([m["id"] for m in members], {
+                        "type": "new_message",
+                        "conversation_id": call["conversation_id"],
+                        "message": saved_m
+                    })
+            return {"action": "call_end_response", "success": True}
+
+        # 30. Chuyển tiếp luồng Audio / Video thời gian thực (Media Relay)
+        elif action == "call_media":
+            channel_id = packet.get("channel_id")
+            sender_id = packet.get("sender_id")
+            call = getattr(self, "active_calls", {}).get(channel_id)
+            if call:
+                target_id = call["receiver_id"] if sender_id == call["caller_id"] else call["caller_id"]
+                self.broadcast_to_users([target_id], {
+                    "type": "call_media_relay",
+                    "channel_id": channel_id,
+                    "media_type": packet.get("media_type"), # 'audio' hoặc 'video'
+                    "data": packet.get("data")
+                })
+            return None
 
 if __name__ == "__main__":
     server = ChatServer()

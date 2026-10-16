@@ -28,6 +28,13 @@ class NetworkClient:
             "refresh_friends": None,
             "on_reconnected": None,
             "connection_lost": None,
+            "reaction_updated": None,
+            "pinned_updated": None,
+            "call_incoming": None,
+            "call_connected": None,
+            "call_rejected": None,
+            "call_ended": None,
+            "call_media_relay": None,
         }
         
         # Pending synchronous responses (action_name -> event & response)
@@ -141,9 +148,9 @@ class NetworkClient:
                             event, res_container = self.pending_responses[action]
                             res_container.append(packet)
                             event.set()
-                        elif pkt_type in self.callbacks and self.callbacks[pkt_type]:
+                        elif pkt_type and pkt_type in self.callbacks and self.callbacks[pkt_type]:
                             self.callbacks[pkt_type](packet)
-            except Exception:
+            except Exception as e:
                 break
         
         self.connected = False
@@ -270,14 +277,15 @@ class NetworkClient:
             "conversation_id": conversation_id
         }, expected_action="messages_history")
 
-    def send_message(self, conversation_id, sender_id, content, msg_type="text") -> bool:
+    def send_message(self, conversation_id, sender_id, content, msg_type="text", reply_to_id=None) -> bool:
         """Gửi tin nhắn đảm bảo có xác nhận từ server và tự động kết nối lại nếu mất mạng."""
         payload = {
             "action": "send_message",
             "conversation_id": conversation_id,
             "sender_id": sender_id,
             "content": content,
-            "message_type": msg_type
+            "message_type": msg_type,
+            "reply_to_id": reply_to_id
         }
         # Nếu chưa kết nối, tự động kết nối lại
         if not self.connected:
@@ -295,7 +303,7 @@ class NetworkClient:
                 return True
         return False
 
-    def upload_file(self, conversation_id, sender_id, filepath, caption=""):
+    def upload_file(self, conversation_id, sender_id, filepath, caption="", reply_to_id=None):
         if not self.connected:
             self.reconnect_and_identify()
         try:
@@ -316,7 +324,8 @@ class NetworkClient:
                 "file_data": b64,
                 "file_size": filesize,
                 "file_type": file_type,
-                "caption": caption
+                "caption": caption,
+                "reply_to_id": reply_to_id
             }, expected_action="upload_response", timeout=25.0)
         except Exception as e:
             return {"success": False, "message": str(e)}
@@ -436,5 +445,86 @@ class NetworkClient:
             "user_id": user_id,
             "target_id": target_id
         }, expected_action="get_block_status_response", timeout=6.0)
+
+    # --- Thả cảm xúc & Ghim tin nhắn & Cloud cá nhân ---
+    def toggle_reaction(self, *args, **kwargs):
+        """Hỗ trợ linh hoạt cả (message_id, user_id, reaction) hoặc (conv_id, message_id, user_id, reaction)"""
+        if len(args) == 4:
+            conv_id, message_id, user_id, reaction = args
+        elif len(args) == 3:
+            message_id, user_id, reaction = args
+        else:
+            message_id = kwargs.get("message_id")
+            user_id = kwargs.get("user_id")
+            reaction = kwargs.get("reaction")
+        return self.send_request({
+            "action": "toggle_reaction",
+            "message_id": message_id,
+            "user_id": user_id,
+            "reaction": reaction
+        }, expected_action="toggle_reaction_response", timeout=5.0)
+
+    def pin_message(self, conversation_id: int, message_id: int, user_id: int):
+        return self.send_request({
+            "action": "pin_message",
+            "conversation_id": conversation_id,
+            "message_id": message_id,
+            "user_id": user_id
+        }, expected_action="pin_message_response", timeout=5.0)
+
+    def unpin_message(self, conversation_id: int):
+        return self.send_request({
+            "action": "unpin_message",
+            "conversation_id": conversation_id
+        }, expected_action="unpin_message_response", timeout=5.0)
+
+    def get_pinned_message(self, conversation_id: int):
+        return self.send_request({
+            "action": "get_pinned_message",
+            "conversation_id": conversation_id
+        }, expected_action="get_pinned_message_response", timeout=5.0)
+
+    def get_saved_conversation(self, user_id: int):
+        return self.send_request({
+            "action": "get_saved_conversation",
+            "user_id": user_id
+        }, expected_action="get_saved_conversation_response", timeout=5.0)
+
+    # --- Gọi thoại & Gọi video (Voice & Video Calls) ---
+    def call_invite(self, caller_id: int, receiver_id: int, conversation_id: int, call_type="voice"):
+        return self.send_request({
+            "action": "call_invite",
+            "caller_id": caller_id,
+            "receiver_id": receiver_id,
+            "conversation_id": conversation_id,
+            "call_type": call_type
+        }, expected_action="call_invite_response", timeout=10.0)
+
+    def call_accept(self, channel_id: str):
+        return self.send_request({
+            "action": "call_accept",
+            "channel_id": channel_id
+        }, expected_action="call_accept_response", timeout=6.0)
+
+    def call_reject(self, channel_id: str):
+        return self.send_request({
+            "action": "call_reject",
+            "channel_id": channel_id
+        }, expected_action="call_reject_response", timeout=6.0)
+
+    def call_end(self, channel_id: str):
+        return self.send_request({
+            "action": "call_end",
+            "channel_id": channel_id
+        }, expected_action="call_end_response", timeout=6.0)
+
+    def send_call_media(self, channel_id: str, sender_id: int, media_type: str, data: str):
+        return self._send_packet({
+            "action": "call_media",
+            "channel_id": channel_id,
+            "sender_id": sender_id,
+            "media_type": media_type,
+            "data": data
+        })
 
 

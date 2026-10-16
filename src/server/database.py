@@ -134,9 +134,13 @@ class Database:
             )
             """)
 
-            # Tự động thêm cột is_deleted vào CSDL cũ nếu chưa có
+            # Tự động thêm cột is_deleted và reply_to_id vào CSDL cũ nếu chưa có
             try:
                 cursor.execute("ALTER TABLE messages ADD COLUMN is_deleted INTEGER DEFAULT 0")
+            except Exception:
+                pass
+            try:
+                cursor.execute("ALTER TABLE messages ADD COLUMN reply_to_id INTEGER DEFAULT NULL")
             except Exception:
                 pass
 
@@ -150,6 +154,34 @@ class Database:
                 UNIQUE(user_id, blocked_id),
                 FOREIGN KEY (user_id) REFERENCES users(id),
                 FOREIGN KEY (blocked_id) REFERENCES users(id)
+            )
+            """)
+
+            # 8. Bảng Cảm xúc tin nhắn (Reactions: ❤️, 👍, 😂, 😮, 😢, 😡)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS message_reactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                reaction TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(message_id, user_id),
+                FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+            """)
+
+            # 9. Bảng Tin nhắn ghim (Pinned Message theo từng cuộc trò chuyện)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS pinned_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL UNIQUE,
+                message_id INTEGER NOT NULL,
+                pinned_by INTEGER NOT NULL,
+                pinned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+                FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+                FOREIGN KEY (pinned_by) REFERENCES users(id)
             )
             """)
             conn.commit()
@@ -537,7 +569,12 @@ class Database:
                 last_msg = cursor.fetchone()
                 conv["last_message"] = dict(last_msg) if last_msg else None
                 
-                if conv["type"] == 'direct':
+                if conv["type"] == 'saved':
+                    conv["title"] = "Cloud của tôi (Saved Messages)"
+                    conv["avatar_color"] = "#8B5CF6"
+                    conv["is_online"] = 1
+                    conv["partner_id"] = user_id
+                elif conv["type"] == 'direct':
                     # Tìm đối phương
                     cursor.execute("""
                         SELECT u.id, u.full_name, u.avatar_color, u.is_online
@@ -577,28 +614,35 @@ class Database:
             return [dict(r) for r in cursor.fetchall()]
 
     # --- Message & File APIs ---
-    def save_message(self, conversation_id, sender_id, message_type, content, file_id=None):
+    def save_message(self, conversation_id, sender_id, message_type, content, file_id=None, reply_to_id=None):
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO messages (conversation_id, sender_id, message_type, content, file_id)
-                VALUES (?, ?, ?, ?, ?)
-            """, (conversation_id, sender_id, message_type, content, file_id))
+                INSERT INTO messages (conversation_id, sender_id, message_type, content, file_id, reply_to_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (conversation_id, sender_id, message_type, content, file_id, reply_to_id))
             msg_id = cursor.lastrowid
             conn.commit()
             
-            # Lấy thông tin tin nhắn vừa lưu kèm thông tin người gửi
+            # Lấy thông tin tin nhắn vừa lưu kèm thông tin người gửi & thông tin trích dẫn reply
             cursor.execute("""
                 SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content, 
-                       m.file_id, m.is_deleted, m.created_at, u.full_name as sender_name, u.avatar_color,
-                       f.original_name, f.file_size, f.file_type
+                       m.file_id, m.is_deleted, m.created_at, m.reply_to_id,
+                       u.full_name as sender_name, u.avatar_color,
+                       f.original_name, f.file_size, f.file_type,
+                       parent.content as reply_content, parent_user.full_name as reply_sender_name
                 FROM messages m
                 JOIN users u ON m.sender_id = u.id
                 LEFT JOIN files f ON m.file_id = f.id
+                LEFT JOIN messages parent ON m.reply_to_id = parent.id
+                LEFT JOIN users parent_user ON parent.sender_id = parent_user.id
                 WHERE m.id = ?
             """, (msg_id,))
             row = cursor.fetchone()
-            return dict(row) if row else None
+            d = dict(row) if row else None
+            if d:
+                d["reactions"] = []
+            return d
 
     def get_messages(self, conversation_id, limit=200):
         with self.get_connection() as conn:
@@ -606,18 +650,49 @@ class Database:
             cursor.execute("""
                 SELECT * FROM (
                     SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content, 
-                           m.file_id, m.is_deleted, m.created_at, u.full_name as sender_name, u.avatar_color,
-                           f.original_name, f.file_size, f.file_type
+                           m.file_id, m.is_deleted, m.created_at, m.reply_to_id,
+                           u.full_name as sender_name, u.avatar_color,
+                           f.original_name, f.file_size, f.file_type,
+                           parent.content as reply_content, parent_user.full_name as reply_sender_name
                     FROM messages m
                     JOIN users u ON m.sender_id = u.id
                     LEFT JOIN files f ON m.file_id = f.id
+                    LEFT JOIN messages parent ON m.reply_to_id = parent.id
+                    LEFT JOIN users parent_user ON parent.sender_id = parent_user.id
                     WHERE m.conversation_id = ?
                     ORDER BY m.id DESC
                     LIMIT ?
                 ) sub
                 ORDER BY sub.id ASC
             """, (conversation_id, limit))
-            return [dict(r) for r in cursor.fetchall()]
+            messages = [dict(r) for r in cursor.fetchall()]
+
+            # Nạp danh sách cảm xúc (reactions) cho từng tin nhắn
+            if messages:
+                msg_ids = [m["id"] for m in messages]
+                placeholders = ",".join("?" * len(msg_ids))
+                cursor.execute(f"""
+                    SELECT mr.message_id, mr.reaction, mr.user_id, u.full_name
+                    FROM message_reactions mr
+                    JOIN users u ON mr.user_id = u.id
+                    WHERE mr.message_id IN ({placeholders})
+                """, msg_ids)
+                all_rx = cursor.fetchall()
+                rx_map = {}
+                for r in all_rx:
+                    mid = r["message_id"]
+                    rx = r["reaction"]
+                    if mid not in rx_map:
+                        rx_map[mid] = {}
+                    if rx not in rx_map[mid]:
+                        rx_map[mid][rx] = {"reaction": rx, "count": 0, "users": []}
+                    rx_map[mid][rx]["count"] += 1
+                    rx_map[mid][rx]["users"].append({"id": r["user_id"], "name": r["full_name"]})
+
+                for m in messages:
+                    mid = m["id"]
+                    m["reactions"] = list(rx_map.get(mid, {}).values())
+            return messages
 
     def recall_message(self, message_id: int, user_id: int):
         """Thu hồi tin nhắn ở cả 2 phía (người gửi và người nhận)."""
@@ -725,4 +800,107 @@ class Database:
             cursor.execute("SELECT * FROM files WHERE id = ?", (file_id,))
             row = cursor.fetchone()
             return dict(row) if row else None
+
+    # --- Reaction APIs ---
+    def toggle_reaction(self, message_id: int, user_id: int, reaction: str):
+        """Thêm, thay đổi hoặc gỡ cảm xúc (Reactions: ❤️, 👍, 😂, 😮, 😢, 😡) của tin nhắn."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT reaction FROM message_reactions WHERE message_id = ? AND user_id = ?", (message_id, user_id))
+            row = cursor.fetchone()
+            if row:
+                if row["reaction"] == reaction:
+                    cursor.execute("DELETE FROM message_reactions WHERE message_id = ? AND user_id = ?", (message_id, user_id))
+                else:
+                    cursor.execute("UPDATE message_reactions SET reaction = ? WHERE message_id = ? AND user_id = ?", (reaction, message_id, user_id))
+            else:
+                cursor.execute("INSERT INTO message_reactions (message_id, user_id, reaction) VALUES (?, ?, ?)", (message_id, user_id, reaction))
+            conn.commit()
+
+            # Lấy conversation_id của tin nhắn này
+            cursor.execute("SELECT conversation_id FROM messages WHERE id = ?", (message_id,))
+            m_row = cursor.fetchone()
+            conv_id = m_row["conversation_id"] if m_row else None
+
+            return self.get_message_reactions(message_id), conv_id
+
+    def get_message_reactions(self, message_id: int):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT mr.reaction, mr.user_id, u.full_name
+                FROM message_reactions mr
+                JOIN users u ON mr.user_id = u.id
+                WHERE mr.message_id = ?
+            """, (message_id,))
+            rows = cursor.fetchall()
+            grouped = {}
+            for r in rows:
+                rx = r["reaction"]
+                if rx not in grouped:
+                    grouped[rx] = {"reaction": rx, "count": 0, "users": []}
+                grouped[rx]["count"] += 1
+                grouped[rx]["users"].append({"id": r["user_id"], "name": r["full_name"]})
+            return list(grouped.values())
+
+    # --- Pinned Messages APIs ---
+    def pin_message(self, conversation_id: int, message_id: int, user_id: int):
+        """Ghim một tin nhắn trong cuộc hội thoại."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO pinned_messages (conversation_id, message_id, pinned_by)
+                VALUES (?, ?, ?)
+                ON CONFLICT(conversation_id) DO UPDATE SET 
+                    message_id = excluded.message_id, 
+                    pinned_by = excluded.pinned_by, 
+                    pinned_at = CURRENT_TIMESTAMP
+            """, (conversation_id, message_id, user_id))
+            conn.commit()
+            return self.get_pinned_message(conversation_id)
+
+    def unpin_message(self, conversation_id: int):
+        """Bỏ ghim tin nhắn của cuộc hội thoại."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM pinned_messages WHERE conversation_id = ?", (conversation_id,))
+            conn.commit()
+            return True
+
+    def get_pinned_message(self, conversation_id: int):
+        """Lấy thông tin tin nhắn đang được ghim trong cuộc hội thoại."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT p.conversation_id, p.message_id as id, p.message_id, p.pinned_by, p.pinned_at,
+                       m.content, m.message_type, u.full_name as sender_name
+                FROM pinned_messages p
+                JOIN messages m ON p.message_id = m.id
+                JOIN users u ON m.sender_id = u.id
+                WHERE p.conversation_id = ?
+            """, (conversation_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    # --- Saved Messages (Cloud của tôi) ---
+    def get_or_create_saved_conversation(self, user_id: int) -> int:
+        """Lấy hoặc tự động tạo không gian 'Cloud của tôi (Saved Messages)' cho người dùng."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM conversations WHERE type = 'saved' AND created_by = ?", (user_id,))
+            row = cursor.fetchone()
+            if row:
+                return row["id"]
+            cursor.execute("""
+                INSERT INTO conversations (type, name, created_by) 
+                VALUES ('saved', 'Cloud của tôi (Saved Messages)', ?)
+            """, (user_id,))
+            conv_id = cursor.lastrowid
+            cursor.execute("""
+                INSERT INTO conversation_members (conversation_id, user_id, role) 
+                VALUES (?, ?, 'admin')
+            """, (conv_id, user_id))
+            conn.commit()
+            return conv_id
+
 
