@@ -1,3 +1,21 @@
+// Self-heal: If mistakenly launched with ELECTRON_RUN_AS_NODE (e.g. from VS Code/IDE terminal or inherited env)
+const _electronCheck: any = require('electron');
+if (typeof _electronCheck === 'string' || !_electronCheck.app) {
+  const electronExe = typeof _electronCheck === 'string' ? _electronCheck : process.execPath;
+  const { spawn: _spawn } = require('child_process');
+  const pathMod = require('path');
+  const cleanEnv = { ...process.env };
+  delete cleanEnv.ELECTRON_RUN_AS_NODE;
+  const child = _spawn(electronExe, ['.'], {
+    cwd: pathMod.resolve(__dirname, '..'),
+    detached: true,
+    stdio: 'ignore',
+    env: cleanEnv,
+  });
+  child.unref();
+  process.exit(0);
+}
+
 import { app, BrowserWindow, ipcMain, dialog, session, desktopCapturer, shell } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -5,6 +23,15 @@ import * as net from 'net';
 import { spawn, ChildProcess } from 'child_process';
 import { PythonBridge } from './python_bridge';
 import { GitUpdater, registerUpdaterIpc } from './updater';
+
+// Ghi log lỗi vào file nếu có sự cố crash bất ngờ
+process.on('uncaughtException', (err) => {
+  try {
+    const rootDir = path.resolve(__dirname, '../../');
+    fs.appendFileSync(path.join(rootDir, 'crash_log.txt'), `[Crash ${new Date().toISOString()}] ${err.stack || err}\n`);
+  } catch {}
+  console.error('[Uncaught Exception]', err);
+});
 
 let mainWindow: BrowserWindow | null = null;
 let pythonProcess: ChildProcess | null = null;

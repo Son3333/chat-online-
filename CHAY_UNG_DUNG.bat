@@ -121,13 +121,13 @@ if not exist "%~dp0frontend\node_modules\electron" (
 :: -------------------------------------------------------------
 :: 4. Kiem tra file build giao dien: dist va dist-electron
 :: -------------------------------------------------------------
-if not exist "%~dp0frontend\dist" (
+if not exist "%~dp0frontend\dist\index.html" (
     echo [*] Dang bien dich giao dien React Web: npm run build...
     cd /d "%~dp0frontend"
     call npm run build
     cd /d "%~dp0"
 )
-if not exist "%~dp0frontend\dist-electron" (
+if not exist "%~dp0frontend\dist-electron\main.js" (
     echo [*] Dang bien dich trinh dieu khien Electron Desktop: npm run build:electron...
     cd /d "%~dp0frontend"
     call npm run build:electron
@@ -147,17 +147,18 @@ if exist "%~dp0scripts\setup_all_in_one.py" (
 echo [*] Dang mo Ung Dung Vibe Nguoi Tot...
 
 set "ELECTRON_RUN_AS_NODE="
-
-if exist "%~dp0frontend\node_modules\electron\dist\electron.exe" (
-    start "" /d "%~dp0frontend" "%~dp0frontend\node_modules\electron\dist\electron.exe" "%~dp0frontend"
-    exit /b 0
-)
-
-if exist "%~dp0frontend\node_modules\.bin\electron.cmd" (
-    start "" /d "%~dp0frontend" .\node_modules\.bin\electron.cmd "%~dp0frontend"
-    exit /b 0
-)
-
+set "ELECTRON_NO_ATTACH_CONSOLE=1"
 cd /d "%~dp0frontend"
+
+if exist "node_modules\electron\dist\electron.exe" (
+    start "" "node_modules\electron\dist\electron.exe" .
+    exit /b 0
+)
+
+if exist "node_modules\.bin\electron.cmd" (
+    start "" node_modules\.bin\electron.cmd .
+    exit /b 0
+)
+
 call npx electron .
 exit /b 0
