@@ -16,6 +16,7 @@ declare global {
       applyUpdate: () => Promise<{ success: boolean; error?: string }>;
       checkUpdateNow: () => Promise<any>;
       getServerInfo?: () => Promise<{ isWan: boolean; address: string }>;
+      openExternal?: (url: string) => Promise<boolean>;
     };
   }
 }
@@ -308,6 +309,18 @@ export const apiService = {
       return await window.api.getServerInfo();
     }
     return { isWan: false, address: '127.0.0.1:8888' };
+  },
+
+  async openExternal(url: string): Promise<boolean> {
+    if (window.api?.openExternal) {
+      try {
+        return await window.api.openExternal(url);
+      } catch (err) {
+        console.warn('[API] openExternal IPC error:', err);
+      }
+    }
+    window.open(url, '_blank');
+    return true;
   },
 };
 

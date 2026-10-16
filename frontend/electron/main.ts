@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, session, desktopCapturer } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, session, desktopCapturer, shell } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as net from 'net';
@@ -121,12 +121,28 @@ async function createWindow() {
     gitUpdater.setWindow(mainWindow);
   }
 
+  // Open external links (such as Google Maps) in default system browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
 
 // IPC Handlers
+ipcMain.handle('app:open-external', async (_event, url: string) => {
+  if (url && (url.startsWith('https://') || url.startsWith('http://'))) {
+    await shell.openExternal(url);
+    return true;
+  }
+  return false;
+});
+
 ipcMain.handle('python:request', async (_event, { action, payload }) => {
   if (!pythonBridge) {
     throw new Error('Python bridge not initialized');

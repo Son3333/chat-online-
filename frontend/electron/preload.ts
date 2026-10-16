@@ -15,6 +15,7 @@ export interface ElectronAPI {
   checkUpdateNow: () => Promise<any>;
   getServerInfo: () => Promise<{ isWan: boolean; address: string }>;
   getScreenSourceId: () => Promise<string | null>;
+  openExternal: (url: string) => Promise<boolean>;
 }
 
 const api: ElectronAPI = {
@@ -39,6 +40,7 @@ const api: ElectronAPI = {
   checkUpdateNow: () => ipcRenderer.invoke('app:check_update'),
   getServerInfo: () => ipcRenderer.invoke('app:get-server-info'),
   getScreenSourceId: () => ipcRenderer.invoke('media:get-screen-source-id'),
+  openExternal: (url: string) => ipcRenderer.invoke('app:open-external', url),
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
   maximizeWindow: () => ipcRenderer.send('window:maximize'),
   closeWindow: () => ipcRenderer.send('window:close'),

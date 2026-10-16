@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Pin, Reply, Trash2, Copy, FileText, Download, ExternalLink, Heart, Video, MapPin } from 'lucide-react';
+import { Check, Pin, Reply, Trash2, Copy, FileText, Download, ExternalLink, Heart, Video, MapPin, Navigation } from 'lucide-react';
 import { Message } from '../../types';
 import { formatTime, formatFileSize } from '../../lib/utils';
 import { useChat } from '../../context/ChatContext';
@@ -160,39 +160,109 @@ const LocationBubbleContent: React.FC<{
 }> = ({ content }) => {
   // Extract coordinates if present (e.g., "21.0285, 105.8542")
   const coordMatch = content.match(/(-?\d+\.\d+),\s*(-?\d+\.\d+)/);
-  const lat = coordMatch ? coordMatch[1] : null;
-  const lng = coordMatch ? coordMatch[2] : null;
+  const lat = coordMatch ? parseFloat(coordMatch[1]) : null;
+  const lng = coordMatch ? parseFloat(coordMatch[2]) : null;
+
+  // Clean human-readable address
+  const cleanAddress = content.replace(/^📍\s*(Vị\s*trí(\s*thực\s*tế|\s*GPS)?:\s*)?/i, '').trim();
+
+  // Directions (Chỉ đường trực tiếp trên Google Maps giống Messenger)
+  const directionsUrl = lat && lng
+    ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+    : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(cleanAddress)}`;
+
+  // View location marker on Google Maps
   const mapUrl = lat && lng
     ? `https://www.google.com/maps?q=${lat},${lng}`
-    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(content.replace(/^📍\s*Vị\s*trí:\s*/i, ''))}`;
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanAddress)}`;
 
-  const handleOpenMap = () => {
-    window.open(mapUrl, '_blank');
+  const handleOpenDirections = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    apiService.openExternal(directionsUrl);
+  };
+
+  const handleOpenMap = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    apiService.openExternal(mapUrl);
   };
 
   return (
-    <div className="my-1 p-3 rounded-xl bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-blue-500/10 border border-emerald-500/30 min-w-[220px] max-w-sm">
-      <div className="flex items-center space-x-2.5 mb-2">
-        <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-md animate-bounce">
-          <MapPin className="w-4 h-4" />
+    <div className="my-1.5 p-2 rounded-2xl bg-slate-50 dark:bg-[#192430] border border-slate-200 dark:border-slate-700/80 shadow-md min-w-[240px] max-w-sm select-none">
+      {/* 1. Visual Map Preview */}
+      {lat && lng ? (
+        <div
+          onClick={handleOpenDirections}
+          title="Bấm để mở Google Maps chỉ đường"
+          className="relative w-full h-36 rounded-xl overflow-hidden cursor-pointer group/map border border-slate-200 dark:border-slate-700 bg-slate-200 dark:bg-slate-800"
+        >
+          <iframe
+            title="Location Map Preview"
+            width="100%"
+            height="100%"
+            frameBorder="0"
+            scrolling="no"
+            src={`https://www.openstreetmap.org/export/embed.html?bbox=${lng - 0.007}%2C${lat - 0.004}%2C${lng + 0.007}%2C${lat + 0.004}&layer=mapnik&marker=${lat}%2C${lng}`}
+            className="w-full h-full pointer-events-none select-none"
+          />
+          {/* Hover overlay hint */}
+          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/map:opacity-100 transition-opacity flex items-center justify-center">
+            <span className="px-3 py-1.5 rounded-full bg-emerald-600 text-white text-xs font-semibold shadow-lg flex items-center space-x-1.5 transform group-hover/map:scale-105 transition-transform">
+              <Navigation className="w-3.5 h-3.5 fill-current" />
+              <span>Chỉ đường trên Google Maps</span>
+            </span>
+          </div>
         </div>
-        <div>
-          <span className="font-bold text-xs text-emerald-600 dark:text-emerald-400 block">
-            Vị Trí Được Chia Sẻ
+      ) : (
+        <div
+          onClick={handleOpenDirections}
+          className="relative w-full h-24 rounded-xl cursor-pointer bg-gradient-to-br from-emerald-500/20 via-teal-500/20 to-blue-500/20 flex flex-col items-center justify-center p-3 text-center border border-emerald-500/30"
+        >
+          <MapPin className="w-7 h-7 text-rose-500 animate-bounce mb-1" />
+          <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+            Bấm để mở bản đồ chỉ đường
           </span>
-          <span className="text-[10px] text-slate-400">Tọa độ thời gian thực</span>
+        </div>
+      )}
+
+      {/* 2. Location Info */}
+      <div className="px-1 pt-2.5 pb-1">
+        <div className="flex items-start space-x-2 mb-1">
+          <MapPin className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-100 block truncate">
+              {cleanAddress.split('(')[0] || 'Vị trí thời gian thực'}
+            </span>
+            {lat && lng ? (
+              <span className="text-[10px] text-slate-400 block">
+                Tọa độ GPS: {lat.toFixed(5)}, {lng.toFixed(5)}
+              </span>
+            ) : (
+              <span className="text-[10px] text-slate-400 block truncate">{cleanAddress}</span>
+            )}
+          </div>
+        </div>
+
+        {/* 3. Action Buttons (Chỉ đường & Xem bản đồ) */}
+        <div className="grid grid-cols-2 gap-2 mt-2.5">
+          <button
+            onClick={handleOpenDirections}
+            className="py-2 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold flex items-center justify-center space-x-1.5 shadow-sm transition-all"
+            title="Chỉ đường từ vị trí của bạn tới điểm này"
+          >
+            <Navigation className="w-3.5 h-3.5 fill-current flex-shrink-0" />
+            <span className="truncate">Chỉ Đường</span>
+          </button>
+
+          <button
+            onClick={handleOpenMap}
+            className="py-2 px-2.5 rounded-xl bg-white dark:bg-[#233140] hover:bg-slate-100 dark:hover:bg-slate-700/60 active:scale-95 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center space-x-1.5 border border-slate-200 dark:border-slate-700 transition-all shadow-xs"
+            title="Xem vị trí ghim trên bản đồ"
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-[#2481cc] flex-shrink-0" />
+            <span className="truncate">Xem Bản Đồ</span>
+          </button>
         </div>
       </div>
-      <p className="text-xs text-slate-700 dark:text-slate-200 font-medium mb-2.5 break-words">
-        {content}
-      </p>
-      <button
-        onClick={handleOpenMap}
-        className="w-full py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-sm transition-colors"
-      >
-        <ExternalLink className="w-3.5 h-3.5" />
-        <span>Xem trên Google Maps</span>
-      </button>
     </div>
   );
 };
