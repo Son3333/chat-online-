@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { MapPin, X, Navigation, Check, Send } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { MapPin, X, Navigation, Check, Send, Search, Loader2, Info } from 'lucide-react';
 
 interface LocationModalProps {
   isOpen: boolean;
@@ -8,11 +8,11 @@ interface LocationModalProps {
 }
 
 const PRESET_LOCATIONS = [
-  { name: 'Hà Nội, Việt Nam', lat: 21.028511, lng: 105.854167 },
-  { name: 'TP. Hồ Chí Minh', lat: 10.776889, lng: 106.700806 },
   { name: 'Đại học Bách Khoa Hà Nội', lat: 21.004481, lng: 105.843653 },
   { name: 'Hồ Hoàn Kiếm, Hà Nội', lat: 21.028775, lng: 105.852378 },
-  { name: 'Sân bay Quốc tế Nội Bài', lat: 21.221235, lng: 105.807185 },
+  { name: 'Hà Nội, Việt Nam', lat: 21.028511, lng: 105.854167 },
+  { name: 'TP. Hồ Chí Minh', lat: 10.776889, lng: 106.700806 },
+  { name: 'Sân bay Nội Bài', lat: 21.221235, lng: 105.807185 },
   { name: 'Đà Nẵng, Việt Nam', lat: 16.054407, lng: 108.202167 },
 ];
 
@@ -26,11 +26,16 @@ export const LocationModal: React.FC<LocationModalProps> = ({
   const [isGettingGPS, setIsGettingGPS] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<string | null>(null);
 
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const searchTimeoutRef = useRef<any>(null);
+
   const detectRealtimeLocation = async () => {
     setIsGettingGPS(true);
-    setGpsStatus('Đang xác định vị trí thực tế của thiết bị...');
+    setGpsStatus('Đang xác định vị trí qua mạng Internet...');
 
-    // 1. Try hardware GPS first
+    // 1. Try hardware GPS (if laptop has GPS / browser location)
     const tryHardwareGPS = (): Promise<{ lat: number; lng: number } | null> => {
       return new Promise((resolve) => {
         if (!navigator.geolocation) return resolve(null);
@@ -42,7 +47,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
       });
     };
 
-    // 2. Fast IP Geolocation (instant on desktop PCs)
+    // 2. Fast IP Geolocation
     const tryNetworkLocation = async () => {
       const endpoints = [
         'https://ipwho.is/',
@@ -66,7 +71,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
             }
           }
         } catch {
-          // try next
+          // next
         }
       }
       return null;
@@ -84,9 +89,9 @@ export const LocationModal: React.FC<LocationModalProps> = ({
     const netResult = await tryNetworkLocation();
     if (netResult) {
       setCoords({ lat: netResult.lat, lng: netResult.lng });
-      setAddress(`📍 Vị trí thực tế: ${netResult.lat.toFixed(6)}, ${netResult.lng.toFixed(6)} (${netResult.city}, ${netResult.country})`);
+      setAddress(`📍 Vị trí mạng: ${netResult.lat.toFixed(6)}, ${netResult.lng.toFixed(6)} (${netResult.city}, ${netResult.country})`);
       setIsGettingGPS(false);
-      setGpsStatus(`Đã định vị thực tế: ${netResult.city}, ${netResult.country}`);
+      setGpsStatus(`Định vị ước tính theo IP mạng: ${netResult.city}`);
       return;
     }
 
@@ -95,7 +100,45 @@ export const LocationModal: React.FC<LocationModalProps> = ({
     setCoords({ lat: fallbackLat, lng: fallbackLng });
     setAddress(`📍 Vị trí: ${fallbackLat.toFixed(6)}, ${fallbackLng.toFixed(6)} (Hà Nội, Việt Nam)`);
     setIsGettingGPS(false);
-    setGpsStatus('Đã định vị: Hà Nội, Việt Nam');
+    setGpsStatus('Vị trí mặc định: Hà Nội');
+  };
+
+  const handleSearchChange = (val: string) => {
+    setSearchQuery(val);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    if (!val.trim() || val.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val)}&countrycodes=vn&limit=5`,
+          { headers: { 'Accept-Language': 'vi' } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setSearchResults(data);
+        }
+      } catch {
+        // search fallback
+      } finally {
+        setIsSearching(false);
+      }
+    }, 400);
+  };
+
+  const handleSelectSearchResult = (item: any) => {
+    const lat = parseFloat(item.lat);
+    const lng = parseFloat(item.lon);
+    setCoords({ lat, lng });
+    const shortName = item.display_name.split(',').slice(0, 3).join(', ');
+    setAddress(`📍 ${shortName}: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+    setSearchResults([]);
+    setSearchQuery('');
+    setGpsStatus(`Đã chọn: ${shortName}`);
   };
 
   useEffect(() => {
@@ -115,6 +158,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
   const handleSelectPreset = (p: { name: string; lat: number; lng: number }) => {
     setCoords({ lat: p.lat, lng: p.lng });
     setAddress(`📍 ${p.name}: ${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`);
+    setSearchResults([]);
   };
 
   return (
@@ -137,7 +181,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
                 Chia Sẻ Vị Trí Trực Tiếp
               </h3>
               <p className="text-[11px] text-slate-400">
-                Gửi vị trí có bản đồ & chỉ đường cho đối phương
+                Gửi vị trí có bản đồ & chỉ đường Google Maps
               </p>
             </div>
           </div>
@@ -150,7 +194,7 @@ export const LocationModal: React.FC<LocationModalProps> = ({
         </div>
 
         {/* Live Visual Map Preview */}
-        <div className="relative w-full h-36 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 mb-3 shadow-inner">
+        <div className="relative w-full h-36 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 mb-2.5 shadow-inner">
           {coords ? (
             <iframe
               title="Realtime Map Preview"
@@ -169,40 +213,80 @@ export const LocationModal: React.FC<LocationModalProps> = ({
           )}
         </div>
 
-        {/* Address & Coordinate Box */}
-        <div className="mb-3">
+        {/* Search Input Box */}
+        <div className="relative mb-2">
           <div className="relative">
             <input
               type="text"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Nhập địa chỉ hoặc tọa độ..."
-              className="w-full h-10 px-3.5 pr-10 rounded-xl bg-slate-100 dark:bg-[#242f3d] text-xs font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2481cc] border border-transparent dark:border-slate-700/60 transition-all"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="🔍 Tìm kiếm địa điểm, số nhà, tên đường..."
+              className="w-full h-9 px-3.5 pr-8 rounded-xl bg-slate-100 dark:bg-[#242f3d] text-xs font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2481cc] border border-transparent dark:border-slate-700/60 transition-all"
             />
-            <button
-              onClick={detectRealtimeLocation}
-              disabled={isGettingGPS}
-              title="Định vị lại"
-              className="absolute right-2 top-2 p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-            >
-              <Navigation className={`w-4 h-4 ${isGettingGPS ? 'animate-spin text-rose-500' : ''}`} />
-            </button>
+            {isSearching ? (
+              <Loader2 className="w-4 h-4 text-[#2481cc] absolute right-2.5 top-2.5 animate-spin" />
+            ) : (
+              <Search className="w-4 h-4 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+            )}
           </div>
-          {gpsStatus && (
-            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 flex items-center space-x-1 px-1">
-              <Check className="w-3 h-3 flex-shrink-0" />
-              <span className="truncate">{gpsStatus}</span>
-            </p>
+
+          {/* Autocomplete Dropdown */}
+          {searchResults.length > 0 && (
+            <div className="absolute left-0 right-0 top-10 z-30 bg-white dark:bg-[#1f2b38] border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden max-h-44 overflow-y-auto">
+              {searchResults.map((item, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSelectSearchResult(item)}
+                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 flex items-start space-x-2 text-xs border-b border-slate-100 dark:border-slate-800 last:border-0"
+                >
+                  <MapPin className="w-3.5 h-3.5 text-rose-500 flex-shrink-0 mt-0.5" />
+                  <span className="text-slate-700 dark:text-slate-200 line-clamp-2">
+                    {item.display_name}
+                  </span>
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
-        {/* Quick Presets */}
-        <div className="mb-4">
-          <span className="block text-[11px] font-medium text-slate-400 mb-1.5">
-            Gợi ý địa điểm nhanh:
+        {/* Current Address & Re-detect */}
+        <div className="mb-2 p-2 rounded-xl bg-slate-50 dark:bg-[#1a2530] border border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-xs">
+          <div className="flex-1 min-w-0 pr-2">
+            <span className="text-[10px] text-slate-400 block font-medium">Vị trí hiện tại sẽ gửi:</span>
+            <span className="font-semibold text-slate-700 dark:text-slate-200 truncate block">
+              {address}
+            </span>
+            {gpsStatus && (
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-0.5 flex items-center space-x-1 truncate">
+                <Check className="w-2.5 h-2.5 flex-shrink-0" />
+                <span className="truncate">{gpsStatus}</span>
+              </span>
+            )}
+          </div>
+          <button
+            onClick={detectRealtimeLocation}
+            disabled={isGettingGPS}
+            title="Định vị lại"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex-shrink-0"
+          >
+            <Navigation className={`w-4 h-4 ${isGettingGPS ? 'animate-spin text-rose-500' : ''}`} />
+          </button>
+        </div>
+
+        {/* Explain PC limitation */}
+        <div className="mb-2.5 px-2 py-1.5 rounded-lg bg-blue-50/70 dark:bg-blue-950/30 text-[11px] text-blue-700 dark:text-blue-300 flex items-start space-x-1.5">
+          <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-[#2481cc]" />
+          <span>
+            Máy tính không có chip vệ tinh GPS như điện thoại nên định vị tự động ước lượng theo IP mạng. Bạn có thể <strong>tìm kiếm địa chỉ</strong> ở trên để ghim chính xác 100%.
           </span>
-          <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto pr-1">
+        </div>
+
+        {/* Quick Presets */}
+        <div className="mb-3.5">
+          <span className="block text-[11px] font-medium text-slate-400 mb-1.5">
+            Hoặc chọn nhanh địa điểm phổ biến:
+          </span>
+          <div className="flex flex-wrap gap-1.5 max-h-16 overflow-y-auto pr-1">
             {PRESET_LOCATIONS.map((loc) => (
               <button
                 key={loc.name}
