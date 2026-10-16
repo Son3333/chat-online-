@@ -15,16 +15,18 @@ import {
   Radio
 } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
+import { apiService } from '../../services/api';
 import { getInitials } from '../../lib/utils';
 
 export const CallModal: React.FC = () => {
-  const { incomingCall, activeCall, acceptCall, rejectCall, endCall } = useChat();
+  const { currentUser, incomingCall, activeCall, acceptCall, rejectCall, endCall } = useChat();
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [remoteVideoFrame, setRemoteVideoFrame] = useState<string | null>(null);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -136,6 +138,49 @@ export const CallModal: React.FC = () => {
       };
     }
   }, [activeCall?.callType, activeCall?.isConnected]);
+
+  // 1. Listen for remote partner's real-time video frames
+  useEffect(() => {
+    const unsubscribe = apiService.onServerEvent((event: any) => {
+      if (event.type === 'call_media_relay' && event.media_type === 'video' && event.data) {
+        setRemoteVideoFrame(event.data);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Stream local webcam frames to partner via server media relay (5 FPS, ~10KB/frame, smooth & reliable)
+  useEffect(() => {
+    if (!activeCall || activeCall.callType !== 'video' || !activeCall.isConnected) {
+      setRemoteVideoFrame(null);
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 300;
+    const ctx = canvas.getContext('2d');
+
+    const frameInterval = setInterval(() => {
+      if (isVideoOff || !localVideoRef.current || localVideoRef.current.readyState < 2) return;
+      try {
+        if (ctx) {
+          ctx.drawImage(localVideoRef.current, 0, 0, canvas.width, canvas.height);
+          const frameData = canvas.toDataURL('image/jpeg', 0.45);
+          apiService.sendRequest('call_media', {
+            channel_id: activeCall.channelId,
+            sender_id: currentUser?.id,
+            media_type: 'video',
+            data: frameData,
+          }).catch(() => {});
+        }
+      } catch (err) {
+        // ignore frame capture error
+      }
+    }, 200);
+
+    return () => clearInterval(frameInterval);
+  }, [activeCall?.callType, activeCall?.isConnected, activeCall?.channelId, currentUser?.id, isVideoOff]);
 
   const toggleMute = () => {
     if (localStreamRef.current) {
@@ -386,30 +431,38 @@ export const CallModal: React.FC = () => {
 
             {/* Main Stage: Remote Video Screen */}
             <div className="flex-1 w-full h-full relative flex items-center justify-center bg-slate-950 overflow-hidden">
-              {/* Partner Video Mock / Ambient Profile */}
-              <div className="w-full h-full flex flex-col items-center justify-center relative">
-                {/* Background ambient lighting */}
-                <div className="absolute inset-0 bg-gradient-to-tr from-cyan-950/40 via-slate-950 to-blue-950/30" />
+              {remoteVideoFrame ? (
+                <img
+                  src={remoteVideoFrame}
+                  alt={activeCall.partnerName}
+                  className="w-full h-full object-cover select-none pointer-events-none transition-opacity duration-150 animate-in fade-in"
+                />
+              ) : (
+                /* Partner Video Mock / Ambient Profile while waiting */
+                <div className="w-full h-full flex flex-col items-center justify-center relative">
+                  {/* Background ambient lighting */}
+                  <div className="absolute inset-0 bg-gradient-to-tr from-cyan-950/40 via-slate-950 to-blue-950/30" />
 
-                {/* Simulated Remote Webcam Display */}
-                <div className="relative z-10 flex flex-col items-center text-center p-6">
-                  <div className="relative mb-6">
-                    <div className="w-32 h-32 rounded-full bg-gradient-to-tr from-emerald-600 via-teal-500 to-cyan-500 p-1 shadow-2xl shadow-emerald-500/20 animate-pulse">
-                      <div className="w-full h-full rounded-full bg-[#17212b] flex items-center justify-center text-white text-3xl font-bold">
-                        {getInitials(activeCall.partnerName)}
+                  {/* Simulated Remote Webcam Display */}
+                  <div className="relative z-10 flex flex-col items-center text-center p-6">
+                    <div className="relative mb-6">
+                      <div className="w-32 h-32 rounded-full bg-gradient-to-tr from-emerald-600 via-teal-500 to-cyan-500 p-1 shadow-2xl shadow-emerald-500/20 animate-pulse">
+                        <div className="w-full h-full rounded-full bg-[#17212b] flex items-center justify-center text-white text-3xl font-bold">
+                          {getInitials(activeCall.partnerName)}
+                        </div>
+                      </div>
+                      <div className="absolute bottom-1 right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-[#0e1621] flex items-center justify-center text-white">
+                        <Video className="w-3.5 h-3.5" />
                       </div>
                     </div>
-                    <div className="absolute bottom-1 right-1 w-6 h-6 rounded-full bg-emerald-500 border-2 border-[#0e1621] flex items-center justify-center text-white">
-                      <Video className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
 
-                  <h4 className="text-lg font-bold text-white mb-1">{activeCall.partnerName}</h4>
-                  <p className="text-xs text-slate-400 max-w-sm">
-                    Cuộc gọi Video HD đang kết nối an toàn qua máy chủ đường truyền bảo mật.
-                  </p>
+                    <h4 className="text-lg font-bold text-white mb-1">{activeCall.partnerName}</h4>
+                    <p className="text-xs text-slate-400 max-w-sm">
+                      Đang kết nối luồng Video HD từ camera đối phương...
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
 
                 {/* Floating Self Camera View (Picture-In-Picture) */}
                 <div className="absolute bottom-20 right-6 w-48 h-36 bg-slate-900 border-2 border-emerald-500/50 rounded-2xl shadow-2xl overflow-hidden z-30 group">

@@ -933,7 +933,26 @@ class ChatServer:
         # 30. Kết thúc cuộc gọi (End Call)
         elif action == "call_end":
             channel_id = packet.get("channel_id")
-            call = getattr(self, "active_calls", {}).pop(channel_id, None)
+            user_id = packet.get("user_id")
+            partner_id = packet.get("partner_id")
+            try:
+                if user_id: user_id = int(user_id)
+                if partner_id: partner_id = int(partner_id)
+            except Exception:
+                pass
+
+            call = None
+            if channel_id and hasattr(self, "active_calls"):
+                call = self.active_calls.pop(channel_id, None)
+
+            if not call and (user_id or partner_id) and hasattr(self, "active_calls"):
+                for cid, c in list(self.active_calls.items()):
+                    if (user_id and (c.get("caller_id") == user_id or c.get("receiver_id") == user_id)) or \
+                       (partner_id and (c.get("caller_id") == partner_id or c.get("receiver_id") == partner_id)):
+                        call = self.active_calls.pop(cid, None)
+                        channel_id = cid
+                        break
+
             if call:
                 duration_sec = 0
                 if "start_time" in call:
@@ -941,6 +960,7 @@ class ChatServer:
                 mins, secs = divmod(duration_sec, 60)
                 dur_str = f"{mins:02d}:{secs:02d}"
 
+                log(f"[Call] call_end: channel={channel_id}, duration={dur_str}. Broadcasting call_ended to caller={call['caller_id']} & receiver={call['receiver_id']}")
                 self.broadcast_to_users([call["caller_id"], call["receiver_id"]], {
                     "type": "call_ended",
                     "channel_id": channel_id,
@@ -996,16 +1016,27 @@ class ChatServer:
                 "message": "Cuộc gọi đã kết thúc hoặc không tồn tại."
             }
 
-        # 30. Chuyển tiếp luồng Audio / Video thời gian thực (Media Relay)
+        # 32. Chuyển tiếp luồng Audio / Video thời gian thực (Media Relay)
         elif action == "call_media":
             channel_id = packet.get("channel_id")
             sender_id = packet.get("sender_id")
+            try:
+                if sender_id: sender_id = int(sender_id)
+            except Exception:
+                pass
             call = getattr(self, "active_calls", {}).get(channel_id)
+            if not call and sender_id:
+                for cid, c in getattr(self, "active_calls", {}).items():
+                    if c.get("caller_id") == sender_id or c.get("receiver_id") == sender_id:
+                        call = c
+                        channel_id = cid
+                        break
             if call:
                 target_id = call["receiver_id"] if sender_id == call["caller_id"] else call["caller_id"]
                 self.broadcast_to_users([target_id], {
                     "type": "call_media_relay",
                     "channel_id": channel_id,
+                    "sender_id": sender_id,
                     "media_type": packet.get("media_type"), # 'audio' hoặc 'video'
                     "data": packet.get("data")
                 })

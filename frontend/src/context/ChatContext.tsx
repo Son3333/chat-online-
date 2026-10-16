@@ -254,16 +254,19 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const endCall = async () => {
     if (!activeCall) return;
-    if (activeCall.channelId) {
-      try {
-        await apiService.sendRequest('call_end', {
-          channel_id: activeCall.channelId,
-        });
-      } catch (err) {
-        console.warn('[Call] Error sending call_end:', err);
-      }
-    }
+    const cid = activeCall.channelId;
+    const pid = activeCall.partnerId;
     setActiveCall(null);
+    setIncomingCall(null);
+    try {
+      await apiService.sendRequest('call_end', {
+        channel_id: cid,
+        user_id: currentUser?.id,
+        partner_id: pid,
+      });
+    } catch (err) {
+      console.warn('[Call] Error sending call_end:', err);
+    }
   };
 
   const logout = () => {
@@ -276,10 +279,10 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.removeItem('telegram_user');
   };
 
-  // Polling heartbeat while outgoing call is ringing
-  // Guarantees caller transitions to connected screen within 800ms as soon as receiver accepts
+  // Polling heartbeat while call is active (both ringing & connected)
+  // Guarantees both sides synchronize connection and disconnection within 1s
   useEffect(() => {
-    if (!activeCall || !activeCall.isOutgoing || activeCall.isConnected) return;
+    if (!activeCall) return;
 
     const interval = setInterval(async () => {
       try {
@@ -290,20 +293,22 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
 
         if (res && res.success && res.status === 'connected') {
-          setActiveCall((prev) =>
-            prev ? { ...prev, isConnected: true, channelId: res.channel_id || prev.channelId } : null
-          );
-        } else if (res && res.status === 'ended') {
+          if (!activeCall.isConnected) {
+            setActiveCall((prev) =>
+              prev ? { ...prev, isConnected: true, channelId: res.channel_id || prev.channelId } : null
+            );
+          }
+        } else if (res && (!res.success || res.status === 'ended')) {
           setActiveCall(null);
           setIncomingCall(null);
         }
       } catch (err) {
         // Silent catch on poll
       }
-    }, 800);
+    }, 1000);
 
     return () => clearInterval(interval);
-  }, [activeCall?.isOutgoing, activeCall?.isConnected, activeCall?.channelId, activeCall?.partnerId, currentUser?.id]);
+  }, [activeCall, currentUser?.id]);
 
   // Listen to real-time events from Python Server
   useEffect(() => {

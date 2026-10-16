@@ -222,6 +222,18 @@ export class PythonBridge {
       const header = Buffer.alloc(4);
       header.writeUInt32BE(jsonBuffer.length, 0);
 
+      // Fire-and-forget for real-time video frames (no timeout overhead)
+      if (action === 'call_media') {
+        try {
+          if (this.socket) {
+            this.socket.write(Buffer.concat([header, jsonBuffer]));
+          }
+          return resolve({ success: true });
+        } catch (err) {
+          return reject(err);
+        }
+      }
+
       const timeoutId = setTimeout(() => {
         this.pendingRequests.delete(trackingKey);
         reject(new Error(`Yêu cầu '${action}' quá thời gian chờ (${actualTimeout}ms)`));
