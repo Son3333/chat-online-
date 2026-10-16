@@ -167,6 +167,10 @@ class PythonBridge {
             start_direct_chat: ['direct_chat_started', 'start_direct_chat_response', 'start_direct_chat'],
             create_group: ['create_group_response', 'create_group'],
             check_call_status: ['check_call_status_response', 'check_call_status'],
+            call_invite: ['call_invite_response', 'call_invite'],
+            call_accept: ['call_accept_response', 'call_accept'],
+            call_end: ['call_end_response', 'call_end'],
+            call_reject: ['call_reject_response', 'call_reject'],
         };
         // Check if there is an in-flight request waiting for this action response directly
         if (action && this.pendingRequests.has(action)) {
@@ -197,7 +201,7 @@ class PythonBridge {
         // Otherwise it is a push event broadcast from server (new_message, user_status_changed, etc.)
         this.emitEvent(packet);
     }
-    async sendRequest(action, payload = {}, timeoutMs = 12000) {
+    async sendRequest(action, payload = {}, timeoutMs = 25000) {
         // Tự động thử kết nối lại ngay nếu hiện tại chưa kết nối
         if (!this.connected || !this.socket || this.socket.destroyed) {
             console.log(`[PythonBridge] Socket not connected for '${action}', attempting to connect to ${this.host}:${this.port}...`);
@@ -209,7 +213,8 @@ class PythonBridge {
         return new Promise((resolve, reject) => {
             // Extended timeout for large media/file transfers over WAN
             const isFileTransfer = action === 'download_file' || action === 'upload_file';
-            const actualTimeout = isFileTransfer ? 60000 : timeoutMs;
+            const isCallAction = action.startsWith('call_') || action === 'check_call_status';
+            const actualTimeout = isFileTransfer ? 90000 : (isCallAction ? 35000 : timeoutMs);
             // Unique tracking key for download_file by file_id
             const trackingKey = (action === 'download_file' && payload.file_id !== undefined)
                 ? `download_file_${payload.file_id}`

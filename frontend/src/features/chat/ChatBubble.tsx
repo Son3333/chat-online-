@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Pin, Reply, Trash2, Copy, FileText, Download, ExternalLink, Heart, Video, MapPin, Navigation, FolderArchive } from 'lucide-react';
+import { Check, Pin, Reply, Trash2, Copy, FileText, Download, ExternalLink, Heart, Video, MapPin, Navigation, FolderArchive, Play } from 'lucide-react';
 import { Message } from '../../types';
 import { formatTime, formatFileSize } from '../../lib/utils';
 import { useChat } from '../../context/ChatContext';
@@ -90,17 +90,23 @@ const ImageBubbleContent: React.FC<{
   );
 };
 
+const videoBlobCache = new Map<string | number, string>();
+
 const VideoBubbleContent: React.FC<{
   fileId: string | number;
   originalName?: string;
   onDownload: () => void;
 }> = ({ fileId, originalName, onDownload }) => {
-  const [videoSrc, setVideoSrc] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cached = videoBlobCache.get(fileId) || null;
+  const [videoSrc, setVideoSrc] = useState<string | null>(cached);
+  const [loading, setLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
-  const blobUrlRef = React.useRef<string | null>(null);
 
   const fetchVideo = () => {
+    if (videoBlobCache.has(fileId)) {
+      setVideoSrc(videoBlobCache.get(fileId)!);
+      return;
+    }
     setLoading(true);
     setHasError(false);
     apiService.downloadFile(fileId)
@@ -115,6 +121,7 @@ const VideoBubbleContent: React.FC<{
             else mime = 'video/mp4';
           }
 
+          let url: string;
           try {
             const binaryString = atob(res.file_data);
             const bytes = new Uint8Array(binaryString.length);
@@ -122,12 +129,12 @@ const VideoBubbleContent: React.FC<{
               bytes[i] = binaryString.charCodeAt(i);
             }
             const blob = new Blob([bytes], { type: mime });
-            const url = URL.createObjectURL(blob);
-            blobUrlRef.current = url;
-            setVideoSrc(url);
+            url = URL.createObjectURL(blob);
           } catch {
-            setVideoSrc(`data:${mime};base64,${res.file_data}`);
+            url = `data:${mime};base64,${res.file_data}`;
           }
+          videoBlobCache.set(fileId, url);
+          setVideoSrc(url);
         } else {
           setHasError(true);
         }
@@ -141,12 +148,9 @@ const VideoBubbleContent: React.FC<{
   };
 
   useEffect(() => {
-    fetchVideo();
-    return () => {
-      if (blobUrlRef.current) {
-        URL.revokeObjectURL(blobUrlRef.current);
-      }
-    };
+    if (videoBlobCache.has(fileId)) {
+      setVideoSrc(videoBlobCache.get(fileId)!);
+    }
   }, [fileId]);
 
   return (
@@ -160,6 +164,7 @@ const VideoBubbleContent: React.FC<{
         <div className="flex flex-col">
           <video
             controls
+            autoPlay
             preload="metadata"
             src={videoSrc}
             onError={() => setHasError(true)}
@@ -179,7 +184,7 @@ const VideoBubbleContent: React.FC<{
       ) : (
         <div className="p-4 flex flex-col space-y-2.5">
           <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
               <Video className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
@@ -187,20 +192,21 @@ const VideoBubbleContent: React.FC<{
                 {originalName || 'Video clip'}
               </span>
               <span className="text-[10px] text-slate-400 block">
-                {hasError ? 'Tải tệp video bị gián đoạn' : 'Tệp video đính kèm'}
+                {hasError ? 'Tải tệp video bị gián đoạn' : 'Video đính kèm (Bấm để xem)'}
               </span>
             </div>
           </div>
           <div className="flex items-center space-x-2">
             <button
               onClick={fetchVideo}
-              className="flex-1 py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+              className="flex-1 py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors shadow-sm"
             >
-              <span>Tải lại video</span>
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>{hasError ? 'Thử lại' : 'Xem video'}</span>
             </button>
             <button
               onClick={onDownload}
-              className="flex-1 py-1.5 px-3 rounded-lg bg-[#2481cc] hover:bg-[#1d6fa5] text-white text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors"
+              className="flex-1 py-1.5 px-3 rounded-lg bg-[#2481cc] hover:bg-[#1d6fa5] text-white text-xs font-semibold flex items-center justify-center space-x-1.5 transition-colors shadow-sm"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Lưu về máy</span>

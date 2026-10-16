@@ -170,6 +170,7 @@ export const CallModal: React.FC = () => {
           apiService.sendRequest('call_media', {
             channel_id: activeCall.channelId,
             sender_id: currentUser?.id,
+            partner_id: activeCall.partnerId,
             media_type: 'video',
             data: frameData,
           }).catch(() => {});

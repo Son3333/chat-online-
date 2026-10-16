@@ -1020,19 +1020,26 @@ class ChatServer:
         elif action == "call_media":
             channel_id = packet.get("channel_id")
             sender_id = packet.get("sender_id")
+            partner_id = packet.get("partner_id")
             try:
                 if sender_id: sender_id = int(sender_id)
+                if partner_id: partner_id = int(partner_id)
             except Exception:
                 pass
-            call = getattr(self, "active_calls", {}).get(channel_id)
-            if not call and sender_id:
-                for cid, c in getattr(self, "active_calls", {}).items():
-                    if c.get("caller_id") == sender_id or c.get("receiver_id") == sender_id:
-                        call = c
-                        channel_id = cid
-                        break
-            if call:
-                target_id = call["receiver_id"] if sender_id == call["caller_id"] else call["caller_id"]
+
+            target_id = partner_id
+            if not target_id:
+                call = getattr(self, "active_calls", {}).get(channel_id)
+                if not call and sender_id:
+                    for cid, c in getattr(self, "active_calls", {}).items():
+                        if c.get("caller_id") == sender_id or c.get("receiver_id") == sender_id:
+                            call = c
+                            channel_id = cid
+                            break
+                if call:
+                    target_id = call["receiver_id"] if sender_id == call["caller_id"] else call["caller_id"]
+
+            if target_id:
                 self.broadcast_to_users([target_id], {
                     "type": "call_media_relay",
                     "channel_id": channel_id,

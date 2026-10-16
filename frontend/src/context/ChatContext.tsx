@@ -298,15 +298,15 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               prev ? { ...prev, isConnected: true, channelId: res.channel_id || prev.channelId } : null
             );
           }
-        } else if (activeCall.isConnected && res && res.status === 'ended') {
-          // Partner ended the call
+        } else if (res && res.status === 'ended') {
+          // Partner ended or rejected the call
           setActiveCall(null);
           setIncomingCall(null);
         }
       } catch (err) {
         // Silent catch on poll
       }
-    }, 1000);
+    }, 2500);
 
     return () => clearInterval(interval);
   }, [activeCall?.channelId, activeCall?.isConnected, activeCall?.partnerId, currentUser?.id]);
