@@ -269,7 +269,7 @@ class Database:
             return {"success": True, "user": {"id": new_id, "username": username, "full_name": full_name, "avatar_color": avatar_color}}
 
     def authenticate_user(self, username, password):
-        username = username.strip().lower()
+        username = username.strip().lower().lstrip("@")
         with self.get_connection() as conn:
             cursor = conn.cursor()
             pwd_hash = hash_password(password)

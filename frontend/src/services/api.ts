@@ -15,7 +15,9 @@ declare global {
       onUpdateAvailable: (callback: (updateInfo: { remoteHash: string; localHash: string; message: string }) => void) => () => void;
       applyUpdate: () => Promise<{ success: boolean; error?: string }>;
       checkUpdateNow: () => Promise<any>;
-      getServerInfo?: () => Promise<{ isWan: boolean; address: string }>;
+      getServerInfo?: () => Promise<{ isWan: boolean; address: string; host?: string; port?: number }>;
+      getServerConfig?: () => Promise<{ host: string; port: number; isWan: boolean }>;
+      setServerConfig?: (config: { host: string; port: number }) => Promise<{ host: string; port: number; isWan: boolean; connected: boolean }>;
       openExternal?: (url: string) => Promise<boolean>;
     };
   }
@@ -44,13 +46,36 @@ export const apiService = {
     return () => {};
   },
 
+  async getServerInfo(): Promise<{ isWan: boolean; address: string; host?: string; port?: number }> {
+    if (window.api?.getServerInfo) {
+      return await window.api.getServerInfo();
+    }
+    return { isWan: false, address: '127.0.0.1:8888', host: '127.0.0.1', port: 8888 };
+  },
+
+  async getServerConfig(): Promise<{ host: string; port: number; isWan: boolean }> {
+    if (window.api?.getServerConfig) {
+      return await window.api.getServerConfig();
+    }
+    return { host: '127.0.0.1', port: 8888, isWan: false };
+  },
+
+  async setServerConfig(host: string, port: number): Promise<{ host: string; port: number; isWan: boolean; connected: boolean }> {
+    if (window.api?.setServerConfig) {
+      return await window.api.setServerConfig({ host, port });
+    }
+    return { host, port, isWan: false, connected: true };
+  },
+
   // Auth
   async login(username: string, password: string): Promise<{ success: boolean; user?: User; error?: string }> {
-    return await this.sendRequest('login', { username, password });
+    const cleanUsername = username.trim().toLowerCase().replace(/^@+/, '');
+    return await this.sendRequest('login', { username: cleanUsername, password });
   },
 
   async register(username: string, password: string, full_name: string): Promise<{ success: boolean; user?: User; error?: string }> {
-    return await this.sendRequest('register', { username, password, full_name });
+    const cleanUsername = username.trim().toLowerCase().replace(/^@+/, '');
+    return await this.sendRequest('register', { username: cleanUsername, password, full_name: full_name.trim() });
   },
 
   async updateProfile(userId: number, data: {
@@ -322,13 +347,6 @@ export const apiService = {
     if (window.api?.checkUpdateNow) {
       return await window.api.checkUpdateNow();
     }
-  },
-
-  async getServerInfo(): Promise<{ isWan: boolean; address: string }> {
-    if (window.api?.getServerInfo) {
-      return await window.api.getServerInfo();
-    }
-    return { isWan: false, address: '127.0.0.1:8888' };
   },
 
   async openExternal(url: string): Promise<boolean> {

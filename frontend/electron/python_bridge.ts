@@ -24,6 +24,15 @@ export class PythonBridge {
     this.port = port;
   }
 
+  public setEndpoint(host: string, port: number) {
+    this.host = host;
+    this.port = port;
+  }
+
+  public getEndpoint(): { host: string; port: number } {
+    return { host: this.host, port: this.port };
+  }
+
   public connect(): Promise<boolean> {
     return new Promise((resolve) => {
       if (this.socket) {

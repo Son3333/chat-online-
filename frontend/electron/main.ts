@@ -12,14 +12,14 @@ let pythonBridge: PythonBridge | null = null;
 let gitUpdater: GitUpdater | null = null;
 
 const isDev = process.env.NODE_ENV === 'development' || (typeof app !== 'undefined' && app ? !app.isPackaged : false);
-const PORT = 8888;
-const HOST = '127.0.0.1';
+let PORT = 8888;
+let HOST = '127.0.0.1';
 
 // Kiểm tra xem port 8888 đã có server chạy chưa
 function checkPortAvailable(port: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
     const s = new net.Socket();
-    s.setTimeout(1000);
+    s.setTimeout(1200);
     s.on('connect', () => {
       s.destroy();
       resolve(true); // Có server đang chạy
@@ -36,7 +36,44 @@ function checkPortAvailable(port: number, host: string): Promise<boolean> {
   });
 }
 
+// Tự động phân giải địa chỉ máy chủ phù hợp (Cục bộ localhost hoặc Mạng Internet WAN)
+async function resolveServerEndpoint(): Promise<{ host: string; port: number; isWan: boolean }> {
+  const rootDir = path.resolve(__dirname, '../../');
+  const cfgPath = path.join(rootDir, 'server_config.json');
+
+  // 1. Kiểm tra cấu hình thủ công trong server_config.json nếu có
+  if (fs.existsSync(cfgPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+      if (data.host && data.port) {
+        const h = String(data.host).trim();
+        const p = Number(data.port);
+        console.log(`[Main] Using configured server from server_config.json: ${h}:${p}`);
+        return { host: h, port: p, isWan: h !== '127.0.0.1' && h !== 'localhost' };
+      }
+    } catch {}
+  }
+
+  // 2. Kiểm tra nếu có Server cục bộ đang chạy trên chính máy tính này (Máy Chủ Host)
+  const isLocalRunning = await checkPortAvailable(8888, '127.0.0.1');
+  if (isLocalRunning) {
+    console.log('[Main] Local Python server detected on 127.0.0.1:8888');
+    return { host: '127.0.0.1', port: 8888, isWan: false };
+  }
+
+  // 3. Nếu máy này không chạy server cục bộ -> Đây là Máy Khác (Client từ xa)
+  // Kết nối trực tiếp tới Server WAN mặc định trên Internet: bore.pub:38888!
+  console.log('[Main] No local server running. Auto-connecting to online WAN Server: bore.pub:38888');
+  return { host: 'bore.pub', port: 38888, isWan: true };
+}
+
 async function startPythonBackendIfNeeded(): Promise<void> {
+  // Chỉ khởi chạy server ngầm nếu kết nối vào chính máy này (127.0.0.1)
+  if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
+    console.log(`[Main] Client configured to remote server (${HOST}:${PORT}). Skipping local server spawn.`);
+    return;
+  }
+
   const isServerRunning = await checkPortAvailable(PORT, HOST);
   if (isServerRunning) {
     console.log('[Main] Python Chat Server is already running on port', PORT);
@@ -235,13 +272,51 @@ ipcMain.handle('app:get-server-info', () => {
       const content = fs.readFileSync(wanInfoPath, 'utf-8');
       const match = content.match(/FULL=(.+)/);
       if (match && match[1]) {
-        return { isWan: true, address: match[1].trim() };
+        return { isWan: true, address: match[1].trim(), host: HOST, port: PORT };
       }
     } catch {
       // fallback
     }
   }
-  return { isWan: false, address: `${HOST}:${PORT}` };
+  const isWan = HOST !== '127.0.0.1' && HOST !== 'localhost';
+  return { isWan, address: `${HOST}:${PORT}`, host: HOST, port: PORT };
+});
+
+ipcMain.handle('app:get-server-config', () => {
+  return {
+    host: HOST,
+    port: PORT,
+    isWan: HOST !== '127.0.0.1' && HOST !== 'localhost',
+  };
+});
+
+ipcMain.handle('app:set-server-config', async (_event, { host, port }: { host: string; port: number }) => {
+  HOST = host.trim();
+  PORT = Number(port);
+  const rootDir = path.resolve(__dirname, '../../');
+  const cfgPath = path.join(rootDir, 'server_config.json');
+  try {
+    fs.writeFileSync(cfgPath, JSON.stringify({ host: HOST, port: PORT }, null, 2), 'utf-8');
+  } catch (e) {
+    console.warn('[Main] Could not write server_config.json:', e);
+  }
+
+  if (pythonBridge) {
+    pythonBridge.setEndpoint(HOST, PORT);
+    const ok = await pythonBridge.connect();
+    return {
+      host: HOST,
+      port: PORT,
+      isWan: HOST !== '127.0.0.1' && HOST !== 'localhost',
+      connected: ok,
+    };
+  }
+  return {
+    host: HOST,
+    port: PORT,
+    isWan: HOST !== '127.0.0.1' && HOST !== 'localhost',
+    connected: false,
+  };
 });
 
 // Media permissions and Screen Sharing Handlers
@@ -279,6 +354,11 @@ app.whenReady().then(async () => {
         callback({});
       });
   });
+
+  // Tự động phân giải server endpoint (máy chủ localhost hay WAN remote)
+  const endpoint = await resolveServerEndpoint();
+  HOST = endpoint.host;
+  PORT = endpoint.port;
 
   await startPythonBackendIfNeeded();
 

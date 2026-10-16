@@ -13,7 +13,9 @@ export interface ElectronAPI {
   onUpdateAvailable: (callback: (updateInfo: { remoteHash: string; localHash: string; message: string }) => void) => () => void;
   applyUpdate: () => Promise<{ success: boolean; error?: string }>;
   checkUpdateNow: () => Promise<any>;
-  getServerInfo: () => Promise<{ isWan: boolean; address: string }>;
+  getServerInfo: () => Promise<{ isWan: boolean; address: string; host?: string; port?: number }>;
+  getServerConfig: () => Promise<{ host: string; port: number; isWan: boolean }>;
+  setServerConfig: (config: { host: string; port: number }) => Promise<{ host: string; port: number; isWan: boolean; connected: boolean }>;
   getScreenSourceId: () => Promise<string | null>;
   openExternal: (url: string) => Promise<boolean>;
 }
@@ -39,6 +41,8 @@ const api: ElectronAPI = {
   applyUpdate: () => ipcRenderer.invoke('app:apply_update'),
   checkUpdateNow: () => ipcRenderer.invoke('app:check_update'),
   getServerInfo: () => ipcRenderer.invoke('app:get-server-info'),
+  getServerConfig: () => ipcRenderer.invoke('app:get-server-config'),
+  setServerConfig: (config) => ipcRenderer.invoke('app:set-server-config', config),
   getScreenSourceId: () => ipcRenderer.invoke('media:get-screen-source-id'),
   openExternal: (url: string) => ipcRenderer.invoke('app:open-external', url),
   minimizeWindow: () => ipcRenderer.send('window:minimize'),
