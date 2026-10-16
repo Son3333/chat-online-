@@ -27,10 +27,10 @@ class ChatApplication(ctk.CTk):
         
         # Configure Window
         self.title("Ứng Dụng Nhắn Tin & Truyền Thông Tin - Nhóm 05")
-        self.minsize(850, 600)
+        self.minsize(980, 650)
         
-        # Khôi phục trạng thái kích thước và tọa độ từ lần trước (hỗ trợ đa màn hình)
-        restore_window_state(self, default_w=1100, default_h=720)
+        # Khôi phục trạng thái kích thước và tọa độ từ lần trước (kích thước chuẩn 1380x940)
+        restore_window_state(self, default_w=1380, default_h=940)
 
         # Themes
         ctk.set_appearance_mode("Dark")
