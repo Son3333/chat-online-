@@ -77,6 +77,17 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
     }
   };
 
+  const handleCancelFriendRequest = async (targetId: number) => {
+    if (!currentUser) return;
+    const res = await apiService.removeFriend(currentUser.id, targetId);
+    if (res && res.success) {
+      setStatusMsg({ text: 'Đã hủy lời mời kết bạn.', type: 'success' });
+      await refreshFriends();
+    } else {
+      setStatusMsg({ text: (res as any)?.error || res?.message || 'Hủy lời mời thất bại!', type: 'error' });
+    }
+  };
+
   const handleBlockUser = async (targetId: number) => {
     if (!currentUser) return;
     if (!confirm('Bạn có chắc chắn muốn chặn người dùng này? Họ sẽ không thể nhắn tin cho bạn.')) return;
@@ -431,10 +442,16 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
                             </button>
                           </div>
                         ) : isSent ? (
-                          <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold flex items-center space-x-1 cursor-default">
-                            <Clock className="w-3.5 h-3.5 animate-pulse" />
-                            <span>Đã gửi lời mời (Chờ duyệt)</span>
-                          </span>
+                          <button
+                            onClick={() => handleCancelFriendRequest(user.id)}
+                            title="Bấm để hủy lời mời kết bạn"
+                            className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-rose-500/15 text-amber-600 dark:text-amber-400 hover:text-rose-600 dark:hover:text-rose-400 border border-amber-500/25 hover:border-rose-500/30 font-semibold flex items-center space-x-1 cursor-pointer transition-all active:scale-95 group/btn"
+                          >
+                            <Clock className="w-3.5 h-3.5 group-hover/btn:hidden" />
+                            <X className="w-3.5 h-3.5 hidden group-hover/btn:inline-block text-rose-500" />
+                            <span className="group-hover/btn:hidden">Chờ duyệt</span>
+                            <span className="hidden group-hover/btn:inline-block font-semibold">Hủy lời mời</span>
+                          </button>
                         ) : (
                           <button
                             onClick={() => handleSendFriendRequest(user.id)}

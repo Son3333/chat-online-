@@ -91,6 +91,14 @@ export const ChatArea: React.FC = () => {
     }
   };
 
+  const handleCancelRequest = async () => {
+    if (!currentUser || !partnerId) return;
+    const res = await apiService.removeFriend(currentUser.id, partnerId);
+    if (res && res.success) {
+      await refreshFriends();
+    }
+  };
+
   const handleBlockUser = async () => {
     if (!currentUser || !partnerId) return;
     if (!confirm(`Bạn có chắc chắn muốn chặn ${activeConv.title}? Họ sẽ không thể nhắn tin cho bạn.`)) return;
@@ -147,10 +155,16 @@ export const ChatArea: React.FC = () => {
                 </button>
               </>
             ) : isSent ? (
-              <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium flex items-center space-x-1">
-                <Clock className="w-3.5 h-3.5" />
-                <span>Chờ duyệt</span>
-              </span>
+              <button
+                onClick={handleCancelRequest}
+                title="Bấm vào để hủy lời mời kết bạn đã gửi"
+                className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-rose-500/15 text-amber-600 dark:text-amber-400 hover:text-rose-600 dark:hover:text-rose-400 border border-amber-500/25 hover:border-rose-500/30 font-medium flex items-center space-x-1 transition-all active:scale-95 cursor-pointer group/btn"
+              >
+                <Clock className="w-3.5 h-3.5 group-hover/btn:hidden" />
+                <X className="w-3.5 h-3.5 hidden group-hover/btn:inline-block text-rose-500" />
+                <span className="group-hover/btn:hidden">Chờ duyệt</span>
+                <span className="hidden group-hover/btn:inline-block font-semibold">Hủy lời mời</span>
+              </button>
             ) : (
               <button
                 onClick={handleAddFriend}
