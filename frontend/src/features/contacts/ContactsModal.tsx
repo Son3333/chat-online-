@@ -44,26 +44,48 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
     }
   };
 
-  const handleAcceptRequest = async (requesterId: number) => {
-    if (!currentUser) return;
-    const res = await apiService.acceptFriendRequest(currentUser.id, requesterId);
-    if (res && res.success) {
-      setStatusMsg({ text: 'Đã chấp nhận lời mời kết bạn!', type: 'success' });
-      await refreshFriends();
-      await refreshConversations();
-    } else {
-      setStatusMsg({ text: res.error || 'Xử lý lời mời thất bại!', type: 'error' });
+  const [processingId, setProcessingId] = useState<number | null>(null);
+
+  const handleAcceptRequest = async (requesterId: number, reqName?: string) => {
+    if (!currentUser || processingId) return;
+    setProcessingId(requesterId);
+    setStatusMsg(null);
+    try {
+      const res = await apiService.acceptFriendRequest(currentUser.id, requesterId);
+      if (res && res.success) {
+        setStatusMsg({ text: res.message || `Đã đồng ý kết bạn với ${reqName || 'người dùng'}!`, type: 'success' });
+        await refreshFriends();
+        await refreshConversations();
+        // Tự động chuyển sang tab "Bạn Bè" để người dùng thấy ngay kết quả
+        setTimeout(() => {
+          setActiveTab('friends');
+        }, 500);
+      } else {
+        setStatusMsg({ text: res.error || res.message || 'Xử lý lời mời thất bại!', type: 'error' });
+      }
+    } catch (err: any) {
+      setStatusMsg({ text: err.message || 'Lỗi kết nối máy chủ!', type: 'error' });
+    } finally {
+      setProcessingId(null);
     }
   };
 
   const handleRejectRequest = async (requesterId: number) => {
-    if (!currentUser) return;
-    const res = await apiService.rejectFriendRequest(currentUser.id, requesterId);
-    if (res && res.success) {
-      setStatusMsg({ text: 'Đã từ chối lời mời kết bạn!', type: 'success' });
-      await refreshFriends();
-    } else {
-      setStatusMsg({ text: res.error || 'Từ chối lời mời thất bại!', type: 'error' });
+    if (!currentUser || processingId) return;
+    setProcessingId(requesterId);
+    setStatusMsg(null);
+    try {
+      const res = await apiService.rejectFriendRequest(currentUser.id, requesterId);
+      if (res && res.success) {
+        setStatusMsg({ text: 'Đã từ chối lời mời kết bạn!', type: 'success' });
+        await refreshFriends();
+      } else {
+        setStatusMsg({ text: res.error || res.message || 'Từ chối lời mời thất bại!', type: 'error' });
+      }
+    } catch (err: any) {
+      setStatusMsg({ text: err.message || 'Lỗi kết nối máy chủ!', type: 'error' });
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -338,15 +360,17 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
 
                   <div className="flex items-center space-x-2">
                     <button
-                      onClick={() => handleAcceptRequest(req.id)}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors flex items-center space-x-1 shadow-sm"
+                      disabled={Boolean(processingId)}
+                      onClick={() => handleAcceptRequest(req.id, req.full_name)}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition-colors flex items-center space-x-1 shadow-sm disabled:opacity-50"
                     >
                       <Check className="w-3.5 h-3.5" />
-                      <span>Đồng ý</span>
+                      <span>{processingId === req.id ? 'Đang duyệt...' : 'Đồng ý'}</span>
                     </button>
                     <button
+                      disabled={Boolean(processingId)}
                       onClick={() => handleRejectRequest(req.id)}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold hover:bg-red-50 dark:hover:bg-red-500/20 hover:text-red-600 transition-colors flex items-center space-x-1"
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-semibold hover:bg-red-50 dark:hover:bg-red-500/20 hover:text-red-600 transition-colors flex items-center space-x-1 disabled:opacity-50"
                     >
                       <X className="w-3.5 h-3.5" />
                       <span>Từ chối</span>

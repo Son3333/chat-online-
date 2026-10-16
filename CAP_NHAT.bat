@@ -39,3 +39,4 @@ echo [*] Dang khoi dong ung dung ngay bay gio...
 timeout /t 2 >nul
 start "" "%~dp0CHAY_UNG_DUNG.bat"
 exit /b 0
+
