@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Pin, Reply, Trash2, Copy, FileText, Download, ExternalLink, Heart, Video, MapPin, Navigation, FolderArchive, Play, Phone, PhoneMissed, PhoneCall } from 'lucide-react';
+import { Check, Pin, Reply, Trash2, Copy, FileText, Download, ExternalLink, Heart, Video, MapPin, Navigation, FolderArchive, Play, Phone, PhoneMissed, PhoneCall, Eye } from 'lucide-react';
 import { Message } from '../../types';
 import { formatTime, formatFileSize } from '../../lib/utils';
 import { useChat } from '../../context/ChatContext';
@@ -9,6 +9,7 @@ interface ChatBubbleProps {
   message: Message;
   isSelf: boolean;
   onOpenImage?: (fileId: string, name: string, dataUrl?: string) => void;
+  onOpenFilePreview?: (fileId: string | number, name: string, fileSize?: number, fileType?: string) => void;
 }
 
 const ImageBubbleContent: React.FC<{
@@ -469,7 +470,7 @@ const CallBubbleContent: React.FC<{
 
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🔥'];
 
-export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenImage }) => {
+export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenImage, onOpenFilePreview }) => {
   const { setReplyTo, pinMessage, recallMessage, toggleReaction, currentUser, startCall } = useChat();
   const [showMenu, setShowMenu] = useState(false);
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
@@ -593,27 +594,46 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
           return (
             <div className="my-1 p-2.5 rounded-xl bg-black/5 dark:bg-black/25 flex items-center space-x-3">
               <div
-                className={`w-9 h-9 rounded-lg flex items-center justify-center ${
+                onClick={() => message.file_id && onOpenFilePreview?.(message.file_id, message.original_name || (message as any).file_name || 'Tài liệu', message.file_size || (message as any).size, message.msg_type)}
+                className={`w-9 h-9 rounded-lg flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity ${
                   isZip
                     ? 'bg-amber-500/15 text-amber-500'
                     : 'bg-[#2481cc]/15 text-[#2481cc]'
                 }`}
+                title="Bấm để xem trước tệp tin"
               >
                 {isZip ? <FolderArchive className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
               </div>
-              <div className="flex-1 min-w-0">
-                <span className="font-semibold text-xs truncate block">{message.original_name || (message as any).file_name || 'Tài liệu'}</span>
+              <div
+                onClick={() => message.file_id && onOpenFilePreview?.(message.file_id, message.original_name || (message as any).file_name || 'Tài liệu', message.file_size || (message as any).size, message.msg_type)}
+                className="flex-1 min-w-0 cursor-pointer group/file"
+                title="Bấm để xem trước tệp tin"
+              >
+                <span className="font-semibold text-xs truncate block group-hover/file:underline text-slate-800 dark:text-slate-100">
+                  {message.original_name || (message as any).file_name || 'Tài liệu'}
+                </span>
                 <span className="text-[10px] opacity-70 block">
-                  {formatFileSize(message.file_size || (message as any).size)} {isZip ? '• Tệp nén' : ''}
+                  {formatFileSize(message.file_size || (message as any).size)} {isZip ? '• Tệp nén' : ''} • Bấm để xem
                 </span>
               </div>
-              <button
-                onClick={handleDownloadFile}
-                title="Tải về máy"
-                className="p-1.5 rounded-lg bg-[#2481cc] hover:bg-[#1d73b8] text-white transition-colors"
-              >
-                <Download className="w-4 h-4" />
-              </button>
+              <div className="flex items-center space-x-1 flex-shrink-0">
+                {message.file_id && onOpenFilePreview && (
+                  <button
+                    onClick={() => onOpenFilePreview(message.file_id!, message.original_name || (message as any).file_name || 'Tài liệu', message.file_size || (message as any).size, message.msg_type)}
+                    title="Xem trước tệp tin"
+                    className="p-1.5 rounded-lg bg-slate-200 dark:bg-slate-700/80 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
+                )}
+                <button
+                  onClick={handleDownloadFile}
+                  title="Tải về máy tính"
+                  className="p-1.5 rounded-lg bg-[#2481cc] hover:bg-[#1d73b8] text-white transition-colors cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           );
         })()}

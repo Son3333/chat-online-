@@ -6,6 +6,7 @@ import APP_LOGO from '../../assets/logo';
 import { ChatHeader } from './ChatHeader';
 import { ChatBubble } from './ChatBubble';
 import { ChatComposer } from './ChatComposer';
+import { FilePreviewModal } from './FilePreviewModal';
 
 export const ChatArea: React.FC = () => {
   const {
@@ -22,6 +23,7 @@ export const ChatArea: React.FC = () => {
   } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [previewImage, setPreviewImage] = useState<{ fileId: string; name: string; url?: string } | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ fileId: string | number; name: string; fileSize?: number; fileType?: string } | null>(null);
   const [logoError, setLogoError] = useState(false);
 
   // Auto scroll to bottom on new messages
@@ -224,6 +226,9 @@ export const ChatArea: React.FC = () => {
                 message={msg}
                 isSelf={isSelf}
                 onOpenImage={(fileId, name, dataUrl) => setPreviewImage({ fileId, name, url: dataUrl })}
+                onOpenFilePreview={(fileId, name, size, type) =>
+                  setPreviewFile({ fileId, name, fileSize: size, fileType: type })
+                }
               />
             </div>
           );
@@ -241,6 +246,18 @@ export const ChatArea: React.FC = () => {
           name={previewImage.name}
           initialUrl={previewImage.url}
           onClose={() => setPreviewImage(null)}
+        />
+      )}
+
+      {/* 6. Universal File Preview Modal (PDF, Code, Text, Media, Office, Archive) */}
+      {previewFile && (
+        <FilePreviewModal
+          isOpen={Boolean(previewFile)}
+          onClose={() => setPreviewFile(null)}
+          fileId={previewFile.fileId}
+          fileName={previewFile.name}
+          fileSize={previewFile.fileSize}
+          fileType={previewFile.fileType}
         />
       )}
     </div>

@@ -4,6 +4,7 @@ import { useChat } from '../../context/ChatContext';
 import { EmojiPicker } from '../../components/EmojiPicker';
 import { apiService } from '../../services/api';
 import { LocationModal } from './LocationModal';
+import { formatFileSize } from '../../lib/utils';
 
 export const ChatComposer: React.FC = () => {
   const { replyTo, setReplyTo, sendMessage, activeConv, currentUser } = useChat();
@@ -13,6 +14,15 @@ export const ChatComposer: React.FC = () => {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+
+  // Staging Attachment before sending (Preview Before Send)
+  const [stagingAttachment, setStagingAttachment] = useState<{
+    fileName: string;
+    fileData: string;
+    fileSize: number;
+    category: 'image' | 'video' | 'file';
+    caption: string;
+  } | null>(null);
 
   const lastTypingRef = useRef<number>(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -76,7 +86,8 @@ export const ChatComposer: React.FC = () => {
     fileName: string,
     base64Data: string,
     fileSize: number,
-    enforcedType?: 'image' | 'video' | 'file'
+    enforcedType?: 'image' | 'video' | 'file',
+    customCaption?: string
   ) => {
     if (!activeConv || !currentUser) return;
 
@@ -86,7 +97,7 @@ export const ChatComposer: React.FC = () => {
     }
 
     setIsSending(true);
-    setUploadStatus('Đang chuẩn bị tệp...');
+    setUploadStatus('Đang chuẩn bị tệp tin...');
 
     try {
       const isImg =
@@ -105,7 +116,7 @@ export const ChatComposer: React.FC = () => {
       let finalSize = fileSize;
 
       if (isImg) {
-        setUploadStatus('Đang tối ưu hình ảnh...');
+        setUploadStatus('Đang nén tối ưu ảnh...');
         try {
           const mime = fileName.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
           const src = `data:${mime};base64,${base64Data}`;
@@ -155,11 +166,11 @@ export const ChatComposer: React.FC = () => {
           apiService.cacheImage(uploadRes.file_id, `data:image/jpeg;base64,${finalB64}`);
         }
 
-        const defaultCaption = isImg
+        const defaultCaption = customCaption?.trim() || (isImg
           ? 'Đã gửi một hình ảnh'
           : isVid
           ? `Đã gửi video: ${fileName}`
-          : `Đã gửi tài liệu: ${fileName}`;
+          : `Đã gửi tài liệu: ${fileName}`);
 
         setUploadStatus('Đang hoàn tất...');
         await sendMessage(
@@ -188,7 +199,13 @@ export const ChatComposer: React.FC = () => {
     try {
       const fileRes = await apiService.selectLocalFile(category);
       if (!fileRes.canceled && fileRes.fileData && fileRes.fileName) {
-        await processFileAttachment(fileRes.fileName, fileRes.fileData, fileRes.fileSize || 0, category);
+        setStagingAttachment({
+          fileName: fileRes.fileName,
+          fileData: fileRes.fileData,
+          fileSize: fileRes.fileSize || 0,
+          category,
+          caption: '',
+        });
         return;
       }
       if (fileRes.canceled) return;
@@ -212,10 +229,28 @@ export const ChatComposer: React.FC = () => {
     reader.onload = async () => {
       const result = reader.result as string;
       const b64 = result.includes(',') ? result.split(',')[1] : result;
-      await processFileAttachment(file.name, b64, file.size, activeCategory);
+      setStagingAttachment({
+        fileName: file.name,
+        fileData: b64,
+        fileSize: file.size,
+        category: activeCategory,
+        caption: '',
+      });
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleConfirmSendStaging = () => {
+    if (!stagingAttachment) return;
+    processFileAttachment(
+      stagingAttachment.fileName,
+      stagingAttachment.fileData,
+      stagingAttachment.fileSize,
+      stagingAttachment.category,
+      stagingAttachment.caption
+    );
+    setStagingAttachment(null);
   };
 
   const handleEmojiSelect = (emoji: string) => {
@@ -255,6 +290,93 @@ export const ChatComposer: React.FC = () => {
           >
             <X className="w-3.5 h-3.5" />
           </button>
+        </div>
+      )}
+
+      {/* Staging Attachment Preview Modal (Xem trước trước khi gửi) */}
+      {stagingAttachment && (
+        <div
+          onClick={() => setStagingAttachment(null)}
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-150 select-none"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-white dark:bg-[#182533] border border-slate-200 dark:border-slate-700/80 rounded-3xl shadow-2xl p-5 flex flex-col overflow-hidden animate-in zoom-in-95 duration-150"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <span className="font-bold text-sm text-slate-800 dark:text-slate-100">
+                Xem trước đính kèm
+              </span>
+              <button
+                onClick={() => setStagingAttachment(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Preview Box */}
+            <div className="my-4 p-3 rounded-2xl bg-slate-100 dark:bg-[#0e1621] flex flex-col items-center justify-center min-h-[160px] max-h-[300px] overflow-hidden">
+              {stagingAttachment.category === 'image' ? (
+                <img
+                  src={`data:image/jpeg;base64,${stagingAttachment.fileData}`}
+                  alt=""
+                  className="max-h-[220px] w-auto max-w-full rounded-xl object-contain shadow-sm"
+                />
+              ) : stagingAttachment.category === 'video' ? (
+                <video
+                  controls
+                  src={`data:video/mp4;base64,${stagingAttachment.fileData}`}
+                  className="max-h-[220px] w-full rounded-xl shadow-sm"
+                />
+              ) : (
+                <div className="flex flex-col items-center p-4 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-indigo-500/15 text-indigo-500 flex items-center justify-center mb-3">
+                    <FileText className="w-8 h-8" />
+                  </div>
+                  <span className="font-semibold text-xs text-slate-700 dark:text-slate-200 truncate max-w-[260px]">
+                    {stagingAttachment.fileName}
+                  </span>
+                  <span className="text-[11px] text-slate-400 mt-0.5">
+                    {formatFileSize(stagingAttachment.fileSize)}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Caption Input */}
+            <div className="mb-4">
+              <input
+                type="text"
+                value={stagingAttachment.caption}
+                onChange={(e) => setStagingAttachment({ ...stagingAttachment, caption: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleConfirmSendStaging();
+                  }
+                }}
+                placeholder="Thêm ghi chú... (Tùy chọn)"
+                className="w-full h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#2481cc]"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center space-x-2 justify-end">
+              <button
+                onClick={() => setStagingAttachment(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleConfirmSendStaging}
+                className="px-5 py-2 rounded-xl bg-[#2481cc] hover:bg-[#1d73b8] active:scale-95 text-white font-bold text-xs flex items-center space-x-1.5 shadow-md shadow-[#2481cc]/25 transition-all cursor-pointer"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Gửi ngay</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
