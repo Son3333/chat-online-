@@ -15,15 +15,15 @@ export const AuthModal: React.FC = () => {
   const [serverSuccessMsg, setServerSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Cấu hình máy chủ kết nối (Mặc định luôn là máy chủ cục bộ 127.0.0.1:8888)
+  // Cấu hình máy chủ kết nối (Mặc định là máy chủ WAN Internet bore.pub:38888)
   const [serverConfig, setServerConfig] = useState<{ host: string; port: number; isWan: boolean }>({
-    host: '127.0.0.1',
-    port: 8888,
-    isWan: false,
+    host: 'bore.pub',
+    port: 38888,
+    isWan: true,
   });
   const [showServerSettings, setShowServerSettings] = useState(false);
-  const [customHost, setCustomHost] = useState('127.0.0.1');
-  const [customPort, setCustomPort] = useState('8888');
+  const [customHost, setCustomHost] = useState('bore.pub');
+  const [customPort, setCustomPort] = useState('38888');
   const [serverSwitching, setServerSwitching] = useState(false);
 
   useEffect(() => {
@@ -75,7 +75,6 @@ export const AuthModal: React.FC = () => {
 
     setLoading(true);
     try {
-      let res: any;
       if (isRegister) {
         if (!fullName.trim()) {
           setErrorMsg('Vui lòng nhập họ và tên của bạn!');
@@ -83,54 +82,14 @@ export const AuthModal: React.FC = () => {
           return;
         }
 
-        try {
-          res = await apiService.register(cleanUsername, password, fullName.trim());
-        } catch (initialErr: any) {
-          // Tự động cứu vãn nếu đang trỏ nhầm máy chủ WAN bị nghẽn
-          if (serverConfig.host !== '127.0.0.1') {
-            try {
-              const fallback = await apiService.setServerConfig('127.0.0.1', 8888);
-              if (fallback.connected) {
-                setServerConfig({ host: '127.0.0.1', port: 8888, isWan: false });
-                res = await apiService.register(cleanUsername, password, fullName.trim());
-              } else {
-                throw initialErr;
-              }
-            } catch {
-              throw initialErr;
-            }
-          } else {
-            throw initialErr;
-          }
-        }
-
+        const res = await apiService.register(cleanUsername, password, fullName.trim());
         if (res.success && res.user) {
           setCurrentUser(res.user);
         } else {
           setErrorMsg(res.error || 'Đăng ký thất bại. Tên đăng nhập có thể đã tồn tại.');
         }
       } else {
-        try {
-          res = await apiService.login(cleanUsername, password);
-        } catch (initialErr: any) {
-          // Tự động cứu vãn: nếu đang kết nối WAN mà bị timeout, tự đổi về 127.0.0.1 cục bộ
-          if (serverConfig.host !== '127.0.0.1') {
-            try {
-              const fallback = await apiService.setServerConfig('127.0.0.1', 8888);
-              if (fallback.connected) {
-                setServerConfig({ host: '127.0.0.1', port: 8888, isWan: false });
-                res = await apiService.login(cleanUsername, password);
-              } else {
-                throw initialErr;
-              }
-            } catch {
-              throw initialErr;
-            }
-          } else {
-            throw initialErr;
-          }
-        }
-
+        const res = await apiService.login(cleanUsername, password);
         if (res.success && res.user) {
           setCurrentUser(res.user);
         } else {
@@ -140,15 +99,11 @@ export const AuthModal: React.FC = () => {
     } catch (err: any) {
       const msg = err.message || '';
       setShowServerSettings(true);
-      if (serverConfig.host !== '127.0.0.1') {
-        setErrorMsg(`Không thể kết nối đến máy chủ (${serverConfig.host}:${serverConfig.port}). Hãy bấm chọn 'Cục bộ (127.0.0.1)' bên dưới!`);
-      } else {
-        setErrorMsg(
-          msg.includes('quá thời gian') || msg.includes('timeout')
-            ? 'Kết nối tới máy chủ cục bộ (127.0.0.1:8888) quá thời gian chờ. Vui lòng kiểm tra lại server!'
-            : 'Không thể kết nối đến máy chủ 127.0.0.1:8888. Hãy chắc chắn server đang chạy!'
-        );
-      }
+      setErrorMsg(
+        msg.includes('quá thời gian') || msg.includes('timeout')
+          ? `Kết nối tới máy chủ (${serverConfig.host}:${serverConfig.port}) quá thời gian chờ. Hãy kiểm tra kết nối mạng hoặc thử lại!`
+          : (msg || `Không thể kết nối đến máy chủ (${serverConfig.host}:${serverConfig.port}). Hãy đảm bảo server đang chạy!`)
+      );
     } finally {
       setLoading(false);
     }

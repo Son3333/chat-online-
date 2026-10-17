@@ -93,45 +93,38 @@ function checkPortAvailable(port, host) {
         s.connect(port, host);
     });
 }
-// Tự động phân giải địa chỉ máy chủ phù hợp (Cục bộ localhost hoặc Mạng Internet WAN)
+// Tự động phân giải địa chỉ máy chủ phù hợp (Đọc từ server_config.json)
 async function resolveServerEndpoint() {
     const rootDir = path.resolve(__dirname, '../../');
-    const serverScript = path.join(rootDir, 'src', 'server', 'server.py');
-    // 1. Nếu đây là máy tính có mã nguồn server (Máy Chủ Host) -> LUÔN LUÔN kết nối trực tiếp 127.0.0.1:8888
-    if (fs.existsSync(serverScript)) {
-        console.log('[Main] Host machine detected. Connecting locally via 127.0.0.1:8888 (0ms ping)');
-        return { host: '127.0.0.1', port: 8888, isWan: false };
-    }
-    // 2. Kiểm tra nếu có Server cục bộ đang chạy trên chính máy tính này
-    const isLocalRunning = await checkPortAvailable(8888, '127.0.0.1');
-    if (isLocalRunning) {
-        console.log('[Main] Local Python server detected on 127.0.0.1:8888 (Host mode, 0ms ping)');
-        return { host: '127.0.0.1', port: 8888, isWan: false };
-    }
-    // 3. Nếu là máy Client từ xa: Đọc cấu hình từ server_config.json nếu có
     const cfgPath = path.join(rootDir, 'server_config.json');
+    // 1. Đọc cấu hình từ server_config.json nếu có
     if (fs.existsSync(cfgPath)) {
         try {
             const data = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
             if (data.host && data.port) {
                 const h = String(data.host).trim();
                 const p = Number(data.port);
-                console.log(`[Main] Remote client configured from server_config.json: ${h}:${p}`);
+                console.log(`[Main] Server endpoint loaded from server_config.json: ${h}:${p}`);
                 return { host: h, port: p, isWan: h !== '127.0.0.1' && h !== 'localhost' };
             }
         }
         catch { }
     }
-    // 4. Mặc định dự phòng cho máy trạm
-    return { host: '127.0.0.1', port: 8888, isWan: false };
+    // 2. Mặc định kết nối tới máy chủ WAN Internet bore.pub:38888
+    return { host: 'bore.pub', port: 38888, isWan: true };
 }
 async function startPythonBackendIfNeeded() {
+    // Nếu máy đang ở chế độ Client kết nối qua WAN Internet -> Tuyệt đối không spawn server local
+    if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
+        console.log(`[Main] Remote client mode connected to WAN: ${HOST}:${PORT}. Skipping local python spawn.`);
+        return;
+    }
     const isServerRunning = await checkPortAvailable(8888, '127.0.0.1');
     if (isServerRunning) {
         console.log('[Main] Python Chat Server is already running on port 8888');
         return;
     }
-    // Khởi chạy server ngầm nếu máy này có mã nguồn backend
+    // Khởi chạy server ngầm nếu máy này chạy cục bộ
     const rootDir = path.resolve(__dirname, '../../');
     const wanScript = path.join(rootDir, 'run_server_wan.py');
     const localScript = path.join(rootDir, 'src', 'server', 'server.py');
