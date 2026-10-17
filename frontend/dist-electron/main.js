@@ -97,67 +97,70 @@ function checkPortAvailable(port, host) {
 async function resolveServerEndpoint() {
     const rootDir = path.resolve(__dirname, '../../');
     const cfgPath = path.join(rootDir, 'server_config.json');
-    // 1. Kiểm tra cấu hình thủ công trong server_config.json nếu có
+    const serverScript = path.join(rootDir, 'src', 'server', 'server.py');
+    // 1. Kiểm tra nếu có Server cục bộ đang chạy trên chính máy tính này (Máy Chủ Host)
+    const isLocalRunning = await checkPortAvailable(8888, '127.0.0.1');
+    if (isLocalRunning) {
+        console.log('[Main] Local Python server detected on 127.0.0.1:8888 (Host mode, 0ms ping)');
+        return { host: '127.0.0.1', port: 8888, isWan: false };
+    }
+    // 2. Nếu máy này có mã nguồn server (Máy Chủ Host) nhưng server chưa bật -> Ưu tiên 127.0.0.1 để tự khởi chạy
+    if (fs.existsSync(serverScript)) {
+        console.log('[Main] Host machine detected with server.py. Connecting via 127.0.0.1:8888');
+        return { host: '127.0.0.1', port: 8888, isWan: false };
+    }
+    // 3. Nếu là máy Client từ xa: Đọc cấu hình từ server_config.json nếu có
     if (fs.existsSync(cfgPath)) {
         try {
             const data = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
             if (data.host && data.port) {
                 const h = String(data.host).trim();
                 const p = Number(data.port);
-                console.log(`[Main] Using configured server from server_config.json: ${h}:${p}`);
+                console.log(`[Main] Remote client configured from server_config.json: ${h}:${p}`);
                 return { host: h, port: p, isWan: h !== '127.0.0.1' && h !== 'localhost' };
             }
         }
         catch { }
     }
-    // 2. Kiểm tra nếu có Server cục bộ đang chạy trên chính máy tính này (Máy Chủ Host)
-    const isLocalRunning = await checkPortAvailable(8888, '127.0.0.1');
-    if (isLocalRunning) {
-        console.log('[Main] Local Python server detected on 127.0.0.1:8888');
-        return { host: '127.0.0.1', port: 8888, isWan: false };
-    }
-    // 3. Nếu máy này không chạy server cục bộ -> Đây là Máy Khác (Client từ xa)
-    // Kết nối trực tiếp tới Server WAN mặc định trên Internet: bore.pub:38888!
-    console.log('[Main] No local server running. Auto-connecting to online WAN Server: bore.pub:38888');
+    // 4. Mặc định cho máy Client từ xa: Tự động kết nối tới Server WAN bore.pub:38888
+    console.log('[Main] Auto-connecting to online WAN Server: bore.pub:38888');
     return { host: 'bore.pub', port: 38888, isWan: true };
 }
 async function startPythonBackendIfNeeded() {
-    // Chỉ khởi chạy server ngầm nếu kết nối vào chính máy này (127.0.0.1)
-    if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
-        console.log(`[Main] Client configured to remote server (${HOST}:${PORT}). Skipping local server spawn.`);
-        return;
-    }
-    const isServerRunning = await checkPortAvailable(PORT, HOST);
+    const isServerRunning = await checkPortAvailable(8888, '127.0.0.1');
     if (isServerRunning) {
-        console.log('[Main] Python Chat Server is already running on port', PORT);
+        console.log('[Main] Python Chat Server is already running on port 8888');
         return;
     }
-    // Khởi chạy server.py
+    // Khởi chạy server ngầm nếu máy này có mã nguồn backend
     const rootDir = path.resolve(__dirname, '../../');
-    const serverScript = path.join(rootDir, 'src', 'server', 'server.py');
-    if (fs.existsSync(serverScript)) {
-        console.log('[Main] Spawning Python server:', serverScript);
-        pythonProcess = (0, child_process_1.spawn)('python', [serverScript], {
-            cwd: rootDir,
-            stdio: ['ignore', 'pipe', 'pipe'],
-        });
-        pythonProcess.stdout?.on('data', (d) => console.log('[Python Server]', d.toString().trim()));
-        pythonProcess.stderr?.on('data', (d) => console.error('[Python Server Error]', d.toString().trim()));
-        pythonProcess.on('exit', (code) => {
-            console.log('[Main] Python server exited with code', code);
-            pythonProcess = null;
-        });
-        // Chờ server sẵn sàng
-        for (let i = 0; i < 15; i++) {
-            await new Promise((r) => setTimeout(r, 400));
-            if (await checkPortAvailable(PORT, HOST)) {
-                console.log('[Main] Python server is up and ready!');
-                break;
+    const wanScript = path.join(rootDir, 'run_server_wan.py');
+    const localScript = path.join(rootDir, 'src', 'server', 'server.py');
+    const scriptToRun = fs.existsSync(wanScript) ? wanScript : (fs.existsSync(localScript) ? localScript : null);
+    if (scriptToRun) {
+        console.log('[Main] Spawning independent Python server process:', scriptToRun);
+        try {
+            pythonProcess = (0, child_process_1.spawn)('python', ['-u', scriptToRun], {
+                cwd: rootDir,
+                detached: true,
+                stdio: 'ignore',
+            });
+            pythonProcess.unref();
+            // Chờ server sẵn sàng trên port 8888
+            for (let i = 0; i < 20; i++) {
+                await new Promise((r) => setTimeout(r, 400));
+                if (await checkPortAvailable(8888, '127.0.0.1')) {
+                    console.log('[Main] Python server is up and ready on 127.0.0.1:8888!');
+                    break;
+                }
             }
+        }
+        catch (err) {
+            console.warn('[Main] Could not spawn python process:', err);
         }
     }
     else {
-        console.warn('[Main] Server script not found at', serverScript);
+        console.log('[Main] Remote client machine detected. No local server script to spawn.');
     }
 }
 async function createWindow() {

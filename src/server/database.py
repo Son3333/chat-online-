@@ -856,10 +856,10 @@ class Database:
 
             # Lấy thông tin tin nhắn vừa lưu kèm thông tin người gửi & thông tin trích dẫn reply
             cursor.execute("""
-                SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content,
+                SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.message_type as msg_type, m.content,
                        m.file_id, m.is_deleted, m.created_at, m.reply_to_id,
                        u.full_name as sender_name, u.avatar_color, u.avatar_url,
-                       f.original_name, f.file_size, f.file_type,
+                       f.original_name, f.original_name as file_name, f.file_size, f.file_type,
                        parent.content as reply_content, parent_user.full_name as reply_sender_name
                 FROM messages m
                 JOIN users u ON m.sender_id = u.id
@@ -883,10 +883,10 @@ class Database:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT * FROM (
-                    SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.content,
+                    SELECT m.id, m.conversation_id, m.sender_id, m.message_type, m.message_type as msg_type, m.content,
                            m.file_id, m.is_deleted, m.created_at, m.reply_to_id,
                            u.full_name as sender_name, u.avatar_color, u.avatar_url,
-                           f.original_name, f.file_size, f.file_type,
+                           f.original_name, f.original_name as file_name, f.file_size, f.file_type,
                            parent.content as reply_content, parent_user.full_name as reply_sender_name
                     FROM messages m
                     JOIN users u ON m.sender_id = u.id

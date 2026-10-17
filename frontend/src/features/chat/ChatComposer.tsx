@@ -61,16 +61,56 @@ export const ChatComposer: React.FC = () => {
       const isVid = /\.(mp4|webm|mov|mkv|avi)$/i.test(fileName);
       const fileType = isImg ? 'image' : isVid ? 'video' : 'file';
 
+      let finalB64 = base64Data;
+      let finalSize = fileSize;
+
+      if (isImg) {
+        try {
+          const mime = fileName.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+          const src = `data:${mime};base64,${base64Data}`;
+          const img = new Image();
+          await new Promise((res, rej) => {
+            img.onload = () => res(null);
+            img.onerror = () => rej();
+            img.src = src;
+          });
+          const maxDim = 1400;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = Math.round((h * maxDim) / w);
+              w = maxDim;
+            } else {
+              w = Math.round((w * maxDim) / h);
+              h = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, w, h);
+            const compDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+            finalB64 = compDataUrl.split(',')[1] || base64Data;
+            finalSize = Math.round((finalB64.length * 3) / 4);
+          }
+        } catch {
+          // Fallback to original if compression fails
+        }
+      }
+
       const uploadRes = await apiService.uploadFile(
         fileName,
-        base64Data,
-        fileSize,
+        finalB64,
+        finalSize,
         fileType
       );
 
       if (uploadRes && uploadRes.file_id) {
         if (isImg) {
-          apiService.cacheImage(uploadRes.file_id, `data:image/png;base64,${base64Data}`);
+          apiService.cacheImage(uploadRes.file_id, `data:image/jpeg;base64,${finalB64}`);
         }
 
         const defaultCaption = isImg
@@ -84,7 +124,7 @@ export const ChatComposer: React.FC = () => {
           fileType,
           uploadRes.file_id,
           fileName,
-          fileSize
+          finalSize
         );
       }
     } catch (err) {

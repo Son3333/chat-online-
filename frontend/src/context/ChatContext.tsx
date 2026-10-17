@@ -28,6 +28,7 @@ interface ChatContextType {
   refreshFriends: () => Promise<void>;
   toggleReaction: (msgId: number, reaction: string) => Promise<void>;
   pinMessage: (msgId: number) => Promise<void>;
+  unpinMessage: () => Promise<void>;
   recallMessage: (msgId: number) => Promise<void>;
   startCall: (type: 'voice' | 'video') => Promise<void>;
   acceptCall: () => Promise<void>;
@@ -134,6 +135,12 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const normalizeMessage = (m: any): Message => ({
+    ...m,
+    msg_type: m.msg_type || m.message_type || 'text',
+    original_name: m.original_name || m.file_name,
+  });
+
   const sendMessage = async (content: string, type: MessageType = 'text', fileId?: string, origName?: string, fileSize?: number) => {
     if (!activeConv || !currentUser) return false;
     const res = await apiService.sendMessage({
@@ -149,7 +156,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
 
     if (res && res.success && res.message) {
-      setMessages((prev) => [...prev, res.message!]);
+      const norm = normalizeMessage(res.message);
+      setMessages((prev) => [...prev, norm]);
       setReplyTo(null);
       refreshConversations();
       return true;
@@ -164,9 +172,26 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const pinMessage = async (msgId: number) => {
     if (!activeConv) return;
+    if (pinnedMessage && pinnedMessage.id === msgId) {
+      await apiService.unpinMessage(activeConv.id);
+      setPinnedMessage(null);
+      setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, is_pinned: 0 } : m)));
+      return;
+    }
     await apiService.pinMessage(activeConv.id, msgId);
     const target = messages.find((m) => m.id === msgId);
-    if (target) setPinnedMessage(target);
+    if (target) {
+      const pinnedObj = { ...target, is_pinned: 1 };
+      setPinnedMessage(pinnedObj);
+      setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, is_pinned: 1 } : { ...m, is_pinned: 0 })));
+    }
+  };
+
+  const unpinMessage = async () => {
+    if (!activeConv) return;
+    await apiService.unpinMessage(activeConv.id);
+    setPinnedMessage(null);
+    setMessages((prev) => prev.map((m) => ({ ...m, is_pinned: 0 })));
   };
 
   const recallMessage = async (msgId: number) => {
@@ -317,7 +342,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       switch (event.type) {
         case 'new_message':
           if (event.message) {
-            const newMsg = event.message;
+            const newMsg = normalizeMessage(event.message);
             if (activeConv && String(activeConv.id) === String(newMsg.conversation_id)) {
               setMessages((prev) => {
                 if (prev.some((m) => m.id === newMsg.id)) return prev;
@@ -356,6 +381,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (activeConv && String(activeConv.id) === String(pinConvId)) {
             const pinnedObj = event.pinned !== undefined ? event.pinned : (event.data?.pinned || null);
             setPinnedMessage(pinnedObj);
+            setMessages((prev) =>
+              prev.map((m) => (pinnedObj && m.id === pinnedObj.id ? { ...m, is_pinned: 1 } : { ...m, is_pinned: 0 }))
+            );
           }
           break;
         }
@@ -507,6 +535,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         refreshFriends,
         toggleReaction,
         pinMessage,
+        unpinMessage,
         recallMessage,
         startCall,
         acceptCall,

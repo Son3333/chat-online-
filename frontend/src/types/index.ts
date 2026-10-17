@@ -36,7 +36,7 @@ export interface Conversation {
   member_count?: number;
   last_message?: LastMessage | null;
   unread_count?: number;
-  is_pinned?: boolean;
+  is_pinned?: boolean | number;
 }
 
 export interface ReactionUser {
@@ -67,7 +67,7 @@ export interface Message {
   is_deleted?: number | boolean;
   created_at: string;
   reactions?: MessageReaction[];
-  is_pinned?: boolean;
+  is_pinned?: boolean | number;
 }
 
 export interface Friend {

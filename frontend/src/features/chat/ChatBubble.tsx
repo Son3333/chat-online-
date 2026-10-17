@@ -403,10 +403,11 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
   const [copied, setCopied] = useState(false);
 
   const isDeleted = Boolean(message.is_deleted);
-  const isImage = message.msg_type === 'image';
-  const isVideo = message.msg_type === 'video';
-  const isLocation = message.msg_type === 'location';
-  const isFile = message.msg_type === 'file';
+  const effectiveType = message.msg_type || (message as any).message_type || 'text';
+  const isImage = effectiveType === 'image';
+  const isVideo = effectiveType === 'video';
+  const isLocation = effectiveType === 'location';
+  const isFile = effectiveType === 'file';
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -532,7 +533,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
         })()}
 
         {/* 5. Text Message Content */}
-        {message.content && (!isImage && !isVideo && !isLocation || isDeleted) && (
+        {message.content && (!isImage && !isVideo && !isLocation && !isFile || isDeleted) && (
           isDeleted ? (
             <p className="leading-relaxed whitespace-pre-wrap select-text">{message.content}</p>
           ) : (

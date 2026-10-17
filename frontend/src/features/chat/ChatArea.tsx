@@ -13,6 +13,7 @@ export const ChatArea: React.FC = () => {
     messages,
     currentUser,
     pinnedMessage,
+    unpinMessage,
     friends,
     pendingFriends,
     sentFriendRequestIds,
@@ -189,13 +190,27 @@ export const ChatArea: React.FC = () => {
       {/* 3. Pinned Message Banner */}
       {pinnedMessage && (
         <div className="h-10 px-4 bg-slate-100 dark:bg-[#1a2530] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs animate-in slide-in-from-top-1 duration-150 select-none">
-          <div className="flex items-center space-x-2 truncate">
+          <div
+            onClick={() => {
+              const el = document.getElementById(`msg-${pinnedMessage.id}`);
+              el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }}
+            className="flex items-center space-x-2 truncate cursor-pointer flex-1 mr-2 hover:opacity-80 transition-opacity"
+            title="Bấm để xem tin nhắn đã ghim"
+          >
             <Pin className="w-3.5 h-3.5 text-[#2481cc] rotate-45 flex-shrink-0" />
             <span className="font-semibold text-[#2481cc]">Tin nhắn đã ghim:</span>
             <span className="truncate text-slate-600 dark:text-slate-300">
               {pinnedMessage.content || pinnedMessage.original_name}
             </span>
           </div>
+          <button
+            onClick={unpinMessage}
+            title="Bỏ ghim tin nhắn này"
+            className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/60 transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
@@ -204,12 +219,13 @@ export const ChatArea: React.FC = () => {
         {messages.map((msg) => {
           const isSelf = msg.sender_id === currentUser?.id;
           return (
-            <ChatBubble
-              key={msg.id}
-              message={msg}
-              isSelf={isSelf}
-              onOpenImage={(fileId, name, dataUrl) => setPreviewImage({ fileId, name, url: dataUrl })}
-            />
+            <div key={msg.id} id={`msg-${msg.id}`} className="contents">
+              <ChatBubble
+                message={msg}
+                isSelf={isSelf}
+                onOpenImage={(fileId, name, dataUrl) => setPreviewImage({ fileId, name, url: dataUrl })}
+              />
+            </div>
           );
         })}
         <div ref={messagesEndRef} />

@@ -168,6 +168,10 @@ export const apiService = {
     return await this.sendRequest('pin_message', { conversation_id: convId, message_id: messageId });
   },
 
+  async unpinMessage(convId: string | number): Promise<{ success: boolean }> {
+    return await this.sendRequest('unpin_message', { conversation_id: convId });
+  },
+
   async getPinnedMessage(convId: string | number): Promise<{ success: boolean; pinned?: Message | null }> {
     return await this.sendRequest('get_pinned_message', { conversation_id: convId });
   },
