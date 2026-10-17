@@ -212,11 +212,17 @@ class GitUpdater {
                     await this.execCommand('git pull origin main');
                 }
             }
-            // 2. Build frontend
+            // 2. Build frontend (chỉ thực hiện nếu máy trạm có cài node_modules để phát triển)
             const frontendDir = path.join(this.rootDir, 'frontend');
-            if (fs.existsSync(frontendDir)) {
-                await this.execCommand('npm run build', frontendDir);
-                await this.execCommand('npm run build:electron', frontendDir);
+            const nodeModulesDir = path.join(frontendDir, 'node_modules');
+            if (fs.existsSync(nodeModulesDir)) {
+                try {
+                    await this.execCommand('npm run build', frontendDir);
+                    await this.execCommand('npm run build:electron', frontendDir);
+                }
+                catch (buildErr) {
+                    console.warn('[Updater] Rebuild skipped, using prebuilt dist files from Git repo:', buildErr);
+                }
             }
             // 3. Relaunch app cleanly
             console.log('[Updater] Update applied! Relaunching application...');

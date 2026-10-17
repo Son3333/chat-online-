@@ -222,6 +222,49 @@ class Database:
             """)
             conn.commit()
 
+            # 11. Tự động nạp tài khoản mẫu của nhóm nếu cơ sở dữ liệu mới tinh (Seed Data)
+            cursor.execute("SELECT COUNT(*) as count FROM users")
+            row = cursor.fetchone()
+            if row and row["count"] == 0:
+                seed_members = [
+                    (1000000001, "sondeptrai", "Son123@", "Vũ Duy Thái Sơn", "#2563EB"),
+                    (1000000002, "dcmmm", "Son123@", "Vũ Duy Thái Sơn", "#2563EB"),
+                    (1000000003, "tam_123", "Tam_123", "Phạm Đức Tâm", "#7C3AED"),
+                    (1000000004, "manh_vy", "Manh123@", "Vy Thế Mạnh", "#059669"),
+                    (1000000005, "dan_vu", "Dan123@", "Vũ Minh Dân", "#D97706"),
+                    (1000000006, "huu_long", "Huu123@", "Long Đức Hữu", "#DC2626"),
+                ]
+                for uid, uname, pwd, fname, color in seed_members:
+                    pwd_h = hash_password(pwd)
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO users (id, username, password_hash, full_name, avatar_color)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (uid, uname, pwd_h, fname, color))
+
+                # Tạo nhóm chat chung của Nhóm 21
+                cursor.execute("""
+                    INSERT INTO conversations (type, name, created_by)
+                    VALUES ('group', 'Nhóm 21 - Đồ Án CNPM', 1000000001)
+                """)
+                group_id = cursor.lastrowid
+                for uid, _, _, _, _ in seed_members:
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO conversation_members (conversation_id, user_id, role)
+                        VALUES (?, ?, 'member')
+                    """, (group_id, uid))
+
+                # Kết bạn chéo giữa tất cả các thành viên (status = 'accepted')
+                member_ids = [m[0] for m in seed_members]
+                for i in range(len(member_ids)):
+                    for j in range(i + 1, len(member_ids)):
+                        u1, u2 = member_ids[i], member_ids[j]
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO friends (user_id, friend_id, status)
+                            VALUES (?, ?, 'accepted')
+                        """, (u1, u2))
+
+                conn.commit()
+
     # --- User APIs ---
     def register_user(self, username, password, full_name):
         username = username.strip().lower().lstrip("@")

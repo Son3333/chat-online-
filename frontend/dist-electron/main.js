@@ -96,20 +96,20 @@ function checkPortAvailable(port, host) {
 // Tự động phân giải địa chỉ máy chủ phù hợp (Cục bộ localhost hoặc Mạng Internet WAN)
 async function resolveServerEndpoint() {
     const rootDir = path.resolve(__dirname, '../../');
-    const cfgPath = path.join(rootDir, 'server_config.json');
     const serverScript = path.join(rootDir, 'src', 'server', 'server.py');
-    // 1. Kiểm tra nếu có Server cục bộ đang chạy trên chính máy tính này (Máy Chủ Host)
+    // 1. Nếu đây là máy tính có mã nguồn server (Máy Chủ Host) -> LUÔN LUÔN kết nối trực tiếp 127.0.0.1:8888
+    if (fs.existsSync(serverScript)) {
+        console.log('[Main] Host machine detected. Connecting locally via 127.0.0.1:8888 (0ms ping)');
+        return { host: '127.0.0.1', port: 8888, isWan: false };
+    }
+    // 2. Kiểm tra nếu có Server cục bộ đang chạy trên chính máy tính này
     const isLocalRunning = await checkPortAvailable(8888, '127.0.0.1');
     if (isLocalRunning) {
         console.log('[Main] Local Python server detected on 127.0.0.1:8888 (Host mode, 0ms ping)');
         return { host: '127.0.0.1', port: 8888, isWan: false };
     }
-    // 2. Nếu máy này có mã nguồn server (Máy Chủ Host) nhưng server chưa bật -> Ưu tiên 127.0.0.1 để tự khởi chạy
-    if (fs.existsSync(serverScript)) {
-        console.log('[Main] Host machine detected with server.py. Connecting via 127.0.0.1:8888');
-        return { host: '127.0.0.1', port: 8888, isWan: false };
-    }
     // 3. Nếu là máy Client từ xa: Đọc cấu hình từ server_config.json nếu có
+    const cfgPath = path.join(rootDir, 'server_config.json');
     if (fs.existsSync(cfgPath)) {
         try {
             const data = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
@@ -122,9 +122,8 @@ async function resolveServerEndpoint() {
         }
         catch { }
     }
-    // 4. Mặc định cho máy Client từ xa: Tự động kết nối tới Server WAN bore.pub:38888
-    console.log('[Main] Auto-connecting to online WAN Server: bore.pub:38888');
-    return { host: 'bore.pub', port: 38888, isWan: true };
+    // 4. Mặc định dự phòng cho máy trạm
+    return { host: '127.0.0.1', port: 8888, isWan: false };
 }
 async function startPythonBackendIfNeeded() {
     const isServerRunning = await checkPortAvailable(8888, '127.0.0.1');
