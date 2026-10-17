@@ -38,9 +38,15 @@ const net = __importStar(require("net"));
 class PythonBridge {
     host;
     port;
-    socket = null;
-    connected = false;
-    buffer = Buffer.alloc(0);
+    // Dual-Socket Architecture: 2 Kênh băng thông độc lập
+    // Kênh 1: Data & Chat Socket (Tin nhắn, Đăng nhập, Bạn bè, Lịch sử, Tải file nặng)
+    dataSocket = null;
+    dataConnected = false;
+    dataBuffer = Buffer.alloc(0);
+    // Kênh 2: Real-time Media Socket (Chuyên dụng cho Mic PCM, Webcam, Báo hiệu gọi)
+    mediaSocket = null;
+    mediaConnected = false;
+    mediaBuffer = Buffer.alloc(0);
     pendingRequests = new Map();
     eventCallbacks = [];
     reconnectTimer = null;
@@ -58,68 +64,141 @@ class PythonBridge {
         return { host: this.host, port: this.port };
     }
     connect() {
-        if (this.connected && this.socket && !this.socket.destroyed) {
+        if (this.dataConnected && this.dataSocket && !this.dataSocket.destroyed) {
+            // Đảm bảo kênh media cũng được kết nối nếu chưa có
+            if (!this.mediaConnected || !this.mediaSocket || this.mediaSocket.destroyed) {
+                this.connectMediaChannel().catch(() => { });
+            }
             return Promise.resolve(true);
         }
         if (this.connectingPromise) {
             return this.connectingPromise;
         }
-        this.connectingPromise = new Promise((resolve) => {
-            if (this.socket) {
+        this.connectingPromise = new Promise(async (resolve) => {
+            const dataOk = await this.connectDataChannel();
+            if (dataOk) {
+                this.connectMediaChannel().catch(() => { });
+                this.emitEvent({ type: 'connection_status', connected: true });
+                this.connectingPromise = null;
+                resolve(true);
+            }
+            else {
+                this.connectingPromise = null;
+                resolve(false);
+            }
+        });
+        return this.connectingPromise;
+    }
+    /**
+     * KẾT NỐI KÊNH 1: Data & Chat Socket
+     */
+    connectDataChannel() {
+        return new Promise((resolve) => {
+            if (this.dataSocket) {
                 try {
-                    this.socket.destroy();
+                    this.dataSocket.destroy();
                 }
                 catch { }
             }
-            this.socket = new net.Socket();
-            this.socket.setTimeout(6000);
-            const finishConnect = (result) => {
-                this.connectingPromise = null;
-                resolve(result);
-            };
-            this.socket.connect(this.port, this.host, () => {
-                this.connected = true;
-                this.socket?.setTimeout(0);
-                this.socket?.setKeepAlive(true, 5000);
-                this.buffer = Buffer.alloc(0);
+            this.dataSocket = new net.Socket();
+            this.dataSocket.setTimeout(6000);
+            this.dataSocket.connect(this.port, this.host, () => {
+                this.dataConnected = true;
+                this.dataSocket?.setTimeout(0);
+                this.dataSocket?.setKeepAlive(true, 5000);
+                this.dataBuffer = Buffer.alloc(0);
                 if (this.reconnectTimer) {
                     clearInterval(this.reconnectTimer);
                     this.reconnectTimer = null;
                 }
-                // Auto re-identify if we have a current session
+                // Tự động định danh kênh Data
                 if (this.currentUserId) {
-                    this.sendRequest('identify', { user_id: this.currentUserId }).catch(() => { });
+                    this.sendSocketPacket(this.dataSocket, {
+                        action: 'identify',
+                        user_id: this.currentUserId,
+                        channel_type: 'data',
+                    });
                 }
-                this.emitEvent({ type: 'connection_status', connected: true });
-                finishConnect(true);
+                resolve(true);
             });
-            this.socket.on('data', (data) => {
-                this.buffer = Buffer.concat([this.buffer, data]);
-                this.processBuffer();
+            this.dataSocket.on('data', (data) => {
+                this.dataBuffer = Buffer.concat([this.dataBuffer, data]);
+                this.processDataBuffer();
             });
-            this.socket.on('error', (err) => {
-                console.warn('[PythonBridge] Socket error:', err.message);
-                finishConnect(false);
-                this.handleDisconnect();
+            this.dataSocket.on('error', (err) => {
+                console.warn('[PythonBridge] Data Socket error:', err.message);
+                this.handleDataDisconnect();
+                resolve(false);
             });
-            this.socket.on('close', () => {
-                finishConnect(false);
-                this.handleDisconnect();
+            this.dataSocket.on('close', () => {
+                this.handleDataDisconnect();
+                resolve(false);
             });
-            this.socket.on('timeout', () => {
-                if (!this.connected) {
+            this.dataSocket.on('timeout', () => {
+                if (!this.dataConnected) {
                     try {
-                        this.socket?.destroy();
+                        this.dataSocket?.destroy();
                     }
                     catch { }
-                    finishConnect(false);
+                    resolve(false);
                 }
             });
         });
-        return this.connectingPromise;
     }
-    handleDisconnect() {
-        this.connected = false;
+    /**
+     * KẾT NỐI KÊNH 2: Real-time Media Socket (Độc lập cho Voice & Video)
+     */
+    connectMediaChannel() {
+        return new Promise((resolve) => {
+            if (this.mediaSocket) {
+                try {
+                    this.mediaSocket.destroy();
+                }
+                catch { }
+            }
+            this.mediaSocket = new net.Socket();
+            this.mediaSocket.setTimeout(6000);
+            this.mediaSocket.connect(this.port, this.host, () => {
+                this.mediaConnected = true;
+                this.mediaSocket?.setTimeout(0);
+                this.mediaSocket?.setKeepAlive(true, 5000);
+                this.mediaBuffer = Buffer.alloc(0);
+                // Tự động định danh kênh Media
+                if (this.currentUserId) {
+                    this.sendSocketPacket(this.mediaSocket, {
+                        action: 'identify',
+                        user_id: this.currentUserId,
+                        channel_type: 'media',
+                    });
+                }
+                resolve(true);
+            });
+            this.mediaSocket.on('data', (data) => {
+                this.mediaBuffer = Buffer.concat([this.mediaBuffer, data]);
+                this.processMediaBuffer();
+            });
+            this.mediaSocket.on('error', (err) => {
+                console.warn('[PythonBridge] Media Socket error:', err.message);
+                this.mediaConnected = false;
+                resolve(false);
+            });
+            this.mediaSocket.on('close', () => {
+                this.mediaConnected = false;
+                resolve(false);
+            });
+            this.mediaSocket.on('timeout', () => {
+                if (!this.mediaConnected) {
+                    try {
+                        this.mediaSocket?.destroy();
+                    }
+                    catch { }
+                    resolve(false);
+                }
+            });
+        });
+    }
+    handleDataDisconnect() {
+        this.dataConnected = false;
         this.connectingPromise = null;
         this.emitEvent({ type: 'connection_status', connected: false });
         this.scheduleReconnect();
@@ -128,35 +207,52 @@ class PythonBridge {
         if (this.reconnectTimer)
             return;
         this.reconnectTimer = setInterval(async () => {
-            if (!this.connected) {
+            if (!this.dataConnected) {
                 await this.connect();
             }
         }, 2500);
     }
-    processBuffer() {
-        while (this.buffer.length >= 4) {
-            const packetLength = this.buffer.readUInt32BE(0);
-            if (this.buffer.length < 4 + packetLength) {
-                // Chờ thêm data phân mảnh
+    processDataBuffer() {
+        while (this.dataBuffer.length >= 4) {
+            const packetLength = this.dataBuffer.readUInt32BE(0);
+            if (this.dataBuffer.length < 4 + packetLength) {
                 break;
             }
-            const packetData = this.buffer.subarray(4, 4 + packetLength);
-            // Giảm tải bộ nhớ: tạo buffer mới cho phần còn lại để giải phóng buffer mẹ lớn
-            const remaining = this.buffer.subarray(4 + packetLength);
-            this.buffer = remaining.length > 0 ? Buffer.from(remaining) : Buffer.alloc(0);
+            const packetData = this.dataBuffer.subarray(4, 4 + packetLength);
+            const remaining = this.dataBuffer.subarray(4 + packetLength);
+            this.dataBuffer = remaining.length > 0 ? Buffer.from(remaining) : Buffer.alloc(0);
             try {
                 const jsonStr = packetData.toString('utf-8');
                 const packet = JSON.parse(jsonStr);
                 this.handleIncomingPacket(packet);
             }
             catch (e) {
-                console.error('[PythonBridge] Failed to parse JSON packet:', e);
+                console.error('[PythonBridge] Failed to parse Data JSON packet:', e);
+            }
+        }
+    }
+    processMediaBuffer() {
+        while (this.mediaBuffer.length >= 4) {
+            const packetLength = this.mediaBuffer.readUInt32BE(0);
+            if (this.mediaBuffer.length < 4 + packetLength) {
+                break;
+            }
+            const packetData = this.mediaBuffer.subarray(4, 4 + packetLength);
+            const remaining = this.mediaBuffer.subarray(4 + packetLength);
+            this.mediaBuffer = remaining.length > 0 ? Buffer.from(remaining) : Buffer.alloc(0);
+            try {
+                const jsonStr = packetData.toString('utf-8');
+                const packet = JSON.parse(jsonStr);
+                this.handleIncomingPacket(packet);
+            }
+            catch (e) {
+                console.error('[PythonBridge] Failed to parse Media JSON packet:', e);
             }
         }
     }
     handleIncomingPacket(packet) {
         const action = packet.action;
-        // 1. Precise match by file_id for file downloads (prevents concurrent download race conditions)
+        // 1. Khớp chính xác theo file_id cho download file
         if (packet.file_id !== undefined) {
             const keyStr = `download_file_${String(packet.file_id)}`;
             const keyNum = `download_file_${Number(packet.file_id)}`;
@@ -169,7 +265,7 @@ class PythonBridge {
                 return;
             }
         }
-        // 1.5. Precise match by conversation_id for get_messages (prevents cross-conversation history leakage)
+        // 1.5. Khớp chính xác theo conversation_id cho get_messages
         if (action === 'messages_history' || action === 'get_messages_response' || action === 'get_messages') {
             if (packet.conversation_id !== undefined) {
                 const keyStr = `get_messages_${String(packet.conversation_id)}`;
@@ -183,7 +279,6 @@ class PythonBridge {
                     return;
                 }
             }
-            // Fallback: match any pending get_messages request
             for (const [key, req] of this.pendingRequests.entries()) {
                 if (key === 'get_messages' || key.startsWith('get_messages_')) {
                     clearTimeout(req.timeoutId);
@@ -193,7 +288,7 @@ class PythonBridge {
                 }
             }
         }
-        // Fallback: match any pending download_file request if action is download_response
+        // Fallback cho download_file
         if (action === 'download_response' || action === 'download_file_response') {
             for (const [key, req] of this.pendingRequests.entries()) {
                 if (key.startsWith('download_file_')) {
@@ -225,18 +320,17 @@ class PythonBridge {
             check_friend: ['check_friend_response', 'check_friend'],
             get_pinned_message: ['get_pinned_message_response', 'get_pinned_message'],
         };
-        // Check if there is an in-flight request waiting for this action response directly
         if (action && this.pendingRequests.has(action)) {
             const req = this.pendingRequests.get(action);
             clearTimeout(req.timeoutId);
             this.pendingRequests.delete(action);
             if (packet.success && packet.user?.id) {
                 this.currentUserId = Number(packet.user.id);
+                this.reIdentifyBothChannels(this.currentUserId);
             }
             req.resolve(packet);
             return;
         }
-        // Match response variants like 'login_response' for 'login', or aliases in ACTION_RESPONSE_MAP
         for (const [reqAction, req] of this.pendingRequests.entries()) {
             const baseAction = reqAction.replace(/_\d+$/, '');
             const aliases = ACTION_RESPONSE_MAP[baseAction] || ACTION_RESPONSE_MAP[reqAction] || [];
@@ -249,29 +343,57 @@ class PythonBridge {
                 this.pendingRequests.delete(reqAction);
                 if (packet.success && packet.user?.id) {
                     this.currentUserId = Number(packet.user.id);
+                    this.reIdentifyBothChannels(this.currentUserId);
                 }
                 req.resolve(packet);
                 return;
             }
         }
-        // Otherwise it is a push event broadcast from server (new_message, user_status_changed, etc.)
+        // Sự kiện push từ server (new_message, call_media_relay, call_incoming, user_status_changed,...)
         this.emitEvent(packet);
     }
+    reIdentifyBothChannels(userId) {
+        if (this.dataSocket && this.dataConnected) {
+            this.sendSocketPacket(this.dataSocket, { action: 'identify', user_id: userId, channel_type: 'data' });
+        }
+        if (this.mediaSocket && this.mediaConnected) {
+            this.sendSocketPacket(this.mediaSocket, { action: 'identify', user_id: userId, channel_type: 'media' });
+        }
+        else {
+            this.connectMediaChannel().catch(() => { });
+        }
+    }
+    sendSocketPacket(sock, payload) {
+        try {
+            if (!sock || sock.destroyed)
+                return false;
+            const jsonBuffer = Buffer.from(JSON.stringify(payload), 'utf-8');
+            const header = Buffer.alloc(4);
+            header.writeUInt32BE(jsonBuffer.length, 0);
+            sock.write(Buffer.concat([header, jsonBuffer]));
+            return true;
+        }
+        catch {
+            return false;
+        }
+    }
     async sendRequest(action, payload = {}, timeoutMs = 25000) {
-        // Tự động thử kết nối lại ngay nếu hiện tại chưa kết nối
-        if (!this.connected || !this.socket || this.socket.destroyed) {
-            console.log(`[PythonBridge] Socket not connected for '${action}', attempting to connect to ${this.host}:${this.port}...`);
+        if (!this.dataConnected || !this.dataSocket || this.dataSocket.destroyed) {
             await this.connect();
         }
-        if (!this.connected || !this.socket) {
+        if (!this.dataConnected || !this.dataSocket) {
             throw new Error(`Chưa kết nối đến máy chủ (${this.host}:${this.port})! Vui lòng kiểm tra lại địa chỉ máy chủ.`);
         }
+        // Phân loại luồng lưu lượng:
+        // Cuộc gọi (call_media, call_invite, call_accept, call_end, check_call_status) -> Đi Kênh 2 (Media Socket)
+        // Toàn bộ tác vụ khác (tin nhắn, tải file, kết bạn, lịch sử) -> Đi Kênh 1 (Data Socket)
+        const isCallTraffic = action === 'call_media' || action.startsWith('call_') || action === 'check_call_status';
+        const targetSocket = (isCallTraffic && this.mediaSocket && this.mediaConnected && !this.mediaSocket.destroyed)
+            ? this.mediaSocket
+            : this.dataSocket;
         return new Promise((resolve, reject) => {
-            // Extended timeout for large media/file transfers over WAN
             const isFileTransfer = action === 'download_file' || action === 'upload_file';
-            const isCallAction = action.startsWith('call_') || action === 'check_call_status';
-            const actualTimeout = isFileTransfer ? 90000 : (isCallAction ? 35000 : timeoutMs);
-            // Unique tracking key for download_file by file_id, get_messages by conversation_id
+            const actualTimeout = isFileTransfer ? 90000 : (isCallTraffic ? 35000 : timeoutMs);
             let trackingKey = action;
             if (action === 'download_file' && payload.file_id !== undefined) {
                 trackingKey = `download_file_${payload.file_id}`;
@@ -283,12 +405,10 @@ class PythonBridge {
             const jsonBuffer = Buffer.from(JSON.stringify(reqPayload), 'utf-8');
             const header = Buffer.alloc(4);
             header.writeUInt32BE(jsonBuffer.length, 0);
-            // Fire-and-forget for real-time video frames (no timeout overhead)
+            // Dữ liệu âm thanh/video thời gian thực: Gửi siêu tốc trực tiếp trên kênh Media
             if (action === 'call_media') {
                 try {
-                    if (this.socket) {
-                        this.socket.write(Buffer.concat([header, jsonBuffer]));
-                    }
+                    targetSocket.write(Buffer.concat([header, jsonBuffer]));
                     return resolve({ success: true });
                 }
                 catch (err) {
@@ -301,12 +421,7 @@ class PythonBridge {
             }, actualTimeout);
             this.pendingRequests.set(trackingKey, { resolve, reject, timeoutId });
             try {
-                if (!this.socket) {
-                    clearTimeout(timeoutId);
-                    this.pendingRequests.delete(trackingKey);
-                    return reject(new Error('Socket không khả dụng'));
-                }
-                this.socket.write(Buffer.concat([header, jsonBuffer]));
+                targetSocket.write(Buffer.concat([header, jsonBuffer]));
             }
             catch (err) {
                 clearTimeout(timeoutId);
@@ -333,15 +448,26 @@ class PythonBridge {
             clearInterval(this.reconnectTimer);
             this.reconnectTimer = null;
         }
-        this.connected = false;
+        this.dataConnected = false;
+        this.mediaConnected = false;
         this.currentUserId = null;
-        if (this.socket) {
-            this.socket.destroy();
-            this.socket = null;
+        if (this.dataSocket) {
+            try {
+                this.dataSocket.destroy();
+            }
+            catch { }
+            this.dataSocket = null;
+        }
+        if (this.mediaSocket) {
+            try {
+                this.mediaSocket.destroy();
+            }
+            catch { }
+            this.mediaSocket = null;
         }
     }
     isConnected() {
-        return this.connected;
+        return this.dataConnected;
     }
 }
 exports.PythonBridge = PythonBridge;

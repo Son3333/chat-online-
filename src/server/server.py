@@ -43,9 +43,11 @@ class ChatServer:
         self.running = False
         self.server_socket = None
 
-        # Mapping: user_id -> client_socket
+        # Mapping: user_id -> data_client_socket (Data & Chat Channel)
         self.active_clients = {}
-        # Mapping: client_socket -> user_id
+        # Mapping: user_id -> media_client_socket (Real-time Call Media Channel)
+        self.media_clients = {}
+        # Mapping: client_socket -> (user_id, channel_type)
         self.socket_to_user = {}
         self.active_calls = {}
         self.lock = threading.RLock()
@@ -155,29 +157,29 @@ class ChatServer:
             return None
 
     def broadcast_to_users(self, user_ids: list, payload: dict):
-        """Gửi thông báo tới danh sách các user_id đang online (hỗ trợ cả int và str)."""
+        """Gửi thông báo tới danh sách các user_id đang online (hỗ trợ cả int và str, đa kênh Dual-Channel)."""
         sockets = []
+        is_call_event = payload.get("type") in ("call_connected", "call_incoming", "call_rejected", "call_ended")
         with self.lock:
             for uid in user_ids:
                 if uid is None:
                     continue
-                sock = self.active_clients.get(uid)
-                if not sock:
-                    try:
-                        sock = self.active_clients.get(int(uid))
-                    except Exception:
-                        pass
-                if not sock:
-                    sock = self.active_clients.get(str(uid))
+                # Báo hiệu cuộc gọi: ưu tiên gửi qua Kênh Media chuyên dụng
+                if is_call_event:
+                    m_sock = self.media_clients.get(uid) or self.media_clients.get(str(uid))
+                    if m_sock and m_sock not in sockets:
+                        sockets.append(m_sock)
+                # Luôn gửi cho Kênh Data để đồng bộ giao diện chat, huy hiệu cuộc gọi
+                sock = self.active_clients.get(uid) or self.active_clients.get(str(uid))
                 if sock and sock not in sockets:
                     sockets.append(sock)
-        if payload.get("type") in ("call_connected", "call_incoming", "call_rejected", "call_ended"):
+        if is_call_event:
             log(f"[Call Broadcast] {payload.get('type')} to user_ids={user_ids}. Found {len(sockets)} target sockets.")
         for sock in sockets:
             self.send_packet(sock, payload)
 
     def _relay_call_media(self, client_sock: socket.socket, packet: dict):
-        """Chuyển tiếp tức thì dữ liệu âm thanh/hình ảnh đúng thứ tự (FIFO) - Không sinh luồng để tránh xé tiếng."""
+        """Chuyển tiếp tức thì dữ liệu âm thanh/hình ảnh qua Kênh Media chuyên dụng (Zero-Latency)."""
         channel_id = packet.get("channel_id")
         sender_id = packet.get("sender_id")
         partner_id = packet.get("partner_id")
@@ -202,9 +204,10 @@ class ChatServer:
         if target_id:
             target_sock = None
             with self.lock:
-                target_sock = self.active_clients.get(target_id)
+                # Ưu tiên gửi thẳng vào Kênh Media chuyên dụng của đối phương
+                target_sock = self.media_clients.get(target_id) or self.media_clients.get(str(target_id))
                 if not target_sock:
-                    target_sock = self.active_clients.get(str(target_id))
+                    target_sock = self.active_clients.get(target_id) or self.active_clients.get(str(target_id))
 
             if target_sock and target_sock != client_sock:
                 self.send_packet(target_sock, {
@@ -302,40 +305,66 @@ class ChatServer:
 
                 elif action == "identify" and response and response.get("success"):
                     user_id = response["user"]["id"]
+                    channel_type = packet.get("channel_type", "data")
                     with self.lock:
-                        if user_id in self.active_clients:
-                            old_sock = self.active_clients[user_id]
-                            if old_sock != client_sock:
-                                if old_sock in self.socket_to_user:
-                                    del self.socket_to_user[old_sock]
-                                try:
-                                    old_sock.close()
-                                except Exception:
-                                    pass
-                        self.active_clients[user_id] = client_sock
-                        self.socket_to_user[client_sock] = user_id
-                    self.db.set_online_status(user_id, True)
-                    self.notify_status_change(user_id, True)
-                    log(f"[+] Nguoi dung [{response['user']['username']}] da ket noi lai va nhan dien tu {client_addr}")
+                        if channel_type == "media":
+                            if user_id in self.media_clients:
+                                old_sock = self.media_clients[user_id]
+                                if old_sock != client_sock:
+                                    if old_sock in self.socket_to_user:
+                                        del self.socket_to_user[old_sock]
+                                    try:
+                                        old_sock.close()
+                                    except Exception:
+                                        pass
+                            self.media_clients[user_id] = client_sock
+                            self.socket_to_user[client_sock] = (user_id, "media")
+                            log(f"[+] User #{user_id} [{response['user']['username']}] da mo KENH MEDIA (Real-time Call) tu {client_addr}")
+                        else:
+                            if user_id in self.active_clients:
+                                old_sock = self.active_clients[user_id]
+                                if old_sock != client_sock:
+                                    if old_sock in self.socket_to_user:
+                                        del self.socket_to_user[old_sock]
+                                    try:
+                                        old_sock.close()
+                                    except Exception:
+                                        pass
+                            self.active_clients[user_id] = client_sock
+                            self.socket_to_user[client_sock] = (user_id, "data")
+                            self.db.set_online_status(user_id, True)
+                            self.notify_status_change(user_id, True)
+                            log(f"[+] User #{user_id} [{response['user']['username']}] da mo KENH DATA & CHAT tu {client_addr}")
 
         except Exception as e:
             log(f"[-] Loi doc socket client {client_addr}: {e}")
         finally:
             uid = None
+            ch_type = "data"
             with self.lock:
                 if client_sock in self.socket_to_user:
-                    uid = self.socket_to_user.pop(client_sock, None)
-                    if uid in self.active_clients and self.active_clients[uid] == client_sock:
-                        del self.active_clients[uid]
+                    mapping = self.socket_to_user.pop(client_sock, None)
+                    if isinstance(mapping, tuple):
+                        uid, ch_type = mapping
+                    else:
+                        uid = mapping
+                    if ch_type == "media":
+                        if uid in self.media_clients and self.media_clients[uid] == client_sock:
+                            del self.media_clients[uid]
+                    else:
+                        if uid in self.active_clients and self.active_clients[uid] == client_sock:
+                            del self.active_clients[uid]
                 with self.sock_locks_guard:
                     self.sock_locks.pop(client_sock, None)
-            if uid:
+            if uid and ch_type == "data":
                 try:
                     self.db.set_online_status(uid, False)
                     self.notify_status_change(uid, False)
-                    log(f"[-] Nguoi dung (ID: {uid}) da ngat ket noi.")
+                    log(f"[-] Nguoi dung (ID: {uid}) da ngat kenh Data & Chat.")
                 except Exception:
                     pass
+            elif uid and ch_type == "media":
+                log(f"[-] Nguoi dung (ID: {uid}) da ngat kenh Media.")
             try:
                 client_sock.close()
             except Exception:
