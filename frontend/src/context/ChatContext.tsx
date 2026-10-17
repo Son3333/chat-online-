@@ -349,12 +349,15 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setActiveCall(null);
     setIncomingCall(null);
     refreshConversations();
-    if (activeConvIdRef.current) {
-      apiService.getMessages(activeConvIdRef.current).then((res) => {
-        if (res && res.messages && res.messages.length > 0) {
-          setMessages(res.messages);
-        }
-      }).catch(() => {});
+    const targetCidEnd = activeConvIdRef.current || (activeConv ? activeConv.id : null);
+    if (targetCidEnd) {
+      setTimeout(() => {
+        apiService.getMessages(targetCidEnd).then((res) => {
+          if (res && res.messages && res.messages.length > 0) {
+            setMessages(res.messages);
+          }
+        }).catch(() => {});
+      }, 350);
     }
     try {
       await apiService.sendRequest('call_end', {
@@ -400,6 +403,17 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           // Partner ended or rejected the call
           setActiveCall(null);
           setIncomingCall(null);
+          refreshConversations();
+          const targetCid = activeConvIdRef.current || (activeConv ? activeConv.id : null);
+          if (targetCid) {
+            setTimeout(() => {
+              apiService.getMessages(targetCid).then((mRes) => {
+                if (mRes && mRes.messages && mRes.messages.length > 0) {
+                  setMessages(mRes.messages);
+                }
+              }).catch(() => {});
+            }, 300);
+          }
         }
       } catch (err) {
         // Silent catch on poll
@@ -416,7 +430,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         case 'new_message':
           if (event.message) {
             const newMsg = normalizeMessage(event.message);
-            if (activeConv && String(activeConv.id) === String(newMsg.conversation_id)) {
+            const currentCid = activeConvIdRef.current || (activeConv ? activeConv.id : null);
+            if (currentCid && String(currentCid) === String(newMsg.conversation_id)) {
               setMessages((prev) => {
                 if (prev.some((m) => m.id === newMsg.id)) return prev;
                 return [...prev, newMsg];
@@ -508,12 +523,15 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setActiveCall(null);
           setIncomingCall(null);
           refreshConversations();
-          if (activeConvIdRef.current) {
-            apiService.getMessages(activeConvIdRef.current).then((res) => {
-              if (res && res.messages && res.messages.length > 0) {
-                setMessages(res.messages);
-              }
-            }).catch(() => {});
+          const targetCidEnded = activeConvIdRef.current || (activeConv ? activeConv.id : null);
+          if (targetCidEnded) {
+            setTimeout(() => {
+              apiService.getMessages(targetCidEnded).then((res) => {
+                if (res && res.messages && res.messages.length > 0) {
+                  setMessages(res.messages);
+                }
+              }).catch(() => {});
+            }, 350);
           }
           break;
 

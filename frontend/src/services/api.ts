@@ -28,6 +28,40 @@ const isElectron = typeof window !== 'undefined' && Boolean(window.api);
 const imageCache = new Map<string, string>();
 const inFlightImageRequests = new Map<string, Promise<string | null>>();
 
+// Hàng đợi tải ảnh song song tối đa 2 tệp cùng lúc để không làm nghẽn luồng socket và cuộc gọi
+class FileDownloadQueue {
+  private running = 0;
+  private queue: (() => Promise<void>)[] = [];
+
+  constructor(private maxConcurrent = 2) {}
+
+  add<T>(task: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      this.queue.push(async () => {
+        try {
+          const res = await task();
+          resolve(res);
+        } catch (err) {
+          reject(err);
+        }
+      });
+      this.processNext();
+    });
+  }
+
+  private processNext() {
+    if (this.running >= this.maxConcurrent || this.queue.length === 0) return;
+    const nextTask = this.queue.shift();
+    if (!nextTask) return;
+    this.running++;
+    nextTask().finally(() => {
+      this.running--;
+      this.processNext();
+    });
+  }
+}
+const imageDownloadQueue = new FileDownloadQueue(2);
+
 export const apiService = {
   isElectron,
 
@@ -226,7 +260,7 @@ export const apiService = {
 
     const promise = (async () => {
       try {
-        const res = await this.downloadFile(key);
+        const res = await imageDownloadQueue.add(() => this.downloadFile(key));
         if (res && res.file_data) {
           let mime = res.file_type || 'image/png';
           if (!mime.startsWith('image/')) {

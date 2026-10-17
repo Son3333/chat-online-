@@ -17,6 +17,7 @@ export class PythonBridge {
   private pendingRequests = new Map<string, { resolve: (val: any) => void; reject: (err: any) => void; timeoutId: NodeJS.Timeout }>();
   private eventCallbacks: ((event: PythonPacket) => void)[] = [];
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private connectingPromise: Promise<boolean> | null = null;
   public currentUserId: number | null = null;
 
   constructor(host = '127.0.0.1', port = 8888) {
@@ -34,13 +35,27 @@ export class PythonBridge {
   }
 
   public connect(): Promise<boolean> {
-    return new Promise((resolve) => {
+    if (this.connected && this.socket && !this.socket.destroyed) {
+      return Promise.resolve(true);
+    }
+    if (this.connectingPromise) {
+      return this.connectingPromise;
+    }
+
+    this.connectingPromise = new Promise((resolve) => {
       if (this.socket) {
-        this.socket.destroy();
+        try {
+          this.socket.destroy();
+        } catch {}
       }
 
       this.socket = new net.Socket();
-      this.socket.setTimeout(5000);
+      this.socket.setTimeout(6000);
+
+      const finishConnect = (result: boolean) => {
+        this.connectingPromise = null;
+        resolve(result);
+      };
 
       this.socket.connect(this.port, this.host, () => {
         this.connected = true;
@@ -58,7 +73,7 @@ export class PythonBridge {
         }
 
         this.emitEvent({ type: 'connection_status', connected: true });
-        resolve(true);
+        finishConnect(true);
       });
 
       this.socket.on('data', (data: Buffer) => {
@@ -68,25 +83,31 @@ export class PythonBridge {
 
       this.socket.on('error', (err) => {
         console.warn('[PythonBridge] Socket error:', err.message);
+        finishConnect(false);
         this.handleDisconnect();
-        resolve(false);
       });
 
       this.socket.on('close', () => {
+        finishConnect(false);
         this.handleDisconnect();
       });
 
       this.socket.on('timeout', () => {
         if (!this.connected) {
-          this.socket?.destroy();
-          resolve(false);
+          try {
+            this.socket?.destroy();
+          } catch {}
+          finishConnect(false);
         }
       });
     });
+
+    return this.connectingPromise;
   }
 
   private handleDisconnect() {
     this.connected = false;
+    this.connectingPromise = null;
     this.emitEvent({ type: 'connection_status', connected: false });
     this.scheduleReconnect();
   }
@@ -109,7 +130,9 @@ export class PythonBridge {
       }
 
       const packetData = this.buffer.subarray(4, 4 + packetLength);
-      this.buffer = this.buffer.subarray(4 + packetLength);
+      // Giảm tải bộ nhớ: tạo buffer mới cho phần còn lại để giải phóng buffer mẹ lớn
+      const remaining = this.buffer.subarray(4 + packetLength);
+      this.buffer = remaining.length > 0 ? Buffer.from(remaining) : Buffer.alloc(0);
 
       try {
         const jsonStr = packetData.toString('utf-8');
@@ -118,9 +141,6 @@ export class PythonBridge {
       } catch (e) {
         console.error('[PythonBridge] Failed to parse JSON packet:', e);
       }
-    }
-    if (this.buffer.length === 0) {
-      this.buffer = Buffer.alloc(0);
     }
   }
 

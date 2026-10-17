@@ -83,7 +83,9 @@ export const CallModal: React.FC = () => {
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [remoteVideoFrame, setRemoteVideoFrame] = useState<string | null>(null);
+  const [hasRemoteFrame, setHasRemoteFrame] = useState(false);
+  const hasRemoteFrameRef = useRef<boolean>(false);
+  const remoteVideoImgRef = useRef<HTMLImageElement>(null);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -299,7 +301,13 @@ export const CallModal: React.FC = () => {
     const unsubscribe = apiService.onServerEvent((event: any) => {
       if (event.type === 'call_media_relay') {
         if (event.media_type === 'video' && event.data) {
-          setRemoteVideoFrame(event.data);
+          if (remoteVideoImgRef.current) {
+            remoteVideoImgRef.current.src = event.data;
+          }
+          if (!hasRemoteFrameRef.current) {
+            hasRemoteFrameRef.current = true;
+            setHasRemoteFrame(true);
+          }
         } else if (event.media_type === 'audio' && event.data && remoteCtx) {
           try {
             if (remoteCtx.state === 'suspended') {
@@ -322,7 +330,7 @@ export const CallModal: React.FC = () => {
 
             const now = remoteCtx.currentTime;
             if (nextPlayTimeRef.current < now) {
-              nextPlayTimeRef.current = now + 0.04; // 40ms jitter buffer
+              nextPlayTimeRef.current = now + 0.08; // 80ms jitter buffer muot ma tren WAN
             }
             source.start(nextPlayTimeRef.current);
             nextPlayTimeRef.current += audioBuffer.duration;
@@ -348,7 +356,9 @@ export const CallModal: React.FC = () => {
   // Stream local webcam frames to partner via server media relay (5 FPS, ~10KB/frame, smooth & reliable)
   useEffect(() => {
     if (!activeCall || activeCall.callType !== 'video' || !activeCall.isConnected) {
-      setRemoteVideoFrame(null);
+      hasRemoteFrameRef.current = false;
+      setHasRemoteFrame(false);
+      if (remoteVideoImgRef.current) remoteVideoImgRef.current.src = '';
       return;
     }
 
@@ -491,7 +501,9 @@ export const CallModal: React.FC = () => {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
     }
-    setRemoteVideoFrame(null);
+    hasRemoteFrameRef.current = false;
+    setHasRemoteFrame(false);
+    if (remoteVideoImgRef.current) remoteVideoImgRef.current.src = '';
     endCall();
   };
 
@@ -648,13 +660,14 @@ export const CallModal: React.FC = () => {
 
             {/* Main Stage: Remote Video Screen */}
             <div className="flex-1 w-full h-full relative flex items-center justify-center bg-slate-950 overflow-hidden">
-              {remoteVideoFrame ? (
-                <img
-                  src={remoteVideoFrame}
-                  alt={activeCall.partnerName}
-                  className="w-full h-full object-cover select-none pointer-events-none transition-opacity duration-150 animate-in fade-in"
-                />
-              ) : (
+              <img
+                ref={remoteVideoImgRef}
+                alt={activeCall.partnerName}
+                className={`w-full h-full object-cover select-none pointer-events-none transition-opacity duration-150 ${
+                  hasRemoteFrame ? 'block' : 'hidden'
+                }`}
+              />
+              {!hasRemoteFrame && (
                 /* Partner Video Mock / Ambient Profile while waiting */
                 <div className="w-full h-full flex flex-col items-center justify-center relative">
                   {/* Background ambient lighting */}
