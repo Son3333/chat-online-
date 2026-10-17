@@ -176,76 +176,62 @@ class ChatServer:
         for sock in sockets:
             self.send_packet(sock, payload)
 
-    def _handle_packet_worker(self, client_sock: socket.socket, client_addr, packet: dict):
-        """Luồng Worker xử lý độc lập từng packet - không bao giờ làm nghẽn luồng đọc socket."""
+    def _relay_call_media(self, client_sock: socket.socket, packet: dict):
+        """Chuyển tiếp tức thì dữ liệu âm thanh/hình ảnh đúng thứ tự (FIFO) - Không sinh luồng để tránh xé tiếng."""
+        channel_id = packet.get("channel_id")
+        sender_id = packet.get("sender_id")
+        partner_id = packet.get("partner_id")
         try:
-            action = packet.get("action")
-            response = self.process_action(client_sock, packet)
+            if sender_id: sender_id = int(sender_id)
+            if partner_id: partner_id = int(partner_id)
+        except Exception:
+            pass
 
+        target_id = partner_id
+        if not target_id:
+            call = getattr(self, "active_calls", {}).get(channel_id)
+            if not call and sender_id:
+                for cid, c in getattr(self, "active_calls", {}).items():
+                    if c.get("caller_id") == sender_id or c.get("receiver_id") == sender_id:
+                        call = c
+                        channel_id = cid
+                        break
+            if call:
+                target_id = call["receiver_id"] if sender_id == call["caller_id"] else call["caller_id"]
+
+        if target_id:
+            target_sock = None
+            with self.lock:
+                target_sock = self.active_clients.get(target_id)
+                if not target_sock:
+                    target_sock = self.active_clients.get(str(target_id))
+
+            if target_sock and target_sock != client_sock:
+                self.send_packet(target_sock, {
+                    "type": "call_media_relay",
+                    "channel_id": channel_id,
+                    "sender_id": sender_id,
+                    "media_type": packet.get("media_type"),
+                    "sample_rate": packet.get("sample_rate"),
+                    "data": packet.get("data")
+                })
+
+    def _handle_heavy_packet(self, client_sock: socket.socket, client_addr, packet: dict):
+        """Xử lý các tác vụ truyền file nặng (download_file) trong luồng riêng để không chặn luồng chính."""
+        try:
+            response = self.process_action(client_sock, packet)
             if response:
                 self.send_packet(client_sock, response)
-
-            # Cập nhật user_id của socket nếu đăng nhập thành công HOẶC kết nối lại (identify)
-            if action in ["login", "register"] and response and response.get("success"):
-                user_id = response["user"]["id"]
-                with self.lock:
-                    # KIỂM TRA ĐĂNG NHẬP THIẾT BỊ KHÁC:
-                    if user_id in self.active_clients:
-                        old_sock = self.active_clients[user_id]
-                        if old_sock != client_sock:
-                            try:
-                                kick_packet = {
-                                    "type": "forced_logout",
-                                    "message": "Tài khoản của bạn vừa được đăng nhập trên một thiết bị khác!\nThiết bị hiện tại đã bị đăng xuất để bảo vệ bảo mật."
-                                }
-                                self.send_packet(old_sock, kick_packet)
-                                if old_sock in self.socket_to_user:
-                                    del self.socket_to_user[old_sock]
-                                def _graceful_close(s):
-                                    time.sleep(0.1)
-                                    try:
-                                        s.shutdown(socket.SHUT_WR)
-                                    except Exception:
-                                        pass
-                                    try:
-                                        s.close()
-                                    except Exception:
-                                        pass
-                                threading.Thread(target=_graceful_close, args=(old_sock,), daemon=True).start()
-                                log(f"[!] Tai khoan [ID: {user_id}] dang nhap thiet bi moi -> Da buoc dang xuat thiet bi cu.")
-                            except Exception:
-                                pass
-
-                    self.active_clients[user_id] = client_sock
-                    self.socket_to_user[client_sock] = user_id
-
-                self.db.set_online_status(user_id, True)
-                self.notify_status_change(user_id, True)
-                log(f"[+] Nguoi dung [{response['user']['username']}] da dang nhap tu {client_addr}")
-
-            elif action == "identify" and response and response.get("success"):
-                user_id = response["user"]["id"]
-                with self.lock:
-                    if user_id in self.active_clients:
-                        old_sock = self.active_clients[user_id]
-                        if old_sock != client_sock:
-                            if old_sock in self.socket_to_user:
-                                del self.socket_to_user[old_sock]
-                            try:
-                                old_sock.close()
-                            except Exception:
-                                pass
-                    self.active_clients[user_id] = client_sock
-                    self.socket_to_user[client_sock] = user_id
-                self.db.set_online_status(user_id, True)
-                self.notify_status_change(user_id, True)
-                log(f"[+] Nguoi dung [{response['user']['username']}] da ket noi lai va nhan dien tu {client_addr}")
-
         except Exception as e:
-            log(f"[-] Loi xu ly packet '{packet.get('action')}' tu {client_addr}: {e}")
+            log(f"[-] Loi xu ly heavy packet '{packet.get('action')}' tu {client_addr}: {e}")
 
     def handle_client(self, client_sock: socket.socket, client_addr):
-        """Luồng Đọc (Reader Loop) liên tục không dừng - đón nhận và điều phối packet song song tức thì."""
+        """
+        Luồng chính cho từng kết nối khách:
+        - Xử lý tuần tự đúng thứ tự (Strict FIFO Order) cho tin nhắn, gọi điện, kiểm tra trạng thái.
+        - call_media được relay trực tiếp lập tức (Zero-latency) mà KHÔNG tạo luồng mới.
+        - download_file được đưa vào luồng phụ để không làm tắc nghẽn gói tin điều khiển.
+        """
         user_id = None
         try:
             while self.running:
@@ -255,24 +241,82 @@ class ChatServer:
 
                 action = packet.get("action")
 
-                # Tự động liên kết socket với user_id nếu packet có kèm ID người gửi
-                cand_uid = packet.get("user_id") or packet.get("caller_id") or packet.get("sender_id") or packet.get("creator_id")
-                if cand_uid and action not in ["login", "register"]:
-                    try:
-                        c_uid = int(cand_uid)
-                        with self.lock:
-                            if self.active_clients.get(c_uid) != client_sock:
-                                self.active_clients[c_uid] = client_sock
-                                self.socket_to_user[client_sock] = c_uid
-                    except Exception:
-                        pass
+                # 1. Âm thanh / Video thời gian thực: Chuyển tiếp ngay lập tức đúng thứ tự
+                if action == "call_media":
+                    self._relay_call_media(client_sock, packet)
+                    continue
 
-                # Khởi chạy luồng Worker xử lý packet này độc lập, luồng đọc tiếp tục đón nhận gói tin tiếp theo ngay lập tức (không nghẽn!)
-                threading.Thread(
-                    target=self._handle_packet_worker,
-                    args=(client_sock, client_addr, packet),
-                    daemon=True
-                ).start()
+                # 2. Tải tệp tin dung lượng lớn: Xử lý ở luồng phụ để không làm kẹt socket
+                if action == "download_file":
+                    threading.Thread(
+                        target=self._handle_heavy_packet,
+                        args=(client_sock, client_addr, packet),
+                        daemon=True
+                    ).start()
+                    continue
+
+                # 3. Các gói tin logic thông thường (call_invite, call_accept, call_end, send_message, get_messages,...)
+                # Chạy tuần tự, phản hồi ngay trong mili-giây, bảo toàn 100% thứ tự gói tin
+                response = self.process_action(client_sock, packet)
+
+                if response:
+                    self.send_packet(client_sock, response)
+
+                # Cập nhật user_id của socket nếu đăng nhập thành công HOẶC kết nối lại (identify)
+                if action in ["login", "register"] and response and response.get("success"):
+                    user_id = response["user"]["id"]
+                    with self.lock:
+                        # KIỂM TRA ĐĂNG NHẬP THIẾT BỊ KHÁC:
+                        if user_id in self.active_clients:
+                            old_sock = self.active_clients[user_id]
+                            if old_sock != client_sock:
+                                try:
+                                    kick_packet = {
+                                        "type": "forced_logout",
+                                        "message": "Tài khoản của bạn vừa được đăng nhập trên một thiết bị khác!\nThiết bị hiện tại đã bị đăng xuất để bảo vệ bảo mật."
+                                    }
+                                    self.send_packet(old_sock, kick_packet)
+                                    if old_sock in self.socket_to_user:
+                                        del self.socket_to_user[old_sock]
+                                    def _graceful_close(s):
+                                        time.sleep(0.1)
+                                        try:
+                                            s.shutdown(socket.SHUT_WR)
+                                        except Exception:
+                                            pass
+                                        try:
+                                            s.close()
+                                        except Exception:
+                                            pass
+                                    threading.Thread(target=_graceful_close, args=(old_sock,), daemon=True).start()
+                                    log(f"[!] Tai khoan [ID: {user_id}] dang nhap thiet bi moi -> Da buoc dang xuat thiet bi cu.")
+                                except Exception:
+                                    pass
+
+                        self.active_clients[user_id] = client_sock
+                        self.socket_to_user[client_sock] = user_id
+
+                    self.db.set_online_status(user_id, True)
+                    self.notify_status_change(user_id, True)
+                    log(f"[+] Nguoi dung [{response['user']['username']}] da dang nhap tu {client_addr}")
+
+                elif action == "identify" and response and response.get("success"):
+                    user_id = response["user"]["id"]
+                    with self.lock:
+                        if user_id in self.active_clients:
+                            old_sock = self.active_clients[user_id]
+                            if old_sock != client_sock:
+                                if old_sock in self.socket_to_user:
+                                    del self.socket_to_user[old_sock]
+                                try:
+                                    old_sock.close()
+                                except Exception:
+                                    pass
+                        self.active_clients[user_id] = client_sock
+                        self.socket_to_user[client_sock] = user_id
+                    self.db.set_online_status(user_id, True)
+                    self.notify_status_change(user_id, True)
+                    log(f"[+] Nguoi dung [{response['user']['username']}] da ket noi lai va nhan dien tu {client_addr}")
 
         except Exception as e:
             log(f"[-] Loi doc socket client {client_addr}: {e}")
@@ -1032,10 +1076,14 @@ class ChatServer:
                 if conv_id:
                     saved_m = self.db.save_message(conv_id, call["caller_id"], "call", msg_text)
                     members = self.db.get_conversation_members(conv_id)
-                    self.broadcast_to_users([m["id"] for m in members], {
+                    member_ids = [m["id"] for m in members]
+                    self.broadcast_to_users(member_ids, {
                         "type": "new_message",
                         "conversation_id": conv_id,
                         "message": saved_m
+                    })
+                    self.broadcast_to_users(member_ids, {
+                        "type": "refresh_conversations"
                     })
             return {"action": "call_end_response", "success": True}
 

@@ -287,15 +287,40 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const acceptCall = async () => {
     if (!incomingCall || !currentUser) return;
     const channelId = incomingCall.channelId;
+    const callerId = incomingCall.callerId;
+    const callerName = incomingCall.callerName;
     setActiveCall({
-      partnerId: incomingCall.callerId,
-      partnerName: incomingCall.callerName,
+      partnerId: callerId,
+      partnerName: callerName,
       callType: incomingCall.callType,
       channelId,
       isOutgoing: false,
       isConnected: true,
     });
     setIncomingCall(null);
+
+    // Tu dong mo cuoc tro chuyen voi nguoi dang goi de ca 2 dong bo tin nhan
+    if (!activeConv || activeConv.partner_id !== callerId) {
+      const existing = conversations.find((c) => c.partner_id === callerId && c.type === 'direct');
+      if (existing) {
+        selectConversation(existing);
+      } else {
+        apiService.sendRequest('start_direct_chat', {
+          user_id: currentUser.id,
+          target_id: callerId,
+        }).then((res) => {
+          if (res && res.conversation_id) {
+            selectConversation({
+              id: res.conversation_id,
+              title: callerName,
+              type: 'direct',
+              partner_id: callerId,
+            });
+          }
+        }).catch(() => {});
+      }
+    }
+
     try {
       await apiService.sendRequest('call_accept', {
         channel_id: channelId,
@@ -323,6 +348,14 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const pid = activeCall.partnerId;
     setActiveCall(null);
     setIncomingCall(null);
+    refreshConversations();
+    if (activeConvIdRef.current) {
+      apiService.getMessages(activeConvIdRef.current).then((res) => {
+        if (res && res.messages && res.messages.length > 0) {
+          setMessages(res.messages);
+        }
+      }).catch(() => {});
+    }
     try {
       await apiService.sendRequest('call_end', {
         channel_id: cid,
@@ -474,6 +507,14 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         case 'call_ended':
           setActiveCall(null);
           setIncomingCall(null);
+          refreshConversations();
+          if (activeConvIdRef.current) {
+            apiService.getMessages(activeConvIdRef.current).then((res) => {
+              if (res && res.messages && res.messages.length > 0) {
+                setMessages(res.messages);
+              }
+            }).catch(() => {});
+          }
           break;
 
         case 'user_status_changed':
