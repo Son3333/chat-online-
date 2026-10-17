@@ -218,21 +218,33 @@ export const ChatArea: React.FC = () => {
 
       {/* 4. Messages List */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col space-y-1">
-        {messages.map((msg) => {
-          const isSelf = msg.sender_id === currentUser?.id;
-          return (
-            <div key={msg.id} id={`msg-${msg.id}`} className="contents">
-              <ChatBubble
-                message={msg}
-                isSelf={isSelf}
-                onOpenImage={(fileId, name, dataUrl) => setPreviewImage({ fileId, name, url: dataUrl })}
-                onOpenFilePreview={(fileId, name, size, type) =>
-                  setPreviewFile({ fileId, name, fileSize: size, fileType: type })
-                }
-              />
+        {messages.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-xs py-16 select-none animate-in fade-in duration-200">
+            <div className="w-12 h-12 rounded-2xl bg-slate-200/50 dark:bg-[#1a2533] flex items-center justify-center text-[#2481cc] mb-2 shadow-xs">
+              <MessageCircle className="w-6 h-6" />
             </div>
-          );
-        })}
+            <p className="font-semibold text-slate-600 dark:text-slate-300">Chưa có tin nhắn nào</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Gửi tin nhắn hoặc đính kèm tệp để bắt đầu cuộc trò chuyện!</p>
+          </div>
+        ) : (
+          messages.map((msg) => {
+            const isSelf = msg.sender_id === currentUser?.id;
+            return (
+              <div key={msg.id} id={`msg-${msg.id}`} className="contents">
+                <BubbleErrorBoundary>
+                  <ChatBubble
+                    message={msg}
+                    isSelf={isSelf}
+                    onOpenImage={(fileId, name, dataUrl) => setPreviewImage({ fileId, name, url: dataUrl })}
+                    onOpenFilePreview={(fileId, name, size, type) =>
+                      setPreviewFile({ fileId, name, fileSize: size, fileType: type })
+                    }
+                  />
+                </BubbleErrorBoundary>
+              </div>
+            );
+          })
+        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -339,4 +351,27 @@ const FullscreenPreviewModal: React.FC<{
     </div>
   );
 };
+
+class BubbleErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: any) {
+    console.warn('[BubbleErrorBoundary] Caught message rendering error:', error);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-2 text-xs text-slate-400 italic bg-black/5 dark:bg-black/20 rounded-lg">
+          [Không thể hiển thị tin nhắn này]
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 

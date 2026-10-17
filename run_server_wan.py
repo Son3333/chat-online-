@@ -57,7 +57,7 @@ def ensure_bore_binary() -> str:
 
 def start_wan_server():
     safe_log("=================================================================")
-    safe_log("  DO AN CHUYEN NGANH CONG NGHE PHAN MEM - NHOM 05")
+    safe_log("  DO AN CHUYEN NGANH CONG NGHE PHAN MEM - NHOM 21")
     safe_log("  KHOI DONG MAY CHU TRUYEN THONG MANG DIEN RONG (WAN / INTERNET)")
     safe_log("=================================================================")
 
@@ -150,11 +150,15 @@ def start_wan_server():
         safe_log(f"  Dia chi ket noi: {domain}:{port}")
         safe_log("=" * 65)
 
-        # Ghi ra file wan_server_info.txt cho các máy trạm từ xa tham khảo
+        # Ghi ra file wan_server_info.txt va server_config.json cho cac may tram ket noi
         try:
             info_file = os.path.join(PROJECT_DIR, "wan_server_info.txt")
             with open(info_file, "w", encoding="utf-8") as f:
                 f.write(f"DOMAIN={domain}\nPORT={port}\nFULL={domain}:{port}\n")
+            cfg_file = os.path.join(PROJECT_DIR, "server_config.json")
+            with open(cfg_file, "w", encoding="utf-8") as f:
+                json.dump({"host": domain, "port": port}, f, indent=2)
+            safe_log(f"[+] Da cap nhat cau hinh server_config.json: {domain}:{port}")
         except Exception:
             pass
 

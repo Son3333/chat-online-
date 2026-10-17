@@ -104,19 +104,28 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setReplyTo(null);
     setTypingUser(null);
 
-    // Fetch messages
-    const res = await apiService.getMessages(conv.id);
-    if (res && res.messages) {
-      setMessages(res.messages);
-    } else {
+    // Fetch messages with safe fallback
+    try {
+      const res = await apiService.getMessages(conv.id);
+      if (res && res.messages) {
+        setMessages(res.messages);
+      } else {
+        setMessages([]);
+      }
+    } catch (err) {
+      console.warn('[ChatContext] Error loading messages:', err);
       setMessages([]);
     }
 
-    // Fetch pinned message
-    const pRes = await apiService.getPinnedMessage(conv.id);
-    if (pRes && pRes.pinned) {
-      setPinnedMessage(pRes.pinned);
-    } else {
+    // Fetch pinned message with safe fallback
+    try {
+      const pRes = await apiService.getPinnedMessage(conv.id);
+      if (pRes && pRes.pinned) {
+        setPinnedMessage(pRes.pinned);
+      } else {
+        setPinnedMessage(null);
+      }
+    } catch {
       setPinnedMessage(null);
     }
   };
