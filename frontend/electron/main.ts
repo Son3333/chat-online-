@@ -167,11 +167,30 @@ async function resolveServerEndpoint(): Promise<{ host: string; port: number; is
   return { host: 'bore.pub', port: 38888, isWan: true };
 }
 
+function ensureDesktopShortcut(): void {
+  try {
+    const rootDir = path.resolve(__dirname, '../../');
+    const psScript = path.join(rootDir, 'scripts', 'create_desktop_shortcut.ps1');
+    if (fs.existsSync(psScript)) {
+      const p = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psScript], {
+        cwd: rootDir,
+        detached: true,
+        stdio: 'ignore',
+      });
+      p.unref();
+    }
+  } catch (err) {
+    console.warn('[Main] Error ensuring desktop shortcut:', err);
+  }
+}
+
 async function startPythonBackendIfNeeded(): Promise<void> {
   // Đã được tự động xử lý an toàn trong resolveServerEndpoint()
 }
 
 async function createWindow() {
+  ensureDesktopShortcut();
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 820,

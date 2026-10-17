@@ -188,10 +188,28 @@ async function resolveServerEndpoint() {
     // Mặc định kết nối tới máy chủ WAN Internet bore.pub:38888
     return { host: 'bore.pub', port: 38888, isWan: true };
 }
+function ensureDesktopShortcut() {
+    try {
+        const rootDir = path.resolve(__dirname, '../../');
+        const psScript = path.join(rootDir, 'scripts', 'create_desktop_shortcut.ps1');
+        if (fs.existsSync(psScript)) {
+            const p = (0, child_process_1.spawn)('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psScript], {
+                cwd: rootDir,
+                detached: true,
+                stdio: 'ignore',
+            });
+            p.unref();
+        }
+    }
+    catch (err) {
+        console.warn('[Main] Error ensuring desktop shortcut:', err);
+    }
+}
 async function startPythonBackendIfNeeded() {
     // Đã được tự động xử lý an toàn trong resolveServerEndpoint()
 }
 async function createWindow() {
+    ensureDesktopShortcut();
     mainWindow = new electron_1.BrowserWindow({
         width: 1200,
         height: 820,

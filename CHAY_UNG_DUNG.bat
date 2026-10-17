@@ -14,6 +14,9 @@ echo        VIBE NGUOI TOT - KHOI DONG HE THONG THONG MINH
 echo =================================================================
 echo.
 
+:: Tu dong tao bieu tuong loi tat (Shortcut) ngoai man hinh Desktop
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\create_desktop_shortcut.ps1" >nul 2>&1
+
 :: -------------------------------------------------------------
 :: 1. Tim kiem trinh thuc thi Python
 :: -------------------------------------------------------------
