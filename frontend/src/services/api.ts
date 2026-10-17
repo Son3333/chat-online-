@@ -10,7 +10,7 @@ declare global {
       closeWindow: () => void;
       setAlwaysOnTop: (enabled: boolean) => Promise<boolean>;
       isAlwaysOnTop: () => Promise<boolean>;
-      selectLocalFile: () => Promise<{ canceled: boolean; fileName?: string; fileData?: string; fileSize?: number }>;
+      selectLocalFile: (category?: 'image' | 'video' | 'file') => Promise<{ canceled: boolean; fileName?: string; fileData?: string; fileSize?: number; category?: string }>;
       saveDownloadedFile: (fileName: string, base64Data: string) => Promise<{ success: boolean; path?: string }>;
       onUpdateAvailable: (callback: (updateInfo: { remoteHash: string; localHash: string; message: string }) => void) => () => void;
       applyUpdate: () => Promise<{ success: boolean; error?: string }>;
@@ -196,7 +196,7 @@ export const apiService = {
     });
   },
 
-  async downloadFile(fileId: string | number): Promise<{ success: boolean; file_data?: string; original_name?: string; filename?: string; file_type?: string }> {
+  async downloadFile(fileId: string | number): Promise<{ success: boolean; file_data?: string; original_name?: string; filename?: string; file_type?: string; message?: string; error?: string }> {
     return await this.sendRequest('download_file', { file_id: fileId });
   },
 
@@ -319,9 +319,9 @@ export const apiService = {
     }
     return false;
   },
-  async selectLocalFile() {
+  async selectLocalFile(category?: 'image' | 'video' | 'file') {
     if (window.api) {
-      return await window.api.selectLocalFile();
+      return await window.api.selectLocalFile(category);
     }
     return { canceled: true };
   },

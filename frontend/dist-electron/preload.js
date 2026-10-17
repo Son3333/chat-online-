@@ -31,7 +31,7 @@ const api = {
     closeWindow: () => electron_1.ipcRenderer.send('window:close'),
     setAlwaysOnTop: (enabled) => electron_1.ipcRenderer.invoke('window:set-always-on-top', enabled),
     isAlwaysOnTop: () => electron_1.ipcRenderer.invoke('window:is-always-on-top'),
-    selectLocalFile: () => electron_1.ipcRenderer.invoke('dialog:select-file'),
+    selectLocalFile: (category) => electron_1.ipcRenderer.invoke('dialog:select-file', category),
     saveDownloadedFile: (fileName, base64Data) => electron_1.ipcRenderer.invoke('dialog:save-file', { fileName, base64Data }),
 };
 electron_1.contextBridge.exposeInMainWorld('api', api);

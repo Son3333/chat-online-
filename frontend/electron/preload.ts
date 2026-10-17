@@ -50,7 +50,7 @@ const api: ElectronAPI = {
   closeWindow: () => ipcRenderer.send('window:close'),
   setAlwaysOnTop: (enabled) => ipcRenderer.invoke('window:set-always-on-top', enabled),
   isAlwaysOnTop: () => ipcRenderer.invoke('window:is-always-on-top'),
-  selectLocalFile: () => ipcRenderer.invoke('dialog:select-file'),
+  selectLocalFile: (category?: string) => ipcRenderer.invoke('dialog:select-file', category),
   saveDownloadedFile: (fileName, base64Data) => ipcRenderer.invoke('dialog:save-file', { fileName, base64Data }),
 };
 

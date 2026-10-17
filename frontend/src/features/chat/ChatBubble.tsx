@@ -496,9 +496,16 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
 
   const handleDownloadFile = async () => {
     if (!message.file_id) return;
-    const res = await apiService.downloadFile(message.file_id);
-    if (res && res.file_data) {
-      await apiService.saveDownloadedFile(message.original_name || 'downloaded_file', res.file_data);
+    const fileName = message.original_name || (message as any).file_name || 'downloaded_file';
+    try {
+      const res = await apiService.downloadFile(message.file_id);
+      if (res && res.file_data) {
+        await apiService.saveDownloadedFile(fileName, res.file_data);
+      } else {
+        alert(res?.message || 'Không thể tải tệp tin từ máy chủ.');
+      }
+    } catch (err: any) {
+      alert('Lỗi tải tệp: ' + (err?.message || 'Quá thời gian chờ.'));
     }
   };
 
@@ -595,9 +602,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
                 {isZip ? <FolderArchive className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
               </div>
               <div className="flex-1 min-w-0">
-                <span className="font-semibold text-xs truncate block">{message.original_name || 'Tài liệu'}</span>
+                <span className="font-semibold text-xs truncate block">{message.original_name || (message as any).file_name || 'Tài liệu'}</span>
                 <span className="text-[10px] opacity-70 block">
-                  {formatFileSize(message.file_size)} {isZip ? '• Tệp nén' : ''}
+                  {formatFileSize(message.file_size || (message as any).size)} {isZip ? '• Tệp nén' : ''}
                 </span>
               </div>
               <button

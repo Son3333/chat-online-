@@ -243,16 +243,31 @@ ipcMain.handle('window:is-always-on-top', () => {
   return mainWindow?.isAlwaysOnTop() ?? false;
 });
 
-ipcMain.handle('dialog:select-file', async () => {
+ipcMain.handle('dialog:select-file', async (_event, category?: 'image' | 'video' | 'file') => {
   if (!mainWindow) return { canceled: true };
+
+  let filters: { name: string; extensions: string[] }[] = [];
+  if (category === 'image') {
+    filters = [
+      { name: 'Hình ảnh (PNG, JPG, GIF, WebP)', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'] },
+      { name: 'Mọi tệp tin', extensions: ['*'] },
+    ];
+  } else if (category === 'video') {
+    filters = [
+      { name: 'Video (MP4, WebM, MOV, MKV)', extensions: ['mp4', 'webm', 'mov', 'mkv', 'avi'] },
+      { name: 'Mọi tệp tin', extensions: ['*'] },
+    ];
+  } else {
+    filters = [
+      { name: 'Mọi tệp tin & Tài liệu', extensions: ['*'] },
+      { name: 'Tài liệu văn phòng', extensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt'] },
+      { name: 'Tệp nén', extensions: ['zip', 'rar', '7z', 'tar', 'gz'] },
+    ];
+  }
+
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
-    filters: [
-      { name: 'Mọi tệp tin & Đa phương tiện', extensions: ['*'] },
-      { name: 'Hình ảnh', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
-      { name: 'Video & Clip', extensions: ['mp4', 'webm', 'mov', 'mkv', 'avi'] },
-      { name: 'Tài liệu', extensions: ['pdf', 'docx', 'xlsx', 'txt', 'zip', 'rar'] },
-    ],
+    filters,
   });
 
   if (result.canceled || result.filePaths.length === 0) {
@@ -270,6 +285,7 @@ ipcMain.handle('dialog:select-file', async () => {
     fileName,
     fileSize: stat.size,
     fileData: base64Data,
+    category,
   };
 });
 
