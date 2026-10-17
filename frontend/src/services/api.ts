@@ -1,4 +1,4 @@
-import { User, Conversation, Message, Friend, CallPacket, ServerEvent } from '../types';
+import { User, Conversation, Message, Friend, CallPacket, ServerEvent, MessageType } from '../types';
 
 declare global {
   interface Window {
@@ -142,7 +142,7 @@ export const apiService = {
     conversation_id: string | number;
     sender_id: number;
     content: string;
-    msg_type?: 'text' | 'image' | 'video' | 'file' | 'location';
+    msg_type?: MessageType;
     file_id?: string | null;
     original_name?: string;
     file_size?: number;

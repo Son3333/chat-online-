@@ -30,7 +30,7 @@ interface ChatContextType {
   pinMessage: (msgId: number) => Promise<void>;
   unpinMessage: () => Promise<void>;
   recallMessage: (msgId: number) => Promise<void>;
-  startCall: (type: 'voice' | 'video') => Promise<void>;
+  startCall: (type: 'voice' | 'video', targetPartnerId?: number, targetPartnerName?: string) => Promise<void>;
   acceptCall: () => Promise<void>;
   rejectCall: () => Promise<void>;
   endCall: () => Promise<void>;
@@ -202,11 +202,12 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     );
   };
 
-  const startCall = async (callType: 'voice' | 'video') => {
-    if (!activeConv || !currentUser) return;
+  const startCall = async (callType: 'voice' | 'video', targetPartnerId?: number, targetPartnerName?: string) => {
+    if (!currentUser) return;
     const rawPartnerId =
-      activeConv.partner_id ||
-      (typeof activeConv.id === 'string' && activeConv.id.startsWith('direct_')
+      targetPartnerId ||
+      activeConv?.partner_id ||
+      (typeof activeConv?.id === 'string' && activeConv.id.startsWith('direct_')
         ? Number(activeConv.id.replace('direct_', ''))
         : undefined);
     if (!rawPartnerId) {
@@ -214,11 +215,13 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       return;
     }
     const partnerId = Number(rawPartnerId);
+    const partnerName = targetPartnerName || activeConv?.title || 'Đối phương';
+    const convId = activeConv?.id || `direct_${partnerId}`;
 
     // Immediately show outgoing ringing screen
     setActiveCall({
       partnerId,
-      partnerName: activeConv.title,
+      partnerName,
       callType,
       isOutgoing: true,
       isConnected: false,
@@ -229,7 +232,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         caller_id: Number(currentUser.id),
         receiver_id: partnerId,
         call_type: callType,
-        conversation_id: activeConv.id,
+        conversation_id: convId,
       });
 
       if (res && res.channel_id) {

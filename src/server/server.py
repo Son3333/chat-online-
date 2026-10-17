@@ -858,16 +858,19 @@ class ChatServer:
             if self.db.is_blocked(caller_id, receiver_id):
                 return {"action": "call_invite_response", "success": False, "message": "Không thể gọi vì cuộc trò chuyện đã bị chặn!"}
 
-            # 2. Kiểm tra xem đối phương có đang trực tuyến không
+            # 2. Đảm bảo conversation_id hợp lệ
+            real_conv_id = None
+            try:
+                if conv_id and str(conv_id).isdigit():
+                    real_conv_id = int(conv_id)
+            except Exception:
+                pass
+            if not real_conv_id:
+                real_conv_id = self.db.get_direct_conversation(caller_id, receiver_id)
+
+            # 3. Kiểm tra xem đối phương có đang trực tuyến không
             with self.lock:
                 is_receiver_online = (receiver_id in self.active_clients) or (str(receiver_id) in self.active_clients)
-            if not is_receiver_online:
-                log(f"[Call] call_invite failed: receiver #{receiver_id} is offline")
-                return {
-                    "action": "call_invite_response",
-                    "success": False,
-                    "message": "Người dùng hiện không trực tuyến hoặc đã tắt ứng dụng!"
-                }
 
             caller = self.db.get_user_by_id(caller_id)
             caller_name = caller["full_name"] if caller else "Người dùng"
@@ -880,23 +883,31 @@ class ChatServer:
                 "caller_id": caller_id,
                 "receiver_id": receiver_id,
                 "call_type": call_type,
-                "conversation_id": conv_id,
-                "status": "ringing"
+                "conversation_id": real_conv_id,
+                "status": "ringing",
+                "is_receiver_online": is_receiver_online
             }
 
-            log(f"[Call] call_invite: caller={caller_id} -> receiver={receiver_id} ({call_type}), channel={channel_id}")
+            log(f"[Call] call_invite: caller={caller_id} -> receiver={receiver_id} ({call_type}), online={is_receiver_online}, channel={channel_id}")
 
-            # Gửi thông báo chuông đến người nhận
-            self.broadcast_to_users([receiver_id], {
-                "type": "call_incoming",
+            # Nếu đối phương trực tuyến, gửi chuông cuộc gọi đến đối phương
+            if is_receiver_online:
+                self.broadcast_to_users([receiver_id], {
+                    "type": "call_incoming",
+                    "channel_id": channel_id,
+                    "caller_id": caller_id,
+                    "caller_name": caller_name,
+                    "avatar_color": avatar_color,
+                    "call_type": call_type,
+                    "conversation_id": real_conv_id
+                })
+
+            return {
+                "action": "call_invite_response",
+                "success": True,
                 "channel_id": channel_id,
-                "caller_id": caller_id,
-                "caller_name": caller_name,
-                "avatar_color": avatar_color,
-                "call_type": call_type,
-                "conversation_id": conv_id
-            })
-            return {"action": "call_invite_response", "success": True, "channel_id": channel_id}
+                "is_receiver_online": is_receiver_online
+            }
 
         # 27. Chấp nhận cuộc gọi (Accept Call)
         elif action == "call_accept":
@@ -928,6 +939,20 @@ class ChatServer:
                     "channel_id": channel_id,
                     "reason": "Đối phương đã từ chối cuộc gọi."
                 })
+                # Ghi nhận cuộc gọi nhỡ vào hội thoại
+                icon = "📞 Cuộc gọi thoại" if call["call_type"] == "voice" else "📹 Cuộc gọi video"
+                msg_text = f"{icon} nhỡ"
+                conv_id = call.get("conversation_id")
+                if not conv_id:
+                    conv_id = self.db.get_direct_conversation(call["caller_id"], call["receiver_id"])
+                if conv_id:
+                    saved_m = self.db.save_message(conv_id, call["caller_id"], "call", msg_text)
+                    members = self.db.get_conversation_members(conv_id)
+                    self.broadcast_to_users([m["id"] for m in members], {
+                        "type": "new_message",
+                        "conversation_id": conv_id,
+                        "message": saved_m
+                    })
             return {"action": "call_reject_response", "success": True}
 
         # 29. WebRTC Signaling Relay (Offer, Answer, ICE Candidate)
@@ -985,12 +1010,16 @@ class ChatServer:
                 # Ghi lịch sử cuộc gọi vào hội thoại
                 icon = "📞 Cuộc gọi thoại" if call["call_type"] == "voice" else "📹 Cuộc gọi video"
                 msg_text = f"{icon} ({dur_str})" if duration_sec > 0 else f"{icon} nhỡ"
-                if call.get("conversation_id"):
-                    saved_m = self.db.save_message(call["conversation_id"], call["caller_id"], "text", msg_text)
-                    members = self.db.get_conversation_members(call["conversation_id"])
+                conv_id = call.get("conversation_id")
+                if not conv_id:
+                    conv_id = self.db.get_direct_conversation(call["caller_id"], call["receiver_id"])
+
+                if conv_id:
+                    saved_m = self.db.save_message(conv_id, call["caller_id"], "call", msg_text)
+                    members = self.db.get_conversation_members(conv_id)
                     self.broadcast_to_users([m["id"] for m in members], {
                         "type": "new_message",
-                        "conversation_id": call["conversation_id"],
+                        "conversation_id": conv_id,
                         "message": saved_m
                     })
             return {"action": "call_end_response", "success": True}

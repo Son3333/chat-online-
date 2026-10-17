@@ -103,6 +103,16 @@ export const CallModal: React.FC = () => {
     };
   }, [incomingCall, activeCall?.isOutgoing, activeCall?.isConnected]);
 
+  // Tự động kết thúc sau 30 giây đổ chuông nếu đối phương không nhấc máy / ngoại tuyến
+  useEffect(() => {
+    if (activeCall && activeCall.isOutgoing && !activeCall.isConnected) {
+      const timer = setTimeout(() => {
+        handleEndCall();
+      }, 30000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeCall?.isOutgoing, activeCall?.isConnected]);
+
   // Handle local camera stream when activeCall is a Video Call and is connected
   useEffect(() => {
     if (activeCall && activeCall.callType === 'video' && activeCall.isConnected) {

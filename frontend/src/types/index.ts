@@ -12,7 +12,7 @@ export interface User {
   created_at?: string;
 }
 
-export type MessageType = 'text' | 'image' | 'video' | 'file' | 'location';
+export type MessageType = 'text' | 'image' | 'video' | 'file' | 'location' | 'call';
 
 export interface LastMessage {
   id?: number;

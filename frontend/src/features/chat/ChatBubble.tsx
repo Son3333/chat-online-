@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Check, Pin, Reply, Trash2, Copy, FileText, Download, ExternalLink, Heart, Video, MapPin, Navigation, FolderArchive, Play } from 'lucide-react';
+import { Check, Pin, Reply, Trash2, Copy, FileText, Download, ExternalLink, Heart, Video, MapPin, Navigation, FolderArchive, Play, Phone, PhoneMissed, PhoneCall } from 'lucide-react';
 import { Message } from '../../types';
 import { formatTime, formatFileSize } from '../../lib/utils';
 import { useChat } from '../../context/ChatContext';
@@ -392,10 +392,85 @@ const LocationBubbleContent: React.FC<{
   );
 };
 
+const CallBubbleContent: React.FC<{
+  message: Message;
+  isSelf: boolean;
+  onCallback: (callType: 'voice' | 'video') => void;
+}> = ({ message, isSelf, onCallback }) => {
+  const content = message.content || '';
+  const isVideo = content.includes('video') || content.includes('📹');
+  const isMissed = content.includes('nhỡ') || content.includes('từ chối') || content.includes('bỏ lỡ') || !content.includes('(');
+  const durationMatch = content.match(/\(([\d:]+)\)/);
+  const duration = durationMatch ? durationMatch[1] : null;
+
+  let title = '';
+  let subtitle = '';
+
+  if (isMissed) {
+    if (isSelf) {
+      title = isVideo ? 'Cuộc gọi video đi' : 'Cuộc gọi thoại đi';
+      subtitle = 'Không có phản hồi';
+    } else {
+      title = isVideo ? 'Cuộc gọi video nhỡ' : 'Cuộc gọi thoại nhỡ';
+      subtitle = 'Bấm để gọi lại ngay';
+    }
+  } else {
+    title = isVideo ? 'Cuộc gọi video' : 'Cuộc gọi thoại';
+    subtitle = duration ? `Thời lượng: ${duration}` : 'Đã kết thúc';
+  }
+
+  return (
+    <div className="my-1 min-w-[210px] max-w-xs select-none">
+      <div className="flex items-center space-x-3 p-1">
+        <div
+          className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm ${
+            isMissed
+              ? 'bg-rose-500/15 text-rose-500 dark:bg-rose-500/25 dark:text-rose-400'
+              : 'bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/25 dark:text-emerald-400'
+          }`}
+        >
+          {isMissed ? (
+            isVideo ? <Video className="w-5 h-5 text-rose-500" /> : <PhoneMissed className="w-5 h-5" />
+          ) : (
+            isVideo ? <Video className="w-5 h-5 text-emerald-500" /> : <PhoneCall className="w-5 h-5" />
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <span
+            className={`font-semibold text-xs truncate block ${
+              isMissed ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-slate-100'
+            }`}
+          >
+            {title}
+          </span>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate block">
+            {subtitle}
+          </span>
+        </div>
+      </div>
+
+      {/* Nút Gọi lại */}
+      <button
+        onClick={() => onCallback(isVideo ? 'video' : 'voice')}
+        className={`mt-2 w-full py-1.5 px-3 rounded-xl font-semibold text-xs flex items-center justify-center space-x-2 transition-all active:scale-95 shadow-xs cursor-pointer ${
+          isMissed
+            ? 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+            : 'bg-[#2481cc]/15 hover:bg-[#2481cc]/25 text-[#2481cc] dark:text-sky-400 border border-[#2481cc]/20'
+        }`}
+        title={`Gọi lại cho ${isSelf ? 'đối phương' : message.sender_name}`}
+      >
+        {isVideo ? <Video className="w-3.5 h-3.5" /> : <Phone className="w-3.5 h-3.5" />}
+        <span>Gọi lại</span>
+      </button>
+    </div>
+  );
+};
+
 const QUICK_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🔥'];
 
 export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenImage }) => {
-  const { setReplyTo, pinMessage, recallMessage, toggleReaction, currentUser } = useChat();
+  const { setReplyTo, pinMessage, recallMessage, toggleReaction, currentUser, startCall } = useChat();
   const [showMenu, setShowMenu] = useState(false);
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
   const [showReactionPicker, setShowReactionPicker] = useState(false);
@@ -404,10 +479,14 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
 
   const isDeleted = Boolean(message.is_deleted);
   const effectiveType = message.msg_type || (message as any).message_type || 'text';
-  const isImage = effectiveType === 'image';
-  const isVideo = effectiveType === 'video';
-  const isLocation = effectiveType === 'location';
-  const isFile = effectiveType === 'file';
+  const isCall =
+    effectiveType === 'call' ||
+    (typeof message.content === 'string' &&
+      (message.content.includes('Cuộc gọi thoại') || message.content.includes('Cuộc gọi video')));
+  const isImage = !isCall && effectiveType === 'image';
+  const isVideo = !isCall && effectiveType === 'video';
+  const isLocation = !isCall && effectiveType === 'location';
+  const isFile = !isCall && effectiveType === 'file';
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -532,8 +611,19 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
           );
         })()}
 
+        {/* 4.5. Call Message Card */}
+        {isCall && !isDeleted && (
+          <CallBubbleContent
+            message={message}
+            isSelf={isSelf}
+            onCallback={(type) => {
+              startCall(type);
+            }}
+          />
+        )}
+
         {/* 5. Text Message Content */}
-        {message.content && (!isImage && !isVideo && !isLocation && !isFile || isDeleted) && (
+        {message.content && (!isImage && !isVideo && !isLocation && !isFile && !isCall || isDeleted) && (
           isDeleted ? (
             <p className="leading-relaxed whitespace-pre-wrap select-text">{message.content}</p>
           ) : (
