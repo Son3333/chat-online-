@@ -711,6 +711,11 @@ class Database:
     # --- Conversations APIs ---
     def get_direct_conversation(self, user1_id, user2_id):
         """Lấy hoặc tạo cuộc trò chuyện 1-1 giữa 2 người dùng."""
+        try:
+            user1_id = int(user1_id)
+            user2_id = int(user2_id)
+        except Exception:
+            pass
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -754,6 +759,10 @@ class Database:
 
     def get_user_conversations(self, user_id):
         """Lấy danh sách các cuộc hội thoại (1-1 và Nhóm) của người dùng."""
+        try:
+            user_id = int(user_id)
+        except Exception:
+            pass
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -829,6 +838,13 @@ class Database:
 
     # --- Message & File APIs ---
     def save_message(self, conversation_id, sender_id, message_type, content, file_id=None, reply_to_id=None):
+        try:
+            conversation_id = int(conversation_id)
+            sender_id = int(sender_id)
+            if reply_to_id is not None:
+                reply_to_id = int(reply_to_id)
+        except Exception:
+            pass
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -859,6 +875,10 @@ class Database:
             return d
 
     def get_messages(self, conversation_id, limit=200):
+        try:
+            conversation_id = int(conversation_id)
+        except Exception:
+            pass
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""

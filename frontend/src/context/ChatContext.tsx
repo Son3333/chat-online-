@@ -328,36 +328,59 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
           break;
 
-        case 'message_recalled':
-          if (event.msg_id) {
+        case 'message_recalled': {
+          const recalledId = event.message_id || event.msg_id;
+          if (recalledId) {
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === event.msg_id ? { ...m, is_deleted: 1, content: 'Tin nhắn đã được thu hồi' } : m
+                m.id === recalledId ? { ...m, is_deleted: 1, content: 'Tin nhắn đã được thu hồi' } : m
               )
             );
           }
           break;
+        }
 
-        case 'reaction_updated':
-          if (event.msg_id && event.data?.reactions) {
+        case 'reaction_updated': {
+          const rxMsgId = event.message_id || event.msg_id;
+          const rxList = event.reactions || event.data?.reactions;
+          if (rxMsgId && rxList) {
             setMessages((prev) =>
-              prev.map((m) => (m.id === event.msg_id ? { ...m, reactions: event.data.reactions } : m))
+              prev.map((m) => (m.id === rxMsgId ? { ...m, reactions: rxList } : m))
             );
           }
           break;
+        }
 
-        case 'pinned_updated':
-          if (activeConv && String(activeConv.id) === String(event.conv_id)) {
-            setPinnedMessage(event.data?.pinned || null);
+        case 'pinned_updated': {
+          const pinConvId = event.conversation_id || event.conv_id;
+          if (activeConv && String(activeConv.id) === String(pinConvId)) {
+            const pinnedObj = event.pinned !== undefined ? event.pinned : (event.data?.pinned || null);
+            setPinnedMessage(pinnedObj);
           }
           break;
+        }
 
-        case 'user_typing':
-          if (activeConv && String(activeConv.id) === String(event.conv_id)) {
-            const senderName = event.data?.sender_name || 'Đối phương';
+        case 'user_typing': {
+          const typingConvId = event.conversation_id || event.conv_id;
+          if (activeConv && String(activeConv.id) === String(typingConvId)) {
+            const senderName = event.sender_name || event.data?.sender_name || 'Đối phương';
             setTypingUser(senderName);
             setTimeout(() => setTypingUser(null), 3000);
           }
+          break;
+        }
+
+        case 'conversation_deleted': {
+          const delConvId = event.conversation_id || event.conv_id;
+          if (activeConv && String(activeConv.id) === String(delConvId)) {
+            setActiveConv(null);
+          }
+          refreshConversations();
+          break;
+        }
+
+        case 'block_status_changed':
+          refreshConversations();
           break;
 
         case 'call_incoming':

@@ -125,19 +125,26 @@ export interface ServerEvent {
   type: string;
   data?: any;
   message?: Message;
+  message_id?: number;
+  msg_id?: number;
   user_id?: number;
+  sender_id?: number;
+  sender_name?: string;
   is_online?: number;
   conv_id?: string | number;
   conversation_id?: string | number;
   reaction?: string;
-  msg_id?: number;
+  reactions?: MessageReaction[];
+  pinned?: any;
   caller_id?: number;
   caller_name?: string;
+  avatar_color?: string;
   call_type?: 'voice' | 'video';
   channel_id?: string;
   duration?: string;
   target_id?: number;
   user?: User;
   connected?: boolean;
+  [key: string]: any;
 }
 

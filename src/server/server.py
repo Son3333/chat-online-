@@ -386,7 +386,12 @@ class ChatServer:
             with self.lock:
                 for conv in convs:
                     if conv.get("type") == "direct" and conv.get("partner_id"):
-                        conv["is_online"] = 1 if (conv["partner_id"] in self.active_clients) else 0
+                        p_id = conv["partner_id"]
+                        try:
+                            p_int = int(p_id)
+                        except Exception:
+                            p_int = None
+                        conv["is_online"] = 1 if ((p_int is not None and p_int in self.active_clients) or str(p_id) in self.active_clients) else 0
                     elif conv.get("type") == "saved":
                         conv["is_online"] = 1
             return {"action": "conversations_list", "success": True, "conversations": convs}
@@ -537,7 +542,12 @@ class ChatServer:
             results = self.db.search_users(keyword, current_user_id)
             with self.lock:
                 for u in results:
-                    u["is_online"] = 1 if (u["id"] in self.active_clients) else 0
+                    u_id = u["id"]
+                    try:
+                        u_int = int(u_id)
+                    except Exception:
+                        u_int = None
+                    u["is_online"] = 1 if ((u_int is not None and u_int in self.active_clients) or str(u_id) in self.active_clients) else 0
             return {"action": "search_results", "success": True, "users": results}
 
         # 9. Bắt đầu chat 1-1
@@ -633,7 +643,12 @@ class ChatServer:
             sent_req_ids = self.db.get_sent_requests(user_id)
             with self.lock:
                 for f in friends:
-                    f["is_online"] = 1 if (f["id"] in self.active_clients) else 0
+                    f_id = f["id"]
+                    try:
+                        f_int = int(f_id)
+                    except Exception:
+                        f_int = None
+                    f["is_online"] = 1 if ((f_int is not None and f_int in self.active_clients) or str(f_id) in self.active_clients) else 0
             return {
                 "action": "get_friends_response",
                 "success": True,
