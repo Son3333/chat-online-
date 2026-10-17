@@ -131,6 +131,9 @@ class PythonBridge {
                 console.error('[PythonBridge] Failed to parse JSON packet:', e);
             }
         }
+        if (this.buffer.length === 0) {
+            this.buffer = Buffer.alloc(0);
+        }
     }
     handleIncomingPacket(packet) {
         const action = packet.action;

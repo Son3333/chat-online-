@@ -35,12 +35,12 @@ export class GitUpdater {
     }
   }
 
-  public startListening(intervalMs = 3000) {
+  public startListening(intervalMs = 120000) {
     if (this.timer) {
       clearInterval(this.timer);
     }
-    // Check after 2 seconds initially, then every intervalMs
-    setTimeout(() => this.check(), 2000);
+    // Check after 5 seconds initially, then every intervalMs
+    setTimeout(() => this.check(), 5000);
     this.timer = setInterval(() => this.check(), intervalMs);
   }
 

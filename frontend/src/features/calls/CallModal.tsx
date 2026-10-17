@@ -226,7 +226,7 @@ export const CallModal: React.FC = () => {
           localAudioCtxRef.current = audioCtx;
 
           const micSource = audioCtx.createMediaStreamSource(stream);
-          const processor = audioCtx.createScriptProcessor(2048, 1, 1);
+          const processor = audioCtx.createScriptProcessor(4096, 1, 1);
           localAudioProcessorRef.current = processor;
 
           // Connect through 0-gain node to destination so onaudioprocess fires without local echo

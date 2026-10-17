@@ -457,11 +457,11 @@ app.whenReady().then(async () => {
 
   await startPythonBackendIfNeeded();
 
-  // Setup 2-second Git update listener
+  // Setup 2-minute Git update listener (tranh spawn git.exe lien tuc gay giat lag may khach)
   const rootDir = path.resolve(__dirname, '../../');
   gitUpdater = new GitUpdater(rootDir);
   registerUpdaterIpc(gitUpdater);
-  gitUpdater.startListening(2000);
+  gitUpdater.startListening(120000);
 
   await createWindow();
 

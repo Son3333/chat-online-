@@ -456,11 +456,11 @@ electron_1.app.whenReady().then(async () => {
     HOST = endpoint.host;
     PORT = endpoint.port;
     await startPythonBackendIfNeeded();
-    // Setup 2-second Git update listener
+    // Setup 2-minute Git update listener (tranh spawn git.exe lien tuc gay giat lag may khach)
     const rootDir = path.resolve(__dirname, '../../');
     gitUpdater = new updater_1.GitUpdater(rootDir);
     (0, updater_1.registerUpdaterIpc)(gitUpdater);
-    gitUpdater.startListening(2000);
+    gitUpdater.startListening(120000);
     await createWindow();
     electron_1.app.on('activate', () => {
         if (electron_1.BrowserWindow.getAllWindows().length === 0) {

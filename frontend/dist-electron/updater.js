@@ -62,12 +62,12 @@ class GitUpdater {
             win.webContents.send('app:update_available', this.currentUpdate);
         }
     }
-    startListening(intervalMs = 3000) {
+    startListening(intervalMs = 120000) {
         if (this.timer) {
             clearInterval(this.timer);
         }
-        // Check after 2 seconds initially, then every intervalMs
-        setTimeout(() => this.check(), 2000);
+        // Check after 5 seconds initially, then every intervalMs
+        setTimeout(() => this.check(), 5000);
         this.timer = setInterval(() => this.check(), intervalMs);
     }
     stopListening() {
