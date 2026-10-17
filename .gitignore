@@ -21,6 +21,7 @@ wan_server_info.txt
 user_credentials.json
 crash_log.txt
 cache/
+.host_machine_id
 
 # Microsoft Office Documents (Chỉ bỏ qua file tạm thời mở ~$*)
 ~$*.docx

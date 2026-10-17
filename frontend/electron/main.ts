@@ -20,6 +20,7 @@ import { app, BrowserWindow, ipcMain, dialog, session, desktopCapturer, shell } 
 import * as path from 'path';
 import * as fs from 'fs';
 import * as net from 'net';
+import * as os from 'os';
 import { spawn, ChildProcess } from 'child_process';
 import { PythonBridge } from './python_bridge';
 import { GitUpdater, registerUpdaterIpc } from './updater';
@@ -63,47 +64,92 @@ function checkPortAvailable(port: number, host: string): Promise<boolean> {
   });
 }
 
-// Tự động phân giải địa chỉ máy chủ phù hợp (Ưu tiên kết nối trực tiếp Localhost nếu là máy Chủ)
-async function resolveServerEndpoint(): Promise<{ host: string; port: number; isWan: boolean }> {
-  // 1. ƯU TIÊN SỐ 1: Nếu port 8888 đang chạy cục bộ (máy này đang chạy Chat Server):
-  // Electron máy chủ luôn dùng trực tiếp 127.0.0.1:8888 để tốc độ 0ms tức thì, không bị rớt mạng Internet.
-  const isLocalRunning = await checkPortAvailable(8888, '127.0.0.1');
-  if (isLocalRunning) {
-    console.log('[Main] Phat hien Chat Server 127.0.0.1:8888 dang chay -> Ket noi truc tiep Localhost 0ms!');
-    return { host: '127.0.0.1', port: 8888, isWan: false };
-  }
+// Xác thực định danh phần cứng máy Chủ độc quyền (Chỉ máy của bạn mới có thẩm quyền làm Máy Chủ)
+function isAuthorizedHostMachine(): boolean {
+  try {
+    // 1. Đối chiếu địa chỉ phần cứng card mạng (Physical MAC Address)
+    const macs = Object.values(os.networkInterfaces())
+      .flat()
+      .map((i) => i && i.mac && i.mac.toLowerCase())
+      .filter(Boolean) as string[];
+    const AUTHORIZED_MACS = ['08:8f:c3:74:c3:be'];
+    if (macs.some((m) => AUTHORIZED_MACS.includes(m))) {
+      return true;
+    }
 
-  // 2. Nếu chưa chạy nhưng máy này là máy Chủ (có file run_server_wan.py hoặc server.py):
-  // Tự động khởi chạy Chat Server ngầm để người dùng không cần bật VS Code!
-  const rootDir = path.resolve(__dirname, '../../');
-  const wanScript = path.join(rootDir, 'run_server_wan.py');
-  const localScript = path.join(rootDir, 'src', 'server', 'server.py');
-  const isHostMachine = fs.existsSync(wanScript) || fs.existsSync(localScript);
+    // 2. Đối chiếu tên máy tính (Computer Hostname)
+    const hostname = os.hostname().toLowerCase();
+    if (hostname === 'gaooooo') {
+      return true;
+    }
 
-  if (isHostMachine) {
-    const scriptToRun = fs.existsSync(wanScript) ? wanScript : localScript;
-    console.log('[Main] Day la may Chu (Host). Tu dong khoi chay Chat Server ngam doc lap:', scriptToRun);
-    try {
-      pythonProcess = spawn('python', ['-u', scriptToRun], {
-        cwd: rootDir,
-        detached: true,
-        stdio: 'ignore',
-      });
-      pythonProcess.unref();
-
-      for (let i = 0; i < 25; i++) {
-        await new Promise((r) => setTimeout(r, 300));
-        if (await checkPortAvailable(8888, '127.0.0.1')) {
-          console.log('[Main] Chat Server noi bo da san sang tren 127.0.0.1:8888!');
-          return { host: '127.0.0.1', port: 8888, isWan: false };
-        }
+    // 3. Đối chiếu mã khóa bí mật nội bộ (.host_machine_id - file này nằm trong .gitignore không bị đẩy lên Git)
+    const hostTokenPath = path.resolve(__dirname, '../../.host_machine_id');
+    if (fs.existsSync(hostTokenPath)) {
+      const content = fs.readFileSync(hostTokenPath, 'utf-8').trim();
+      if (content === 'HOST_PRIMARY_GAOOOOO_088FC374C3BE') {
+        return true;
       }
-    } catch (err) {
-      console.warn('[Main] Khong the spawn python server:', err);
+    }
+  } catch (err) {
+    console.warn('[Main] Loi kiem tra ma may:', err);
+  }
+  return false;
+}
+
+// Tự động phân giải địa chỉ máy chủ phù hợp dựa trên mã định danh phần cứng máy
+async function resolveServerEndpoint(): Promise<{ host: string; port: number; isWan: boolean }> {
+  const rootDir = path.resolve(__dirname, '../../');
+  const isHost = isAuthorizedHostMachine();
+
+  console.log(`[Main] Kiem tra phan quyen may: ${isHost ? 'MAY CHU (HOST) DUOC CAP QUYEN' : 'MAY KHACH (CLIENT)'}`);
+
+  // =========================================================================
+  // A. NẾU LÀ MÁY CHỦ CỦA BẠN (ĐƯỢC PHÊ DUYỆT BỞI MÃ MÁY):
+  // =========================================================================
+  if (isHost) {
+    // 1. Nếu port 8888 nội bộ đang chạy sẵn -> Kết nối trực tiếp 127.0.0.1:8888 để tốc độ 0ms
+    const isLocalRunning = await checkPortAvailable(8888, '127.0.0.1');
+    if (isLocalRunning) {
+      console.log('[Main] [Host] Chat Server 127.0.0.1:8888 dang chay -> Ket noi truc tiep Localhost 0ms!');
+      return { host: '127.0.0.1', port: 8888, isWan: false };
+    }
+
+    // 2. Nếu port 8888 chưa chạy -> Tự động khởi chạy Chat Server WAN ngầm để phục vụ toàn nhóm
+    const wanScript = path.join(rootDir, 'run_server_wan.py');
+    const localScript = path.join(rootDir, 'src', 'server', 'server.py');
+    const scriptToRun = fs.existsSync(wanScript) ? wanScript : (fs.existsSync(localScript) ? localScript : null);
+
+    if (scriptToRun) {
+      console.log('[Main] [Host] Tu dong khoi chay Chat Server WAN ngam cho nhom:', scriptToRun);
+      try {
+        pythonProcess = spawn('python', ['-u', scriptToRun], {
+          cwd: rootDir,
+          detached: true,
+          stdio: 'ignore',
+        });
+        pythonProcess.unref();
+
+        for (let i = 0; i < 25; i++) {
+          await new Promise((r) => setTimeout(r, 300));
+          if (await checkPortAvailable(8888, '127.0.0.1')) {
+            console.log('[Main] [Host] Chat Server da san sang tren 127.0.0.1:8888!');
+            return { host: '127.0.0.1', port: 8888, isWan: false };
+          }
+        }
+      } catch (err) {
+        console.warn('[Main] [Host] Khong the spawn python server:', err);
+      }
     }
   }
 
-  // 3. Nếu là máy Khách (Bạn bè từ xa): Đọc cấu hình WAN từ server_config.json
+  // =========================================================================
+  // B. NẾU LÀ MÁY BẠN BÈ / KHÁCH (KHÔNG PHẢI MÁY CHỦ):
+  // Tuyệt đối KHÔNG spawn Python, KHÔNG tạo database riêng!
+  // Chỉ chạy chế độ Client và kết nối tới Máy Chủ qua WAN Internet.
+  // =========================================================================
+  console.log('[Main] [Client] Che do May Khach -> Ket noi toi May Chu WAN...');
+
   const cfgPath = path.join(rootDir, 'server_config.json');
   if (fs.existsSync(cfgPath)) {
     try {
@@ -111,13 +157,13 @@ async function resolveServerEndpoint(): Promise<{ host: string; port: number; is
       if (data.host && data.port) {
         const h = String(data.host).trim();
         const p = Number(data.port);
-        console.log(`[Main] Client ket noi toi WAN Server: ${h}:${p}`);
+        console.log(`[Main] [Client] Ket noi toi WAN Server: ${h}:${p}`);
         return { host: h, port: p, isWan: h !== '127.0.0.1' && h !== 'localhost' };
       }
     } catch {}
   }
 
-  // 4. Mặc định kết nối tới máy chủ WAN Internet bore.pub:38888
+  // Mặc định kết nối tới máy chủ WAN Internet bore.pub:38888
   return { host: 'bore.pub', port: 38888, isWan: true };
 }
 
