@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { Pin, X, Download, MessageCircle, ShieldAlert, UserPlus, Ban, Check, Clock } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { apiService } from '../../services/api';
@@ -26,10 +26,16 @@ export const ChatArea: React.FC = () => {
   const [previewFile, setPreviewFile] = useState<{ fileId: string | number; name: string; fileSize?: number; fileType?: string } | null>(null);
   const [logoError, setLogoError] = useState(false);
 
+  // Filter messages strictly for active conversation to guarantee ZERO cross-chat leakage
+  const convMessages = useMemo(() => {
+    if (!activeConv) return [];
+    return messages.filter((m) => String(m.conversation_id) === String(activeConv.id));
+  }, [messages, activeConv]);
+
   // Auto scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [convMessages]);
 
   // When no conversation is selected
   if (!activeConv) {
@@ -218,7 +224,7 @@ export const ChatArea: React.FC = () => {
 
       {/* 4. Messages List */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col space-y-1">
-        {messages.length === 0 ? (
+        {convMessages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-xs py-16 select-none animate-in fade-in duration-200">
             <div className="w-12 h-12 rounded-2xl bg-slate-200/50 dark:bg-[#1a2533] flex items-center justify-center text-[#2481cc] mb-2 shadow-xs">
               <MessageCircle className="w-6 h-6" />
@@ -227,10 +233,10 @@ export const ChatArea: React.FC = () => {
             <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Gửi tin nhắn hoặc đính kèm tệp để bắt đầu cuộc trò chuyện!</p>
           </div>
         ) : (
-          messages.map((msg) => {
+          convMessages.map((msg) => {
             const isSelf = msg.sender_id === currentUser?.id;
             return (
-              <div key={msg.id} id={`msg-${msg.id}`} className="contents">
+              <div key={msg.id} id={`msg-${msg.id}`} className="w-full flex flex-col">
                 <BubbleErrorBoundary>
                   <ChatBubble
                     message={msg}

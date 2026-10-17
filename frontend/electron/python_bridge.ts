@@ -138,6 +138,20 @@ export class PythonBridge {
       }
     }
 
+    // 1.5. Precise match by conversation_id for get_messages (prevents cross-conversation history leakage)
+    if (packet.conversation_id !== undefined && (action === 'messages_history' || action === 'get_messages_response' || action === 'get_messages')) {
+      const keyStr = `get_messages_${String(packet.conversation_id)}`;
+      const keyNum = `get_messages_${Number(packet.conversation_id)}`;
+      const matchedKey = this.pendingRequests.has(keyStr) ? keyStr : (this.pendingRequests.has(keyNum) ? keyNum : null);
+      if (matchedKey) {
+        const req = this.pendingRequests.get(matchedKey)!;
+        clearTimeout(req.timeoutId);
+        this.pendingRequests.delete(matchedKey);
+        req.resolve(packet);
+        return;
+      }
+    }
+
     // Fallback: match any pending download_file request if action is download_response
     if (action === 'download_response' || action === 'download_file_response') {
       for (const [key, req] of this.pendingRequests.entries()) {
@@ -223,10 +237,13 @@ export class PythonBridge {
       const isCallAction = action.startsWith('call_') || action === 'check_call_status';
       const actualTimeout = isFileTransfer ? 90000 : (isCallAction ? 35000 : timeoutMs);
 
-      // Unique tracking key for download_file by file_id
-      const trackingKey = (action === 'download_file' && payload.file_id !== undefined)
-        ? `download_file_${payload.file_id}`
-        : action;
+      // Unique tracking key for download_file by file_id, get_messages by conversation_id
+      let trackingKey = action;
+      if (action === 'download_file' && payload.file_id !== undefined) {
+        trackingKey = `download_file_${payload.file_id}`;
+      } else if (action === 'get_messages' && payload.conversation_id !== undefined) {
+        trackingKey = `get_messages_${payload.conversation_id}`;
+      }
 
       const reqPayload = { action, ...payload };
       const jsonBuffer = Buffer.from(JSON.stringify(reqPayload), 'utf-8');

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { User, Conversation, Message, Friend, ServerEvent, MessageType, ActiveCallState, IncomingCallState } from '../types';
 import { apiService } from '../services/api';
 
@@ -58,6 +58,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [activeCall, setActiveCall] = useState<ActiveCallState | null>(null);
   const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const activeConvIdRef = useRef<string | number | null>(null);
 
   // Sync theme to HTML class
   useEffect(() => {
@@ -100,33 +101,49 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [currentUser]);
 
   const selectConversation = async (conv: Conversation) => {
+    activeConvIdRef.current = conv.id;
     setActiveConv(conv);
+    // Xóa trắng tin nhắn của hội thoại cũ ngay lập tức để không bao giờ bị hiện đè/nhầm lẫn
+    setMessages([]);
     setReplyTo(null);
     setTypingUser(null);
+    setPinnedMessage(null);
+
+    const targetConvId = conv.id;
 
     // Fetch messages with safe fallback
     try {
-      const res = await apiService.getMessages(conv.id);
-      if (res && res.messages) {
-        setMessages(res.messages);
-      } else {
-        setMessages([]);
+      const res = await apiService.getMessages(targetConvId);
+      // Chỉ gán messages nếu người dùng vẫn đang ở đúng hội thoại này
+      if (String(activeConvIdRef.current) === String(targetConvId)) {
+        if (res && res.messages) {
+          const filtered = res.messages.filter((m: any) => String(m.conversation_id) === String(targetConvId));
+          setMessages(filtered);
+        } else {
+          setMessages([]);
+        }
       }
     } catch (err) {
       console.warn('[ChatContext] Error loading messages:', err);
-      setMessages([]);
+      if (String(activeConvIdRef.current) === String(targetConvId)) {
+        setMessages([]);
+      }
     }
 
     // Fetch pinned message with safe fallback
     try {
-      const pRes = await apiService.getPinnedMessage(conv.id);
-      if (pRes && pRes.pinned) {
-        setPinnedMessage(pRes.pinned);
-      } else {
-        setPinnedMessage(null);
+      const pRes = await apiService.getPinnedMessage(targetConvId);
+      if (String(activeConvIdRef.current) === String(targetConvId)) {
+        if (pRes && pRes.pinned) {
+          setPinnedMessage(pRes.pinned);
+        } else {
+          setPinnedMessage(null);
+        }
       }
     } catch {
-      setPinnedMessage(null);
+      if (String(activeConvIdRef.current) === String(targetConvId)) {
+        setPinnedMessage(null);
+      }
     }
   };
 
@@ -152,8 +169,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const sendMessage = async (content: string, type: MessageType = 'text', fileId?: string, origName?: string, fileSize?: number) => {
     if (!activeConv || !currentUser) return false;
+    const targetConvId = activeConv.id;
     const res = await apiService.sendMessage({
-      conversation_id: activeConv.id,
+      conversation_id: targetConvId,
       sender_id: currentUser.id,
       content,
       msg_type: type,
@@ -166,7 +184,13 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     if (res && res.success && res.message) {
       const norm = normalizeMessage(res.message);
-      setMessages((prev) => [...prev, norm]);
+      // Chỉ thêm tin nhắn nếu người dùng vẫn đang ở hội thoại đó
+      if (String(norm.conversation_id) === String(activeConvIdRef.current)) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === norm.id)) return prev;
+          return [...prev, norm];
+        });
+      }
       setReplyTo(null);
       refreshConversations();
       return true;
