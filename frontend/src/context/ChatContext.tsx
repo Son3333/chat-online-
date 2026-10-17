@@ -211,7 +211,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ? Number(activeConv.id.replace('direct_', ''))
         : undefined);
     if (!rawPartnerId) {
-      alert('Không tìm thấy thông tin đối phương để thực hiện cuộc gọi.');
+      console.warn('[Call] No partner id found to start call');
       return;
     }
     const partnerId = Number(rawPartnerId);
@@ -238,11 +238,10 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (res && res.channel_id) {
         setActiveCall((prev) => (prev ? { ...prev, channelId: res.channel_id } : null));
       } else {
-        alert(res?.message || 'Không thể thực hiện cuộc gọi vào lúc này.');
         setActiveCall(null);
       }
     } catch (err: any) {
-      alert(err?.message || 'Không thể kết nối đến máy chủ để thực hiện cuộc gọi.');
+      console.warn('[Call] Error sending call_invite:', err);
       setActiveCall(null);
     }
   };
