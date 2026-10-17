@@ -18,6 +18,7 @@ interface ChatContextType {
   typingUser: string | null;
   incomingCall: IncomingCallState | null;
   activeCall: ActiveCallState | null;
+  loadingMessages: boolean;
   pinnedMessage: Message | null;
   replyTo: Message | null;
   setReplyTo: (msg: Message | null) => void;
@@ -48,6 +49,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [loadingMessages, setLoadingMessages] = useState<boolean>(false);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [pendingFriends, setPendingFriends] = useState<User[]>([]);
   const [sentFriendRequestIds, setSentFriendRequestIds] = useState<number[]>([]);
@@ -103,7 +105,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const selectConversation = async (conv: Conversation) => {
     activeConvIdRef.current = conv.id;
     setActiveConv(conv);
-    // Xóa trắng tin nhắn của hội thoại cũ ngay lập tức để không bao giờ bị hiện đè/nhầm lẫn
+    setLoadingMessages(true);
     setMessages([]);
     setReplyTo(null);
     setTypingUser(null);
@@ -116,17 +118,20 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const res = await apiService.getMessages(targetConvId);
       // Chỉ gán messages nếu người dùng vẫn đang ở đúng hội thoại này
       if (String(activeConvIdRef.current) === String(targetConvId)) {
-        if (res && res.messages) {
-          const filtered = res.messages.filter((m: any) => String(m.conversation_id) === String(targetConvId));
-          setMessages(filtered);
+        if (res && res.messages && res.messages.length > 0) {
+          const filtered = res.messages.filter(
+            (m: any) => !m.conversation_id || String(m.conversation_id) === String(targetConvId)
+          );
+          setMessages(filtered.length > 0 ? filtered : res.messages);
         } else {
           setMessages([]);
         }
       }
     } catch (err) {
       console.warn('[ChatContext] Error loading messages:', err);
+    } finally {
       if (String(activeConvIdRef.current) === String(targetConvId)) {
-        setMessages([]);
+        setLoadingMessages(false);
       }
     }
 
@@ -550,6 +555,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         conversations,
         activeConv,
         messages,
+        loadingMessages,
         friends,
         pendingFriends,
         sentFriendRequestIds,

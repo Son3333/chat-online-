@@ -127,8 +127,18 @@ export const apiService = {
   async getMessages(convId: string | number, limit = 60): Promise<{ success: boolean; messages: Message[] }> {
     const res = await this.sendRequest('get_messages', { conversation_id: convId, limit });
     const rawMessages: any[] = res?.messages || [];
+    const membersMap = new Map<number, string>();
+    if (Array.isArray(res?.members)) {
+      for (const mem of res.members) {
+        if (mem.id && mem.avatar_url) {
+          membersMap.set(Number(mem.id), mem.avatar_url);
+        }
+      }
+    }
     const normalized: Message[] = rawMessages.map((m: any) => ({
       ...m,
+      conversation_id: m.conversation_id !== undefined ? m.conversation_id : (res?.conversation_id !== undefined ? res.conversation_id : convId),
+      avatar_url: m.avatar_url || membersMap.get(Number(m.sender_id)),
       msg_type: m.msg_type || m.message_type || 'text',
       original_name: m.original_name || m.file_name,
     }));

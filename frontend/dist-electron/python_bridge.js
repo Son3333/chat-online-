@@ -148,16 +148,27 @@ class PythonBridge {
             }
         }
         // 1.5. Precise match by conversation_id for get_messages (prevents cross-conversation history leakage)
-        if (packet.conversation_id !== undefined && (action === 'messages_history' || action === 'get_messages_response' || action === 'get_messages')) {
-            const keyStr = `get_messages_${String(packet.conversation_id)}`;
-            const keyNum = `get_messages_${Number(packet.conversation_id)}`;
-            const matchedKey = this.pendingRequests.has(keyStr) ? keyStr : (this.pendingRequests.has(keyNum) ? keyNum : null);
-            if (matchedKey) {
-                const req = this.pendingRequests.get(matchedKey);
-                clearTimeout(req.timeoutId);
-                this.pendingRequests.delete(matchedKey);
-                req.resolve(packet);
-                return;
+        if (action === 'messages_history' || action === 'get_messages_response' || action === 'get_messages') {
+            if (packet.conversation_id !== undefined) {
+                const keyStr = `get_messages_${String(packet.conversation_id)}`;
+                const keyNum = `get_messages_${Number(packet.conversation_id)}`;
+                const matchedKey = this.pendingRequests.has(keyStr) ? keyStr : (this.pendingRequests.has(keyNum) ? keyNum : null);
+                if (matchedKey) {
+                    const req = this.pendingRequests.get(matchedKey);
+                    clearTimeout(req.timeoutId);
+                    this.pendingRequests.delete(matchedKey);
+                    req.resolve(packet);
+                    return;
+                }
+            }
+            // Fallback: match any pending get_messages request
+            for (const [key, req] of this.pendingRequests.entries()) {
+                if (key === 'get_messages' || key.startsWith('get_messages_')) {
+                    clearTimeout(req.timeoutId);
+                    this.pendingRequests.delete(key);
+                    req.resolve(packet);
+                    return;
+                }
             }
         }
         // Fallback: match any pending download_file request if action is download_response
@@ -190,6 +201,7 @@ class PythonBridge {
             reject_friend: ['reject_friend_response', 'reject_friend'],
             remove_friend: ['remove_friend_response', 'remove_friend'],
             check_friend: ['check_friend_response', 'check_friend'],
+            get_pinned_message: ['get_pinned_message_response', 'get_pinned_message'],
         };
         // Check if there is an in-flight request waiting for this action response directly
         if (action && this.pendingRequests.has(action)) {
@@ -204,9 +216,12 @@ class PythonBridge {
         }
         // Match response variants like 'login_response' for 'login', or aliases in ACTION_RESPONSE_MAP
         for (const [reqAction, req] of this.pendingRequests.entries()) {
-            const aliases = ACTION_RESPONSE_MAP[reqAction] || [];
+            const baseAction = reqAction.replace(/_\d+$/, '');
+            const aliases = ACTION_RESPONSE_MAP[baseAction] || ACTION_RESPONSE_MAP[reqAction] || [];
             if (action === `${reqAction}_response` ||
+                action === `${baseAction}_response` ||
                 action === reqAction ||
+                action === baseAction ||
                 (action && aliases.includes(action))) {
                 clearTimeout(req.timeoutId);
                 this.pendingRequests.delete(reqAction);

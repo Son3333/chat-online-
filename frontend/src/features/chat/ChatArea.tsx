@@ -12,6 +12,7 @@ export const ChatArea: React.FC = () => {
   const {
     activeConv,
     messages,
+    loadingMessages,
     currentUser,
     pinnedMessage,
     unpinMessage,
@@ -29,7 +30,7 @@ export const ChatArea: React.FC = () => {
   // Filter messages strictly for active conversation to guarantee ZERO cross-chat leakage
   const convMessages = useMemo(() => {
     if (!activeConv) return [];
-    return messages.filter((m) => String(m.conversation_id) === String(activeConv.id));
+    return messages.filter((m) => !m.conversation_id || String(m.conversation_id) === String(activeConv.id));
   }, [messages, activeConv]);
 
   // Auto scroll to bottom on new messages
@@ -224,7 +225,13 @@ export const ChatArea: React.FC = () => {
 
       {/* 4. Messages List */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col space-y-1">
-        {convMessages.length === 0 ? (
+        {loadingMessages ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-xs py-16 select-none animate-in fade-in duration-150">
+            <div className="w-9 h-9 border-3 border-[#2481cc]/25 border-t-[#2481cc] rounded-full animate-spin mb-3 shadow-xs" />
+            <p className="font-semibold text-slate-600 dark:text-slate-300">Đang tải lịch sử tin nhắn...</p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Vui lòng đợi trong giây lát</p>
+          </div>
+        ) : convMessages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-xs py-16 select-none animate-in fade-in duration-200">
             <div className="w-12 h-12 rounded-2xl bg-slate-200/50 dark:bg-[#1a2533] flex items-center justify-center text-[#2481cc] mb-2 shadow-xs">
               <MessageCircle className="w-6 h-6" />
