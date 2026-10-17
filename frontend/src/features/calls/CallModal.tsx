@@ -18,6 +18,63 @@ import { useChat } from '../../context/ChatContext';
 import { apiService } from '../../services/api';
 import { getInitials } from '../../lib/utils';
 
+// Helper functions for real-time PCM audio streaming
+function downsampleBuffer(buffer: Float32Array, inputSampleRate: number, outputSampleRate: number): Int16Array {
+  if (outputSampleRate >= inputSampleRate) {
+    const output = new Int16Array(buffer.length);
+    for (let i = 0; i < buffer.length; i++) {
+      const s = Math.max(-1, Math.min(1, buffer[i]));
+      output[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    return output;
+  }
+  const sampleRateRatio = inputSampleRate / outputSampleRate;
+  const newLength = Math.round(buffer.length / sampleRateRatio);
+  const result = new Int16Array(newLength);
+  let offsetResult = 0;
+  let offsetBuffer = 0;
+  while (offsetResult < result.length) {
+    const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+    let accum = 0;
+    let count = 0;
+    for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+      accum += buffer[i];
+      count++;
+    }
+    const avg = count > 0 ? accum / count : 0;
+    const s = Math.max(-1, Math.min(1, avg));
+    result[offsetResult] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    offsetResult++;
+    offsetBuffer = nextOffsetBuffer;
+  }
+  return result;
+}
+
+function int16ToBase64(int16Array: Int16Array): string {
+  const uint8 = new Uint8Array(int16Array.buffer, int16Array.byteOffset, int16Array.byteLength);
+  let binary = '';
+  const len = uint8.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(uint8[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToFloat32(base64: string): Float32Array {
+  const binary = atob(base64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  const int16 = new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 2));
+  const float32 = new Float32Array(int16.length);
+  for (let i = 0; i < int16.length; i++) {
+    float32[i] = int16[i] / (int16[i] < 0 ? 0x8000 : 0x7fff);
+  }
+  return float32;
+}
+
 export const CallModal: React.FC = () => {
   const { currentUser, incomingCall, activeCall, acceptCall, rejectCall, endCall } = useChat();
   const [callDuration, setCallDuration] = useState(0);
@@ -30,6 +87,25 @@ export const CallModal: React.FC = () => {
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const localAudioCtxRef = useRef<AudioContext | null>(null);
+  const localAudioProcessorRef = useRef<ScriptProcessorNode | null>(null);
+
+  const remoteAudioCtxRef = useRef<AudioContext | null>(null);
+  const remoteGainRef = useRef<GainNode | null>(null);
+  const nextPlayTimeRef = useRef<number>(0);
+
+  const isMutedRef = useRef(isMuted);
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
+
+  const isSpeakerMutedRef = useRef(isSpeakerMuted);
+  useEffect(() => {
+    isSpeakerMutedRef.current = isSpeakerMuted;
+    if (remoteGainRef.current) {
+      remoteGainRef.current.gain.value = isSpeakerMuted ? 0 : 1;
+    }
+  }, [isSpeakerMuted]);
 
   // Timer for active call duration
   useEffect(() => {
@@ -103,7 +179,7 @@ export const CallModal: React.FC = () => {
     };
   }, [incomingCall, activeCall?.isOutgoing, activeCall?.isConnected]);
 
-  // Tự động kết thúc sau 30 giây đổ chuông nếu đối phương không nhấc máy / ngoại tuyến
+  // Tu dong ket thuc sau 30 giay do chuong neu doi phuong khong nhac may / ngoai tuyen
   useEffect(() => {
     if (activeCall && activeCall.isOutgoing && !activeCall.isConnected) {
       const timer = setTimeout(() => {
@@ -113,53 +189,163 @@ export const CallModal: React.FC = () => {
     }
   }, [activeCall?.isOutgoing, activeCall?.isConnected]);
 
-  // Handle local camera stream when activeCall is a Video Call and is connected
+  // Handle local microphone & camera stream when activeCall is connected
   useEffect(() => {
-    if (activeCall && activeCall.callType === 'video' && activeCall.isConnected) {
-      let isSubscribed = true;
-
-      const startCamera = async () => {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-            audio: true,
-          });
-          if (!isSubscribed) {
-            stream.getTracks().forEach((track) => track.stop());
-            return;
-          }
-          localStreamRef.current = stream;
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-          }
-        } catch (err) {
-          console.warn('[VideoCall] Could not access real camera, falling back to simulated preview:', err);
-        }
-      };
-
-      startCamera();
-
-      return () => {
-        isSubscribed = false;
-        if (localStreamRef.current) {
-          localStreamRef.current.getTracks().forEach((track) => track.stop());
-          localStreamRef.current = null;
-        }
-      };
+    if (!activeCall || !activeCall.isConnected) {
+      return;
     }
-  }, [activeCall?.callType, activeCall?.isConnected]);
 
-  // 1. Listen for remote partner's real-time video frames
+    let isSubscribed = true;
+    const isVideo = activeCall.callType === 'video';
+
+    const startMedia = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: isVideo ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+
+        if (!isSubscribed) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        localStreamRef.current = stream;
+        if (isVideo && localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+
+        // Web Audio API setup for capturing microphone and streaming PCM chunks
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          const audioCtx = new AudioCtx();
+          localAudioCtxRef.current = audioCtx;
+
+          const micSource = audioCtx.createMediaStreamSource(stream);
+          const processor = audioCtx.createScriptProcessor(2048, 1, 1);
+          localAudioProcessorRef.current = processor;
+
+          // Connect through 0-gain node to destination so onaudioprocess fires without local echo
+          const muteGain = audioCtx.createGain();
+          muteGain.gain.value = 0;
+
+          micSource.connect(processor);
+          processor.connect(muteGain);
+          muteGain.connect(audioCtx.destination);
+
+          processor.onaudioprocess = (e) => {
+            if (isMutedRef.current) return;
+            const inputData = e.inputBuffer.getChannelData(0);
+            const targetSampleRate = 16000;
+            const pcm16 = downsampleBuffer(inputData, audioCtx.sampleRate, targetSampleRate);
+            const b64Data = int16ToBase64(pcm16);
+
+            apiService.sendRequest('call_media', {
+              channel_id: activeCall.channelId,
+              sender_id: currentUser?.id,
+              partner_id: activeCall.partnerId,
+              media_type: 'audio',
+              sample_rate: targetSampleRate,
+              data: b64Data,
+            }).catch(() => {});
+          };
+        }
+      } catch (err) {
+        console.warn('[CallModal] Media capture error:', err);
+      }
+    };
+
+    startMedia();
+
+    return () => {
+      isSubscribed = false;
+      if (localAudioProcessorRef.current) {
+        localAudioProcessorRef.current.disconnect();
+        localAudioProcessorRef.current = null;
+      }
+      if (localAudioCtxRef.current) {
+        try {
+          localAudioCtxRef.current.close();
+        } catch {}
+        localAudioCtxRef.current = null;
+      }
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
+        localStreamRef.current = null;
+      }
+    };
+  }, [activeCall?.callType, activeCall?.isConnected, activeCall?.channelId, activeCall?.partnerId, currentUser?.id]);
+
+  // Listen for remote partner's real-time video frames and audio PCM packets
   useEffect(() => {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    let remoteCtx: AudioContext | null = null;
+    let remoteGain: GainNode | null = null;
+
+    if (AudioCtx) {
+      remoteCtx = new AudioCtx();
+      remoteAudioCtxRef.current = remoteCtx;
+      remoteGain = remoteCtx.createGain();
+      remoteGain.gain.value = isSpeakerMutedRef.current ? 0 : 1;
+      remoteGain.connect(remoteCtx.destination);
+      remoteGainRef.current = remoteGain;
+      nextPlayTimeRef.current = 0;
+    }
+
     const unsubscribe = apiService.onServerEvent((event: any) => {
-      if (event.type === 'call_media_relay' && event.media_type === 'video' && event.data) {
-        setRemoteVideoFrame(event.data);
+      if (event.type === 'call_media_relay') {
+        if (event.media_type === 'video' && event.data) {
+          setRemoteVideoFrame(event.data);
+        } else if (event.media_type === 'audio' && event.data && remoteCtx) {
+          try {
+            if (remoteCtx.state === 'suspended') {
+              remoteCtx.resume();
+            }
+            const sampleRate = event.sample_rate || 16000;
+            const float32 = base64ToFloat32(event.data);
+            if (float32.length === 0) return;
+
+            const audioBuffer = remoteCtx.createBuffer(1, float32.length, sampleRate);
+            audioBuffer.getChannelData(0).set(float32);
+
+            const source = remoteCtx.createBufferSource();
+            source.buffer = audioBuffer;
+            if (remoteGain) {
+              source.connect(remoteGain);
+            } else {
+              source.connect(remoteCtx.destination);
+            }
+
+            const now = remoteCtx.currentTime;
+            if (nextPlayTimeRef.current < now) {
+              nextPlayTimeRef.current = now + 0.04; // 40ms jitter buffer
+            }
+            source.start(nextPlayTimeRef.current);
+            nextPlayTimeRef.current += audioBuffer.duration;
+          } catch (audioErr) {
+            console.warn('[CallModal] Remote audio play error:', audioErr);
+          }
+        }
       }
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      if (remoteCtx) {
+        try {
+          remoteCtx.close();
+        } catch {}
+        remoteAudioCtxRef.current = null;
+        remoteGainRef.current = null;
+      }
+    };
   }, []);
 
-  // 2. Stream local webcam frames to partner via server media relay (5 FPS, ~10KB/frame, smooth & reliable)
+  // Stream local webcam frames to partner via server media relay (5 FPS, ~10KB/frame, smooth & reliable)
   useEffect(() => {
     if (!activeCall || activeCall.callType !== 'video' || !activeCall.isConnected) {
       setRemoteVideoFrame(null);
@@ -194,21 +380,23 @@ export const CallModal: React.FC = () => {
   }, [activeCall?.callType, activeCall?.isConnected, activeCall?.channelId, currentUser?.id, isVideoOff]);
 
   const toggleMute = () => {
+    const nextMuted = !isMuted;
     if (localStreamRef.current) {
       localStreamRef.current.getAudioTracks().forEach((track) => {
-        track.enabled = isMuted; // toggle
+        track.enabled = !nextMuted;
       });
     }
-    setIsMuted(!isMuted);
+    setIsMuted(nextMuted);
   };
 
   const toggleVideo = () => {
+    const nextVideoOff = !isVideoOff;
     if (localStreamRef.current) {
       localStreamRef.current.getVideoTracks().forEach((track) => {
-        track.enabled = isVideoOff; // toggle
+        track.enabled = !nextVideoOff;
       });
     }
-    setIsVideoOff(!isVideoOff);
+    setIsVideoOff(nextVideoOff);
   };
 
   const toggleScreenShare = async () => {
@@ -282,10 +470,28 @@ export const CallModal: React.FC = () => {
   };
 
   const handleEndCall = () => {
+    if (localAudioProcessorRef.current) {
+      localAudioProcessorRef.current.disconnect();
+      localAudioProcessorRef.current = null;
+    }
+    if (localAudioCtxRef.current) {
+      try {
+        localAudioCtxRef.current.close();
+      } catch {}
+      localAudioCtxRef.current = null;
+    }
+    if (remoteAudioCtxRef.current) {
+      try {
+        remoteAudioCtxRef.current.close();
+      } catch {}
+      remoteAudioCtxRef.current = null;
+      remoteGainRef.current = null;
+    }
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
     }
+    setRemoteVideoFrame(null);
     endCall();
   };
 
@@ -511,6 +717,20 @@ export const CallModal: React.FC = () => {
                 >
                   {isMuted ? <MicOff className="w-5 h-5 text-amber-400" /> : <Mic className="w-5 h-5" />}
                   <span className="hidden sm:inline">{isMuted ? 'Bật Mic' : 'Tắt Mic'}</span>
+                </button>
+
+                {/* 1.5. Mute Speaker */}
+                <button
+                  onClick={() => setIsSpeakerMuted(!isSpeakerMuted)}
+                  title={isSpeakerMuted ? 'Bật Loa ngoài' : 'Tắt Loa ngoài'}
+                  className={`p-3.5 rounded-xl transition-all font-medium text-xs flex items-center space-x-2 ${
+                    isSpeakerMuted
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                      : 'bg-white/10 hover:bg-white/15 text-white'
+                  }`}
+                >
+                  {isSpeakerMuted ? <VolumeX className="w-5 h-5 text-amber-400" /> : <Volume2 className="w-5 h-5" />}
+                  <span className="hidden sm:inline">{isSpeakerMuted ? 'Bật Loa' : 'Tắt Loa'}</span>
                 </button>
 
                 {/* 2. Toggle Camera */}

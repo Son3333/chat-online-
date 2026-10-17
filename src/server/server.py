@@ -1089,6 +1089,7 @@ class ChatServer:
                     "channel_id": channel_id,
                     "sender_id": sender_id,
                     "media_type": packet.get("media_type"), # 'audio' hoặc 'video'
+                    "sample_rate": packet.get("sample_rate"),
                     "data": packet.get("data")
                 })
             return None
