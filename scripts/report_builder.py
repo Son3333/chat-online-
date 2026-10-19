@@ -243,4 +243,28 @@ def add_table_data(doc, headers, data, col_widths=None):
 
     doc.add_paragraph().paragraph_format.space_after = Pt(4)
 
+def add_image(doc, img_filename, caption, width_in_inches=5.6):
+    img_path = os.path.join("assets", "report_images", img_filename)
+    if not os.path.exists(img_path):
+        print(f"[CANH BAO] Khong tim thay anh: {img_path}")
+        return
+    p_img = doc.add_paragraph()
+    p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_img.paragraph_format.space_before = Pt(8)
+    p_img.paragraph_format.space_after = Pt(2)
+    p_img.paragraph_format.keep_with_next = True
+    r_img = p_img.add_run()
+    r_img.add_picture(img_path, width=Inches(width_in_inches))
+
+    p_cap = doc.add_paragraph()
+    p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_cap.paragraph_format.space_after = Pt(8)
+    r_cap = p_cap.add_run(caption)
+    r_cap.font.name = 'Times New Roman'
+    r_cap.font.size = Pt(11)
+    r_cap.font.bold = True
+    r_cap.font.italic = True
+    r_cap.font.color.rgb = RGBColor(0x1F, 0x29, 0x37)
+
 print("Core helper functions initialized.")
+

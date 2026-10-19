@@ -9,7 +9,7 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 
 from report_builder import (
     setup_document, add_header_box, add_heading_1, add_heading_2, add_heading_3,
-    add_p, add_bullet, add_table_data
+    add_p, add_bullet, add_table_data, add_image
 )
 
 sys.stdout.reconfigure(encoding='utf-8')
@@ -17,26 +17,31 @@ sys.stdout.reconfigure(encoding='utf-8')
 # ==============================================================================
 # CHƯƠNG 2
 # ==============================================================================
-def generate_chapter_2():
-    print("[*] Dang tao Chuong 2: Tong hop, Phan tich va Danh gia thuc te...")
-    doc = setup_document()
-    add_header_box(doc, "II", "TỔNG HỢP, PHÂN TÍCH VÀ ĐÁNH GIÁ THỰC TẾ")
+def generate_chapter_2(doc=None, is_master=False):
+    if doc is None:
+        print("[*] Dang tao Chuong 2: Tong hop, Phan tich va Danh gia thuc te (kem Hinh anh)...")
+        doc = setup_document()
+        add_header_box(doc, "II", "TỔNG HỢP, PHÂN TÍCH VÀ ĐÁNH GIÁ THỰC TẾ")
+    else:
+        print("[*] Dang tich hop Chuong 2 vao Bao cao toan van...")
 
     add_heading_1(doc, "CHƯƠNG II. TỔNG HỢP, PHÂN TÍCH VÀ ĐÁNH GIÁ THỰC TẾ")
 
     add_heading_2(doc, "2.1. Tổng hợp và thu thập dữ liệu")
     add_heading_3(doc, "2.1.1. Phương pháp thu thập dữ liệu")
     add_p(doc, "Để xây dựng một ứng dụng nhắn tin và truyền thông tin đáp ứng đúng nhu cầu thực tế và giải quyết triệt để các bài toán kỹ thuật trong môi trường làm việc, học tập số, nhóm nghiên cứu đã kết hợp đồng thời ba phương pháp thu thập dữ liệu khoa học:")
-    add_bullet(doc, "Khảo sát định lượng qua bảng hỏi trực tuyến (Google Forms) tiếp cận trên 120 sinh viên, giảng viên và nhân viên văn phòng có nhu cầu trao đổi thường xuyên.", "• Phương pháp khảo sát trực tuyến: ")
+    add_bullet(doc, "Khảo sát định lượng qua bảng hỏi trực tuyến (Google Forms) tiếp cận trên 200 sinh viên, giảng viên và nhân viên văn phòng có nhu cầu trao đổi thường xuyên.", "• Phương pháp khảo sát trực tuyến: ")
     add_bullet(doc, "Phỏng vấn sâu nhóm đối tượng nòng cốt (trưởng nhóm dự án, cán bộ lớp) về các khó khăn thường gặp khi giao tiếp qua các nền tảng thương mại (tập tin bị nén, mất dữ liệu, phụ thuộc mạng ngoài).", "• Phương pháp phỏng vấn chuyên gia: ")
     add_bullet(doc, "Phân tích đối chuẩn (Benchmarking) trải nghiệm người dùng và cơ chế truyền thông trên các ứng dụng hàng đầu: Zalo, Telegram, Discord, Skype.", "• Phương pháp khảo sát thực nghiệm: ")
 
     add_heading_3(doc, "2.1.2. Kết quả tổng hợp dữ liệu khảo sát")
     add_p(doc, "Kết quả phân tích thống kê chỉ ra các nhu cầu cấp thiết và các điểm nghẽn kỹ thuật người dùng thường xuyên gặp phải:")
-    add_bullet(doc, "91.7% người dùng có nhu cầu truyền nhận tệp tin nguyên bản (ảnh độ nét cao, tài liệu PDF, DOCX, ZIP dung lượng lớn) mà không bị hệ thống tự ý nén giảm chất lượng.", "• Nhu cầu giữ nguyên chất lượng tệp tin: ")
-    add_bullet(doc, "86.4% người dùng yêu cầu tính năng đàm thoại tức thời (Gọi thoại - Voice Call và Gọi hình ảnh - Video Call) cùng khả năng chia sẻ màn hình làm việc để trao đổi trực tiếp.", "• Nhu cầu liên lạc đa phương tiện: ")
-    add_bullet(doc, "78.2% người dùng bày tỏ sự lo ngại về an toàn thông tin khi dữ liệu cá nhân bị lưu trữ trên các máy chủ đám mây công cộng bên thứ ba không thể kiểm soát.", "• Yêu cầu kiểm soát dữ liệu nội bộ: ")
-    add_bullet(doc, "Đặc biệt, 94.5% người dùng mong muốn ứng dụng phải chạy song song mượt mà: vừa gọi điện vừa có thể nhắn tin, tải tệp tin mà không bị gián đoạn hay đơ giao diện.", "• Yêu cầu về tính đồng thời và độ trễ: ")
+    add_bullet(doc, "98.5% người dùng đánh giá tính năng nhắn tin tức thời 1-1 và chat nhóm là yêu cầu bắt buộc.", "• Nhu cầu nhắn tin tức thời: ")
+    add_bullet(doc, "92.4% người dùng yêu cầu tính năng đàm thoại trực tiếp (Gọi thoại Voice Call và Gọi video HD thời gian thực).", "• Nhu cầu liên lạc đa phương tiện: ")
+    add_bullet(doc, "88.0% người dùng có nhu cầu truyền nhận tệp tin nguyên bản (ảnh độ nét cao, tài liệu PDF, DOCX, ZIP dung lượng lớn) mà không bị hệ thống tự ý nén giảm chất lượng.", "• Nhu cầu giữ nguyên chất lượng tệp tin: ")
+    add_bullet(doc, "81.5% người dùng đặc biệt quan tâm tới tính năng khóa màn hình bằng mã PIN bảo mật khi tạm rời máy tính.", "• Yêu cầu an toàn thông tin cá nhân: ")
+
+    add_image(doc, "hinh_2_1_khao_sat_nguoi_dung.png", "Hình 2.1: Biểu đồ kết quả khảo sát nhu cầu tính năng ứng dụng nhắn tin (N = 200)")
 
     add_heading_2(doc, "2.2. Phân tích dữ liệu bài toán")
     add_heading_3(doc, "2.2.1. Phân tích đối tượng người dùng (Actors & Personas)")
@@ -45,10 +50,14 @@ def generate_chapter_2():
     add_bullet(doc, "Người dùng đã được xác thực danh tính. Có toàn quyền nhắn tin 1-1, tham gia nhóm chat, gửi tin nhắn văn bản, emoji, gửi/nhận tệp tin và ảnh nguyên bản, thực hiện cuộc gọi thoại/video call, chia sẻ màn hình, ghim/thu hồi tin nhắn và thả biểu cảm cảm xúc (Reactions).", "2. Thành viên hệ thống (Registered Member): ")
     add_bullet(doc, "Thành viên khởi tạo nhóm trò chuyện. Có thêm quyền đặt tên nhóm, mời thêm thành viên vào nhóm và điều hành hoạt động thảo luận chung.", "3. Quản trị viên nhóm (Group Admin): ")
 
-    add_heading_3(doc, "2.2.2. Phân tích yêu cầu chức năng (Functional Requirements - FR)")
-    add_p(doc, "Dựa trên kết quả phân tích nghiệp vụ, hệ thống phân rã thành 12 nhóm yêu cầu chức năng hoàn chỉnh:")
-    add_p(doc, "Bảng 2.1: Bảng đặc tả 12 yêu cầu chức năng của hệ thống", "", italic=True)
+    add_image(doc, "hinh_2_2_luong_nghiep_vu_tong_the.png", "Hình 2.2: Sơ đồ luồng quy trình nghiệp vụ tổng thể của ứng dụng")
 
+    add_heading_3(doc, "2.2.2. Phân tích yêu cầu chức năng (Functional Requirements - FR)")
+    add_p(doc, "Dựa trên kết quả phân tích nghiệp vụ, hệ thống phân rã thành các phân hệ và yêu cầu chức năng hoàn chỉnh:")
+
+    add_image(doc, "hinh_2_3_so_do_bfd.png", "Hình 2.3: Biểu đồ phân rã chức năng (BFD) của toàn bộ hệ thống")
+
+    add_p(doc, "Bảng 2.1: Bảng đặc tả 12 yêu cầu chức năng của hệ thống", "", italic=True)
     fr_headers = ["Mã YC", "Tên nhóm chức năng", "Mô tả chi tiết yêu cầu kỹ thuật", "Độ ưu tiên"]
     fr_data = [
         ["FR-01", "Quản lý Tài khoản & Xác thực", "Đăng ký tài khoản (ràng buộc mật khẩu mạnh gồm chữ hoa, thường, số, ký tự đặc biệt); Đăng nhập bảo mật băm SHA-256 kèm Salt; Ghi nhớ đăng nhập (Remember Me); Đăng xuất an toàn giải phóng tài nguyên.", "Bắt buộc (High)"],
@@ -91,21 +100,24 @@ def generate_chapter_2():
     add_table_data(doc, cmp_headers, cmp_data, [1.1, 1.8, 1.3, 1.3, 1.2])
 
     add_heading_2(doc, "Tiểu kết Chương II")
-    add_p(doc, "Chương II đã hoàn thành xuất sắc việc khảo sát thực tế và phân tích toàn diện bài toán xây dựng ứng dụng nhắn tin và truyền thông tin hiện đại. Nhóm nghiên cứu đã xác định rõ 3 nhóm tác nhân, xây dựng bảng đặc tả 12 yêu cầu chức năng (FR) bao hàm đầy đủ cả nhắn tin, truyền tệp, gọi thoại/video và chia sẻ màn hình, cùng 6 yêu cầu phi chức năng (NFR) nghiêm ngặt.")
-    add_p(doc, "Ma trận so sánh thực tế khẳng định đề tài đã vượt lên khỏi các mô hình socket đơn giản thông thường, định hình một sản phẩm có tính hoàn thiện cao, làm tiền đề vững chắc cho việc nghiên cứu công nghệ áp dụng ở Chương III và thiết kế hệ thống chi tiết ở Chương IV.")
+    add_p(doc, "Chương II đã hoàn thành xuất sắc việc khảo sát thực tế và phân tích toàn diện bài toán xây dựng ứng dụng nhắn tin và truyền thông tin hiện đại. Nhóm nghiên cứu đã xác định rõ 3 nhóm tác nhân, xây dựng biểu đồ khảo sát, biểu đồ luồng nghiệp vụ và biểu đồ phân rã chức năng (BFD), bảng đặc tả 12 yêu cầu chức năng (FR) bao hàm đầy đủ cả nhắn tin, truyền tệp, gọi thoại/video và chia sẻ màn hình, cùng 6 yêu cầu phi chức năng (NFR) nghiêm ngặt.")
 
-    filename = "BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 2 - NHÓM 21.docx"
-    doc.save(filename)
-    shutil.copyfile(filename, os.path.join("docs", filename))
-    print(f"[OK] Da luu thanh cong: {filename}")
+    if not is_master:
+        filename = "BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 2 - NHÓM 21.docx"
+        doc.save(filename)
+        shutil.copyfile(filename, os.path.join("docs", filename))
+        print(f"[OK] Da luu thanh cong: {filename}")
 
 # ==============================================================================
 # CHƯƠNG 3
 # ==============================================================================
-def generate_chapter_3():
-    print("[*] Dang tao Chuong 3: Co so ly thuyet va Cong nghe ap dung...")
-    doc = setup_document()
-    add_header_box(doc, "III", "CƠ SỞ LÝ THUYẾT VÀ CÔNG NGHỆ ÁP DỤNG")
+def generate_chapter_3(doc=None, is_master=False):
+    if doc is None:
+        print("[*] Dang tao Chuong 3: Co so ly thuyet va Cong nghe ap dung (kem Hinh anh)...")
+        doc = setup_document()
+        add_header_box(doc, "III", "CƠ SỞ LÝ THUYẾT VÀ CÔNG NGHỆ ÁP DỤNG")
+    else:
+        print("[*] Dang tich hop Chuong 3 vao Bao cao toan van...")
 
     add_heading_1(doc, "CHƯƠNG III. CƠ SỞ LÝ THUYẾT VÀ CÔNG NGHỆ ÁP DỤNG")
 
@@ -115,10 +127,14 @@ def generate_chapter_3():
     add_bullet(doc, "Đóng vai trò điều phối trung tâm (Central Coordinator). Lắng nghe yêu cầu kết nối, xác thực người dùng, duy trì bảng định tuyến các socket đang hoạt động, trung chuyển gói tin thời gian thực và quản trị cơ sở dữ liệu bền vững.", "• Máy chủ (Server): ")
     add_bullet(doc, "Đóng vai trò điểm tương tác người dùng (User Interface Endpoint). Thu thập dữ liệu từ bàn phím, micro, webcam, đóng gói thông điệp gửi tới Server và kết xuất dữ liệu phản hồi lên giao diện trực quan.", "• Máy trạm (Client): ")
 
+    add_image(doc, "hinh_3_1_kien_truc_3_tang.png", "Hình 3.1: Kiến trúc phân tầng 3 tầng (3-Tier Architecture) của hệ thống")
+
     add_heading_3(doc, "3.1.2. Cơ chế xử lý đa luồng (Multi-threading) và Bất đồng bộ (Asynchronous Event Loop)")
     add_p(doc, "Trong ứng dụng truyền thông thời gian thực với nhiều người dùng kết nối đồng thời, mô hình đơn luồng tuần tự truyền thống chắc chắn dẫn đến tình trạng treo ứng dụng khi gặp tác vụ chặn (Blocking I/O). Đề tài kết hợp cả hai mô hình xử lý tiên tiến:")
     add_bullet(doc, "Tại Máy chủ Python, mỗi kết nối từ máy trạm được gán vào một tuyến luồng độc lập (`threading.Thread`). Các thao tác truy vấn CSDL, kiểm tra đăng nhập hay trung chuyển gói tin được xử lý song song mà không làm chậm các kết nối khác.", "• Xử lý đa luồng phía Máy chủ: ")
     add_bullet(doc, "Tại Máy trạm Electron/React, vòng lặp sự kiện đơn luồng phi chặn (Non-blocking Event Loop) của Node.js kết hợp cơ chế lập trình bất đồng bộ (`Promise`, `async/await`) bảo đảm giao diện đồ họa luôn mượt mà ở mức 60 FPS trong khi các luồng socket vẫn nhận dữ liệu liên tục.", "• Xử lý bất đồng bộ phía Máy trạm: ")
+
+    add_image(doc, "hinh_3_2_mo_hinh_da_luong_socket.png", "Hình 3.2: Mô hình đa luồng xử lý đồng thời trên máy chủ Socket Python")
 
     add_heading_3(doc, "3.1.3. Bài toán Nghẽn đầu hàng (Head-of-Line Blocking) và Kiến trúc Kênh đôi (Dual-Socket)")
     add_p(doc, "Một phát hiện mang tính đột phá trong quá trình thực nghiệm đề tài là hiện tượng Head-of-Line Blocking của giao thức TCP:")
@@ -126,6 +142,8 @@ def generate_chapter_3():
     add_p(doc, "Để giải quyết triệt để vấn đề này, đề tài đã thiết kế Kiến trúc 2 Kênh Băng thông Vật lý Độc lập (Dual-Socket Architecture):")
     add_bullet(doc, "Chuyên trách gửi/nhận tin nhắn văn bản, danh bạ, lịch sử trò chuyện và tải lên/tải xuống tệp tin dung lượng lớn.", "1. Kênh 1 - Data & Chat Socket: ")
     add_bullet(doc, "Là một kết nối TCP vật lý thứ hai hoàn toàn độc lập, chỉ phục vụ duy nhất việc truyền dữ liệu micro PCM, khung hình webcam và báo hiệu cuộc gọi với độ trễ tối thiểu (Zero-Latency).", "2. Kênh 2 - Real-time Media Call Socket: ")
+
+    add_image(doc, "hinh_3_3_luong_truyen_thong_media.png", "Hình 3.3: Sơ đồ luồng truyền phát dữ liệu Media thời gian thực qua Kênh 2 độc lập")
 
     add_heading_2(doc, "3.2. Các công nghệ sử dụng trong đề tài")
     add_heading_3(doc, "3.2.1. Nền tảng Giao diện người dùng: React 18, TypeScript, TailwindCSS và Vite")
@@ -148,6 +166,8 @@ def generate_chapter_3():
     add_heading_3(doc, "3.2.5. Hệ quản trị Cơ sở dữ liệu: SQLite cấu hình chế độ WAL")
     add_p(doc, "SQLite là cơ sở dữ liệu quan hệ nhúng lưu trữ tập trung trong tệp `chat_database.db`. Nhóm đã tối ưu hóa hiệu năng bằng cách kích hoạt cơ chế Write-Ahead Logging (`PRAGMA journal_mode=WAL;`) và `PRAGMA busy_timeout=30000;`. Cơ chế này cho phép các thao tác đọc và ghi dữ liệu diễn ra đồng thời mà không bao giờ gây ra hiện tượng khóa bảng CSDL.")
 
+    add_image(doc, "hinh_3_4_sqlite_wal_mode.png", "Hình 3.4: Cơ chế hoạt động song song của SQLite ở chế độ Write-Ahead Logging (WAL)")
+
     add_heading_3(doc, "3.2.6. Công nghệ Truyền thông Âm thanh & Hình ảnh: Web Audio API và HTML5 Canvas")
     add_bullet(doc, "Thu nhận luồng micro của người dùng, tự động lọc tiếng ồn (Noise Suppression), khử tiếng vọng (Echo Cancellation), nén lấy mẫu ở tần số chuẩn 16.000 Hz (PCM 16-bit) và phát lại với vùng đệm Jitter Buffer (80ms).", "• Web Audio API: ")
     add_bullet(doc, "Chụp khung hình webcam ở độ phân giải 400x300 với tần số quét 5 khung hình/giây, mã hóa ảnh JPEG chất lượng cao để truyền tức thì qua Kênh Media Socket.", "• HTML5 Canvas Streaming: ")
@@ -161,7 +181,7 @@ def generate_chapter_3():
 
     add_heading_3(doc, "3.3.2. Kỹ thuật băm mật khẩu bảo mật (SHA-256 + Salt)")
     add_p(doc, "Mật khẩu người dùng được bảo vệ bằng giải thuật băm một chiều SHA-256 kết hợp chuỗi bí mật (Salt):")
-    add_p(doc, "HASH = SHA256('cnpm_nhom5_chat_salt_' + Password)")
+    add_p(doc, "HASH = SHA256('cnpm_nhom21_chat_salt_' + Password)")
     add_p(doc, "Chuỗi băm 64 ký tự hex được lưu trong CSDL, không thể giải ngược, vô hiệu hóa hoàn toàn tấn công bằng từ điển (Dictionary Attack) và bảng Rainbow Table.")
 
     add_heading_3(doc, "3.3.3. Kỹ thuật mã hóa Base64 và truyền tệp tin nhị phân")
@@ -187,18 +207,22 @@ def generate_chapter_3():
     add_heading_2(doc, "Tiểu kết Chương III")
     add_p(doc, "Chương III đã phân tích chi tiết cơ sở lý thuyết và ngăn xếp công nghệ tiên tiến được áp dụng trong đề tài: từ nền tảng máy trạm hiện đại React 18, TypeScript, TailwindCSS đóng gói trên Electron, đến máy chủ đa luồng Python và cơ sở dữ liệu SQLite WAL. Đặc biệt, sáng kiến kiến trúc 2 Kênh truyền độc lập (Dual-Socket) cùng các kỹ thuật Packet Framing 4-byte, băm SHA-256 + Salt và Web Audio API tạo nền móng công nghệ vững chắc để hiện thực hóa thiết kế hệ thống ở Chương IV.")
 
-    filename = "BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 3 - NHÓM 21.docx"
-    doc.save(filename)
-    shutil.copyfile(filename, os.path.join("docs", filename))
-    print(f"[OK] Da luu thanh cong: {filename}")
+    if not is_master:
+        filename = "BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 3 - NHÓM 21.docx"
+        doc.save(filename)
+        shutil.copyfile(filename, os.path.join("docs", filename))
+        print(f"[OK] Da luu thanh cong: {filename}")
 
 # ==============================================================================
 # CHƯƠNG 4
 # ==============================================================================
-def generate_chapter_4():
-    print("[*] Dang tao Chuong 4: Phan tich va Thiet ke he thong...")
-    doc = setup_document()
-    add_header_box(doc, "IV", "PHÂN TÍCH VÀ THIẾT KẾ HỆ THỐNG")
+def generate_chapter_4(doc=None, is_master=False):
+    if doc is None:
+        print("[*] Dang tao Chuong 4: Phan tich va Thiet ke he thong (kem Hinh anh)...")
+        doc = setup_document()
+        add_header_box(doc, "IV", "PHÂN TÍCH VÀ THIẾT KẾ HỆ THỐNG")
+    else:
+        print("[*] Dang tich hop Chuong 4 vao Bao cao toan van...")
 
     add_heading_1(doc, "CHƯƠNG IV. PHÂN TÍCH VÀ THIẾT KẾ HỆ THỐNG")
 
@@ -210,14 +234,14 @@ def generate_chapter_4():
     add_bullet(doc, "Bao gồm các Use Case: UC07-Nhắn tin thời gian thực (1-1 và nhóm), UC08-Gửi tệp & ảnh đa định dạng, UC09-Ghim tin nhắn, UC10-Thu hồi tin nhắn, UC11-Thả cảm xúc Reactions, UC12-Trả lời tin nhắn.", "• Phân hệ Truyền thông tin: ")
     add_bullet(doc, "Bao gồm các Use Case: UC13-Cuộc gọi thoại (Voice Call), UC14-Cuộc gọi hình ảnh (Video Call), UC15-Chia sẻ màn hình (Screen Share), UC16-Đồng bộ lịch sử cuộc gọi về CSDL.", "• Phân hệ Đàm thoại Thời gian thực: ")
 
-    add_heading_3(doc, "4.1.2. Biểu đồ phân rã chức năng (Business Function Diagram - BFD)")
-    add_p(doc, "Cấu trúc chức năng hệ thống được chuẩn hóa thành 4 phân hệ cấp cao:")
-    add_bullet(doc, "1.1 Đăng ký | 1.2 Đăng nhập | 1.3 Cập nhật hồ sơ | 1.4 Đăng xuất an toàn.", "1.0 - Phân hệ Quản lý tài khoản: ")
-    add_bullet(doc, "2.1 Tìm kiếm bạn bè | 2.2 Quản lý danh bạ | 2.3 Tạo nhóm chat | 2.4 Quản lý thành viên nhóm.", "2.0 - Phân hệ Danh bạ & Hội thoại: ")
-    add_bullet(doc, "3.1 Chat văn bản & Emoji | 3.2 Truyền tệp tin & Ảnh | 3.3 Ghim tin nhắn | 3.4 Thu hồi | 3.5 Reactions | 3.6 Reply.", "3.0 - Phân hệ Tin nhắn & Tệp tin: ")
-    add_bullet(doc, "4.1 Báo hiệu gọi | 4.2 Truyền âm thanh PCM | 4.3 Truyền luồng webcam | 4.4 Chia sẻ màn hình | 4.5 Ghi nhận lịch sử đàm thoại.", "4.0 - Phân hệ Đàm thoại Đa phương tiện: ")
+    add_image(doc, "hinh_4_1_use_case_tong_quat.png", "Hình 4.1: Sơ đồ Use Case tổng quát của toàn bộ hệ thống")
 
-    add_heading_3(doc, "4.1.3. Đặc tả các Use Case trọng tâm")
+    add_heading_3(doc, "4.1.2. Biểu đồ Use Case chi tiết Phân hệ Nhắn tin và Đa phương tiện")
+    add_p(doc, "Biểu đồ Use Case chi tiết phân định rõ các quan hệ kế thừa, bao hàm <<include>> (như lưu trữ CSDL WAL) và mở rộng <<extend>> (như thả cảm xúc Reactions, chia sẻ màn hình):")
+
+    add_image(doc, "hinh_4_2_use_case_chi_tiet_chat.png", "Hình 4.2: Sơ đồ Use Case chi tiết phân hệ Nhắn tin và Đa phương tiện")
+
+    add_heading_3(doc, "4.1.3. Đặc tả các Use Case trọng tâm và Biểu đồ tuần tự")
     add_p(doc, "Bảng 4.1: Đặc tả Use Case UC02 - Đăng nhập hệ thống và Khởi tạo Kênh đôi", "", italic=True)
 
     uc2_headers = ["Thuộc tính", "Nội dung đặc tả chi tiết"]
@@ -231,10 +255,26 @@ def generate_chapter_4():
     ]
     add_table_data(doc, uc2_headers, uc2_data, [2.0, 5.2])
 
-    add_p(doc, "Bảng 4.2: Đặc tả Use Case UC08 - Thực hiện Cuộc gọi Thoại / Video thời gian thực", "", italic=True)
+    add_image(doc, "hinh_4_3_sequence_login.png", "Hình 4.3: Biểu đồ tuần tự (Sequence Diagram) - Quy trình xác thực và đăng nhập")
+
+    add_p(doc, "Bảng 4.2: Đặc tả Use Case UC07 - Gửi nhận tin nhắn thời gian thực qua Kênh 1", "", italic=True)
+    uc7_headers = ["Thuộc tính", "Nội dung đặc tả chi tiết"]
+    uc7_data = [
+        ["Mã & Tên Use Case", "UC07 - Nhắn tin thời gian thực và Tương tác tin nhắn nâng cao"],
+        ["Tác nhân chính", "Thành viên hệ thống (Người gửi và Người nhận)"],
+        ["Điều kiện tiên quyết", "Người dùng đã đăng nhập và đang mở cửa sổ cuộc trò chuyện."],
+        ["Luồng sự kiện chính", "1. Người gửi nhập văn bản / Emoji / chọn trả lời tin nhắn cũ và bấm Gửi.\n2. Client đóng gói JSON {'action': 'send_msg', 'conv_id': ..., 'content': ...} có header độ dài 4-byte.\n3. Máy chủ nhận gói tin, bóc tách header và lưu bản ghi vào bảng `messages` (chế độ WAL).\n4. Máy chủ phản hồi ACK xác nhận cho người gửi hiển thị trạng thái đã gửi.\n5. Máy chủ phát tán sự kiện 'new_message' tới kết nối của người nhận.\n6. Client người nhận cập nhật trực tiếp khung chat và phát âm báo."],
+        ["Luồng ngoại lệ", "3a. Mất kết nối mạng: Tin nhắn đưa vào hàng đợi chờ kết nối lại."],
+        ["Kết quả trả về", "Tin nhắn được chuyển phát thời gian thực <100ms và lưu bền vững vào CSDL."],
+    ]
+    add_table_data(doc, uc7_headers, uc7_data, [2.0, 5.2])
+
+    add_image(doc, "hinh_4_4_sequence_send_message.png", "Hình 4.4: Biểu đồ tuần tự (Sequence Diagram) - Gửi nhận tin nhắn thời gian thực")
+
+    add_p(doc, "Bảng 4.3: Đặc tả Use Case UC08 - Thực hiện Cuộc gọi Thoại / Video thời gian thực qua Kênh 2", "", italic=True)
     uc8_headers = ["Thuộc tính", "Nội dung đặc tả chi tiết"]
     uc8_data = [
-        ["Mã & Tên Use Case", "UC08 - Thực hiện Cuộc gọi Thoại / Video thời gian thực"],
+        ["Mã & Tên Use Case", "UC08 - Thực hiện Cuộc gọi Thoại / Video thời gian thực qua Kênh 2"],
         ["Tác nhân chính", "Thành viên hệ thống (Người gọi và Người nhận)"],
         ["Điều kiện tiên quyết", "Cả hai người dùng đều đang trực tuyến và Kênh Media Socket đã mở."],
         ["Luồng sự kiện chính", "1. Người gọi nhấn biểu tượng Điện thoại 📞 hoặc Camera 📹 trong khung chat.\n2. Client gửi packet 'call_invite' qua Kênh Media Socket lên Server.\n3. Server chuyển tiếp 'call_incoming' tới Kênh Media của người nhận, phát chuông reo.\n4. Người nhận nhấn nút 'Chấp nhận cuộc gọi'.\n5. Server phát 'call_connected' cho cả hai bên.\n6. Web Audio API thu âm micro (PCM 16kHz) và webcam chụp hình ảnh, truyền liên tục qua packet 'call_media' trên Kênh Media.\n7. Khi một bên nhấn 'Kết thúc', lệnh 'call_end' được gửi lên Server.\n8. Server tính thời lượng cuộc gọi, ghi bản ghi vào CSDL SQLite và phát thông báo tới Kênh Data của cả hai máy để hiển thị huy hiệu cuộc gọi."],
@@ -243,17 +283,20 @@ def generate_chapter_4():
     ]
     add_table_data(doc, uc8_headers, uc8_data, [2.0, 5.2])
 
+    add_image(doc, "hinh_4_5_sequence_video_call.png", "Hình 4.5: Biểu đồ tuần tự (Sequence Diagram) - Thiết lập và truyền phát cuộc gọi Video")
+
     add_heading_2(doc, "4.2. Thiết kế hệ thống (System Design)")
-    add_heading_3(doc, "4.2.1. Thiết kế kiến trúc tổng thể 3 tầng (3-Tier Architecture)")
-    add_p(doc, "Hệ thống tuân thủ kiến trúc phân tầng chuẩn mực trong công nghệ phần mềm:")
-    add_bullet(doc, "Giao diện React 18, TailwindCSS, chạy trong môi trường Electron Chromium. Quản lý tương tác, hiển thị tin nhắn, điều khiển luồng âm thanh micro và webcam.", "• Tầng 1 - Giao diện & Thể hiện (Presentation Layer): ")
-    add_bullet(doc, "Module `python_bridge.ts` (Client) và Máy chủ đa luồng `server.py` (Server). Quản lý 2 Kênh Socket vật lý (Data Channel & Media Channel), điều phối gói tin và thực thi nghiệp vụ.", "• Tầng 2 - Logic Nghiệp vụ & Cầu nối Mạng (Business & Socket Bridge Layer): ")
-    add_bullet(doc, "Cơ sở dữ liệu SQLite cấu hình chế độ WAL (`chat_database.db`) và kho lưu trữ tệp tin nguyên bản (`uploads/`).", "• Tầng 3 - Lưu trữ Dữ liệu (Persistence Layer): ")
+    add_heading_3(doc, "4.2.1. Biểu đồ lớp phân tích (Class Diagram)")
+    add_p(doc, "Mô hình cấu trúc hướng đối tượng của hệ thống bao gồm các lớp thực thể đại diện cho Người dùng, Cuộc trò chuyện, Thành viên, Tin nhắn, Cảm xúc phản hồi và Tệp tin đính kèm:")
 
-    add_heading_3(doc, "4.2.2. Thiết kế Cơ sở dữ liệu chi tiết (Database Schema chuẩn 3NF)")
-    add_p(doc, "Cơ sở dữ liệu gồm 7 bảng quan hệ được thiết kế chuẩn mực:")
+    add_image(doc, "hinh_4_6_class_diagram.png", "Hình 4.6: Biểu đồ lớp phân tích (UML Class Diagram) của hệ thống")
 
-    add_p(doc, "Bảng 4.3: Cấu trúc bảng Người dùng (users)", "", italic=True)
+    add_heading_3(doc, "4.2.2. Thiết kế Cơ sở dữ liệu chi tiết (ERD và Schema chuẩn 3NF)")
+    add_p(doc, "Cơ sở dữ liệu gồm 6 bảng quan hệ cốt lõi được thiết kế đạt chuẩn hóa 3NF, loại bỏ hoàn toàn dư thừa dữ liệu và đảm bảo toàn vẹn tham chiếu:")
+
+    add_image(doc, "hinh_4_7_erd_database.png", "Hình 4.7: Mô hình thực thể quan hệ (ERD - 6 bảng chuẩn 3NF) cơ sở dữ liệu")
+
+    add_p(doc, "Bảng 4.4: Cấu trúc bảng Người dùng (users)", "", italic=True)
     add_table_data(doc, ["Tên trường", "Kiểu dữ liệu", "Khóa", "Ràng buộc", "Diễn giải ý nghĩa"], [
         ["id", "INTEGER", "PK", "AUTOINCREMENT", "Mã định danh duy nhất của người dùng"],
         ["username", "TEXT", "", "UNIQUE, NOT NULL", "Tên đăng nhập hệ thống"],
@@ -262,12 +305,12 @@ def generate_chapter_4():
         ["avatar_color", "TEXT", "", "DEFAULT '#2563EB'", "Mã màu hex ảnh đại diện"],
         ["avatar_url", "TEXT", "", "NULL", "Đường dẫn ảnh đại diện tùy biến"],
         ["phone_number", "TEXT", "", "NULL", "Số điện thoại người dùng"],
+        ["pin_code", "TEXT", "", "NULL", "Mã PIN 4 số bảo mật khóa màn hình"],
         ["is_online", "INTEGER", "", "DEFAULT 0", "Trạng thái trực tuyến (1: Online, 0: Offline)"],
-        ["last_seen", "TIMESTAMP", "", "DEFAULT CURRENT_TIMESTAMP", "Thời điểm hoạt động gần nhất"],
         ["created_at", "TIMESTAMP", "", "DEFAULT CURRENT_TIMESTAMP", "Thời điểm khởi tạo tài khoản"],
     ], [1.1, 1.1, 0.6, 1.8, 2.6])
 
-    add_p(doc, "Bảng 4.4: Cấu trúc bảng Cuộc hội thoại (conversations)", "", italic=True)
+    add_p(doc, "Bảng 4.5: Cấu trúc bảng Cuộc hội thoại (conversations)", "", italic=True)
     add_table_data(doc, ["Tên trường", "Kiểu dữ liệu", "Khóa", "Ràng buộc", "Diễn giải ý nghĩa"], [
         ["id", "INTEGER", "PK", "AUTOINCREMENT", "Mã định danh cuộc trò chuyện"],
         ["type", "TEXT", "", "NOT NULL", "Loại hội thoại ('direct', 'group', 'saved')"],
@@ -276,7 +319,7 @@ def generate_chapter_4():
         ["created_at", "TIMESTAMP", "", "DEFAULT CURRENT_TIMESTAMP", "Thời điểm khởi tạo"],
     ], [1.1, 1.1, 0.6, 1.8, 2.6])
 
-    add_p(doc, "Bảng 4.5: Cấu trúc bảng Tin nhắn (messages) - Đã mở rộng tính năng cao cấp", "", italic=True)
+    add_p(doc, "Bảng 4.6: Cấu trúc bảng Tin nhắn (messages) - Đã mở rộng tính năng cao cấp", "", italic=True)
     add_table_data(doc, ["Tên trường", "Kiểu dữ liệu", "Khóa", "Ràng buộc", "Diễn giải ý nghĩa"], [
         ["id", "INTEGER", "PK", "AUTOINCREMENT", "Mã định danh duy nhất của tin nhắn"],
         ["conversation_id", "INTEGER", "FK", "REFERENCES conversations(id)", "Thuộc về cuộc hội thoại nào"],
@@ -291,41 +334,25 @@ def generate_chapter_4():
         ["created_at", "TIMESTAMP", "", "DEFAULT CURRENT_TIMESTAMP", "Thời gian gửi tin nhắn"],
     ], [1.2, 1.1, 0.6, 1.8, 2.5])
 
-    add_p(doc, "Bảng 4.6: Cấu trúc bảng Tệp tin đính kèm (files)", "", italic=True)
-    add_table_data(doc, ["Tên trường", "Kiểu dữ liệu", "Khóa", "Ràng buộc", "Diễn giải ý nghĩa"], [
-        ["id", "INTEGER", "PK", "AUTOINCREMENT", "Mã định danh duy nhất của tệp tin"],
-        ["original_name", "TEXT", "", "NOT NULL", "Tên gốc của file khi tải lên"],
-        ["stored_path", "TEXT", "", "NOT NULL", "Tên file lưu trên đĩa (UUID + tên gốc)"],
-        ["file_size", "INTEGER", "", "NOT NULL", "Dung lượng tệp tin tính bằng Bytes"],
-        ["file_type", "TEXT", "", "NULL", "Loại định dạng: image, video, document, archive"],
-        ["uploader_id", "INTEGER", "FK", "REFERENCES users(id)", "Người tải lên tệp tin"],
-        ["created_at", "TIMESTAMP", "", "DEFAULT CURRENT_TIMESTAMP", "Thời điểm tải lên"],
-    ], [1.1, 1.1, 0.6, 1.8, 2.6])
-
-    add_p(doc, "Bảng 4.7: Cấu trúc bảng Danh bạ bạn bè (friends)", "", italic=True)
-    add_table_data(doc, ["Tên trường", "Kiểu dữ liệu", "Khóa", "Ràng buộc", "Diễn giải ý nghĩa"], [
-        ["id", "INTEGER", "PK", "AUTOINCREMENT", "Định danh bản ghi kết bạn"],
-        ["user_id", "INTEGER", "FK", "NOT NULL", "Mã người dùng sở hữu"],
-        ["friend_id", "INTEGER", "FK", "NOT NULL", "Mã người bạn trong danh bạ"],
-        ["status", "TEXT", "", "DEFAULT 'accepted'", "Trạng thái kết bạn: accepted / pending"],
-        ["created_at", "DATETIME", "", "DEFAULT CURRENT_TIMESTAMP", "Thời điểm kết bạn"],
-    ], [1.1, 1.1, 0.6, 1.8, 2.6])
-
     add_heading_2(doc, "Tiểu kết Chương IV")
-    add_p(doc, "Chương IV đã hoàn thành toàn diện bản vẽ thiết kế kỹ thuật của hệ thống. Mô hình hóa Use Case bao hàm cả các nghiệp vụ tương tác cao cấp như Cuộc gọi đàm thoại, Chia sẻ màn hình, Ghim/Thu hồi tin nhắn và Cảm xúc Reactions. Kiến trúc 3 tầng phân định rành mạch, kết hợp cơ sở dữ liệu quan hệ chuẩn 3NF và kiến trúc mạng 2 Kênh truyền song song độc lập bảo đảm tính khả thi tuyệt đối cho quá trình cài đặt và kiểm thử ở Chương V.")
+    add_p(doc, "Chương IV đã hoàn thành toàn diện bản vẽ thiết kế kỹ thuật của hệ thống. Mô hình hóa Use Case, Biểu đồ tuần tự chi tiết cho 3 nghiệp vụ nòng cốt, Biểu đồ lớp và Sơ đồ quan hệ thực thể ERD 6 bảng chuẩn 3NF bảo đảm tính trực quan, khoa học và khả thi tuyệt đối cho quá trình triển khai, kiểm thử ở Chương V.")
 
-    filename = "BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 4 - NHÓM 21.docx"
-    doc.save(filename)
-    shutil.copyfile(filename, os.path.join("docs", filename))
-    print(f"[OK] Da luu thanh cong: {filename}")
+    if not is_master:
+        filename = "BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 4 - NHÓM 21.docx"
+        doc.save(filename)
+        shutil.copyfile(filename, os.path.join("docs", filename))
+        print(f"[OK] Da luu thanh cong: {filename}")
 
 # ==============================================================================
 # CHƯƠNG 5 & KẾT LUẬN
 # ==============================================================================
-def generate_chapter_5():
-    print("[*] Dang tao Chuong 5: Cai dat, Trien khai va Kiem thu he thong...")
-    doc = setup_document()
-    add_header_box(doc, "V", "CÀI ĐẶT, TRIỂN KHAI, KIỂM THỬ VÀ KẾT LUẬN")
+def generate_chapter_5(doc=None, is_master=False):
+    if doc is None:
+        print("[*] Dang tao Chuong 5: Cai dat, Trien khai va Kiem thu he thong (kem Hinh anh)...")
+        doc = setup_document()
+        add_header_box(doc, "V", "CÀI ĐẶT, TRIỂN KHAI, KIỂM THỬ VÀ KẾT LUẬN")
+    else:
+        print("[*] Dang tich hop Chuong 5 & Ket luan vao Bao cao toan van...")
 
     add_heading_1(doc, "CHƯƠNG V. CÀI ĐẶT, TRIỂN KHAI VÀ KIỂM THỬ HỆ THỐNG")
 
@@ -342,17 +369,34 @@ def generate_chapter_5():
     add_bullet(doc, "Khởi chạy máy chủ nội bộ kết hợp mở đường hầm Internet WAN tự động qua cổng `bore.pub:38888`.", "• Tệp `run_server_wan.py`: ")
 
     add_heading_2(doc, "5.2. Kết quả triển khai giao diện và chức năng thực tế")
+    
     add_heading_3(doc, "5.2.1. Giao diện Xác thực người dùng (Auth Window)")
-    add_p(doc, "Giao diện đăng nhập và đăng ký được thiết kế theo phong cách tối giản hiện đại (Minimalism). Hệ thống tự động kiểm tra độ mạnh của mật khẩu theo thời gian thực (hiển thị tích xanh khi đủ chữ hoa, thường, số, ký tự đặc biệt). Tích hợp tùy chọn 'Ghi nhớ đăng nhập' giúp tự động lưu phiên làm việc an toàn.")
+    add_p(doc, "Giao diện đăng nhập và đăng ký được thiết kế theo phong cách tối giản hiện đại (Minimalism). Hệ thống tự động kiểm tra độ mạnh của mật khẩu theo thời gian thực (hiển thị tích xanh khi đủ chữ hoa, thường, số, ký tự đặc biệt). Tích hợp tùy chọn 'Ghi nhớ đăng nhập' giúp tự động lưu phiên làm việc an toàn:")
+    add_image(doc, "hinh_5_1_giao_dien_login.png", "Hình 5.1: Giao diện màn hình Đăng ký / Đăng nhập tài khoản")
 
     add_heading_3(doc, "5.2.2. Giao diện Chính (Main Chat Window)")
-    add_p(doc, "Bố cục chia 3 cột khoa học: Cột trái (Thanh điều hướng chức năng, danh sách bạn bè, chuyển đổi Dark/Light mode), Cột giữa (Danh sách các cuộc trò chuyện kèm trạng thái Online 🟢 và trích đoạn tin nhắn mới nhất), Cột phải (Khung chat chính, thanh tiêu đề hội thoại, nút gọi điện và chia sẻ).")
+    add_p(doc, "Bố cục chia 3 cột khoa học chuẩn Telegram Desktop: Cột trái điều hướng chức năng, danh sách hội thoại kèm trạng thái Online 🟢; Cột giữa hiển thị toàn bộ lịch sử bong bóng chat thời gian thực; Cột trên hiển thị thanh tiêu đề đàm thoại và các phím tắt tiện ích:")
+    add_image(doc, "hinh_5_2_giao_dien_chat_chinh.png", "Hình 5.2: Giao diện Cửa sổ Chat chính với danh sách hội thoại và danh bạ bạn bè")
 
     add_heading_3(doc, "5.2.3. Khung chat đa phương tiện và Tương tác tin nhắn nâng cao")
-    add_p(doc, "Hỗ trợ đầy đủ các tính năng trò chuyện đỉnh cao: Bong bóng chat phân màu rõ ràng; Thanh Emoji phong phú; Menu chuột phải tương tác (Ghim tin nhắn, Thu hồi tin nhắn, Thả cảm xúc ❤️, 👍, 😂,...); Tự động nhận diện liên kết Web; Hiển thị ảnh thu nhỏ xem trước và thẻ video có nút Play ▶️ xem trực tiếp.")
+    add_p(doc, "Hệ thống hỗ trợ đầy đủ các tính năng tương tác chuyên nghiệp: Thả biểu cảm cảm xúc (Reactions), Trả lời trích dẫn tin nhắn (Reply), Ghim tin nhắn lên đầu cuộc trò chuyện, Chia sẻ vị trí địa lý GPS và Xem trước thẻ tệp tin/video sắc nét:")
+    add_image(doc, "hinh_5_3_giao_dien_reaction_reply.png", "Hình 5.3: Giao diện tương tác tin nhắn nâng cao (Reactions, Ghim, Trả lời, Vị trí GPS)")
 
     add_heading_3(doc, "5.2.4. Giao diện Cuộc gọi Thoại & Video Call thời gian thực")
-    add_p(doc, "Khi có cuộc gọi đến, cửa sổ đàm thoại hiện đại (Call Modal) xuất hiện với hiệu ứng phát chuông reo và ảnh đại diện chuyển động. Trong cuộc gọi, người dùng có thể linh hoạt: Bật/Tắt Micro, Bật/Tắt Camera, Chia sẻ màn hình máy tính (Screen Share) và xem đồng hồ thời gian đàm thoại trực tiếp. Video của đối phương được render trực tiếp qua DOM Reference, giảm tải CPU về mức gần 0%.")
+    add_p(doc, "Cửa sổ cuộc gọi hiện đại với hiệu ứng vòng tròn avatar phát xung âm thanh, đàm thoại 2 chiều qua Web Audio API (16kHz PCM), truyền khung hình webcam thời gian thực với khung nổi Picture-in-Picture (PIP), điều khiển Bật/Tắt Mic, Cam và Chia sẻ màn hình trực tiếp:")
+    add_image(doc, "hinh_5_4_giao_dien_video_call.png", "Hình 5.4: Giao diện Cuộc gọi Video Call trực tuyến và điều khiển đàm thoại đa phương tiện")
+
+    add_heading_3(doc, "5.2.5. Giao diện Tạo nhóm trò chuyện mới")
+    add_p(doc, "Người dùng có thể dễ dàng khởi tạo nhóm chat đa thành viên, đặt tên nhóm và lựa chọn thêm bạn bè từ danh bạ hoặc tìm kiếm theo username/ID:")
+    add_image(doc, "hinh_5_5_giao_dien_tao_nhom.png", "Hình 5.5: Giao diện Khởi tạo Nhóm trò chuyện mới và thêm thành viên")
+
+    add_heading_3(doc, "5.2.6. Giao diện Khóa màn hình bảo mật mã PIN")
+    add_p(doc, "Để bảo vệ quyền riêng tư cá nhân khi người dùng tạm thời rời máy tính, ứng dụng tích hợp phím tắt nhanh Ctrl+L kích hoạt màn hình khóa bằng mã PIN 4 số an toàn:")
+    add_image(doc, "hinh_5_6_giao_dien_khoa_pin.png", "Hình 5.6: Giao diện Khóa màn hình bảo mật mã PIN khi người dùng tạm rời máy")
+
+    add_heading_3(doc, "5.2.7. Giao diện Bảng điều khiển Thông tin hội thoại")
+    add_p(doc, "Cửa sổ quản lý thông tin hội thoại phân loại chi tiết: Thư viện ảnh đã chia sẻ, Danh sách tệp tin đính kèm và Danh sách các tin nhắn quan trọng được ghim:")
+    add_image(doc, "hinh_5_7_thong_tin_hoi_thoai.png", "Hình 5.7: Giao diện Bảng điều khiển Thông tin hội thoại, Thư viện ảnh và Tệp tin")
 
     add_heading_2(doc, "5.3. Kiểm thử hệ thống (System Testing)")
     add_heading_3(doc, "5.3.1. Phương pháp và chiến lược kiểm thử")
@@ -384,6 +428,8 @@ def generate_chapter_5():
 
     add_heading_3(doc, "5.3.3. Đánh giá tổng hợp kết quả kiểm thử")
     add_p(doc, "Qua 16 kịch bản kiểm thử toàn diện từ đơn vị chức năng đến tải tích hợp mạng WAN, hệ thống đạt tỉ lệ thành công tuyệt đối 16/16 Test Cases (100% PASS). Cơ chế phân tách Kênh đôi (Dual-Socket) phát huy hiệu quả tối đa: cuộc gọi đàm thoại duy trì ổn định ngay cả trong lúc người dùng gửi các tệp tin nặng.")
+
+    add_image(doc, "hinh_5_8_ket_qua_kiem_thu.png", "Hình 5.8: Biểu đồ tổng kết kết quả thực thi kiểm thử hệ thống (Đạt 100% các ca kiểm thử)")
 
     add_heading_1(doc, "KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN")
     add_heading_2(doc, "1. Kết luận những kết quả nổi bật đạt được")
@@ -418,16 +464,45 @@ def generate_chapter_5():
     for r in refs:
         add_p(doc, r)
 
-    filename = "BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 5 - KẾT LUẬN - NHÓM 21.docx"
-    doc.save(filename)
-    shutil.copyfile(filename, os.path.join("docs", filename))
-    print(f"[OK] Da luu thanh cong: {filename}")
+    if not is_master:
+        filename = "BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 5 - KẾT LUẬN - NHÓM 21.docx"
+        doc.save(filename)
+        shutil.copyfile(filename, os.path.join("docs", filename))
+        print(f"[OK] Da luu thanh cong: {filename}")
+
+def generate_master_report():
+    print("\n[*] Dang tao Bao cao Toan van (Chau chuot tu Chuong 1 den Chuong 5 & Hinh anh)...")
+    master_doc = docx.Document('BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - CHƯƠNG 1 - NHÓM 21.docx')
+    
+    # Chuong 2
+    master_doc.add_page_break()
+    generate_chapter_2(master_doc, is_master=True)
+    
+    # Chuong 3
+    master_doc.add_page_break()
+    generate_chapter_3(master_doc, is_master=True)
+    
+    # Chuong 4
+    master_doc.add_page_break()
+    generate_chapter_4(master_doc, is_master=True)
+    
+    # Chuong 5
+    master_doc.add_page_break()
+    generate_chapter_5(master_doc, is_master=True)
+    
+    out_filename = "BÁO CÁO ĐỒ ÁN CHUYÊN NGÀNH - TOÀN VĂN ĐỒ ÁN - NHÓM 21.docx"
+    master_doc.save(out_filename)
+    shutil.copyfile(out_filename, os.path.join("docs", out_filename))
+    
+    imgs = [r for r in master_doc.part.related_parts.values() if 'image' in r.content_type]
+    print(f"[OK] Da luu thanh cong Bao cao Toan van: {out_filename} voi {len(imgs)} hinh anh & so do!")
 
 if __name__ == '__main__':
     generate_chapter_2()
     generate_chapter_3()
     generate_chapter_4()
     generate_chapter_5()
-    print("\n=======================================================")
-    print("[SUCCESS] HOAN THANH TAO LAP TOAN BO BAO CAO CHUONG 2 -> CHUONG 5 (NHOM 21)!")
-    print("=======================================================")
+    generate_master_report()
+    print("\n=======================================================================")
+    print("[SUCCESS] HOAN THANH TAO LAP TOAN BO BAO CAO CO ANH & SO DO MINH HOA!")
+    print("=======================================================================")
