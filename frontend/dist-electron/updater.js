@@ -206,11 +206,18 @@ class GitUpdater {
             // 1. Reset to latest remote if git is available
             if (fs.existsSync(path.join(this.rootDir, '.git'))) {
                 try {
+                    await this.execCommand('git fetch origin main');
                     await this.execCommand('git reset --hard origin/main');
                 }
                 catch {
                     await this.execCommand('git pull origin main');
                 }
+            }
+            else {
+                return {
+                    success: false,
+                    error: 'Thu muc khong co .git (ban tai ZIP). Vui long len https://github.com/Son3333/chat-online- tai ban ZIP moi nhat de cap nhat.',
+                };
             }
             // 2. Build frontend (chỉ thực hiện nếu máy trạm có cài node_modules để phát triển)
             const frontendDir = path.join(this.rootDir, 'frontend');
