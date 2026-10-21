@@ -77,22 +77,12 @@ class GitUpdater {
         }
     }
     async getLocalHash() {
-        // 1. Try git rev-parse HEAD if .git exists
+        // Chỉ đọc commit hash nếu thư mục có Git repo (.git)
         if (fs.existsSync(path.join(this.rootDir, '.git'))) {
             try {
                 const hash = await this.execCommand('git rev-parse HEAD');
                 if (hash && hash.length >= 7)
                     return hash.trim();
-            }
-            catch { }
-        }
-        // 2. Fallback to version.json (especially for ZIP download without .git)
-        const versionPath = path.join(this.rootDir, 'version.json');
-        if (fs.existsSync(versionPath)) {
-            try {
-                const data = JSON.parse(fs.readFileSync(versionPath, 'utf-8'));
-                if (data.commit)
-                    return String(data.commit).trim();
             }
             catch { }
         }
@@ -140,6 +130,10 @@ class GitUpdater {
         });
     }
     async check() {
+        // Nếu cài đặt qua file ZIP (không có thư mục .git), không tự động quét Git commit để tránh popup làm phiền
+        if (!fs.existsSync(path.join(this.rootDir, '.git'))) {
+            return null;
+        }
         if (this.isChecking)
             return this.currentUpdate;
         this.isChecking = true;
