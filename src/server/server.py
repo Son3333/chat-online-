@@ -8,7 +8,13 @@ import time
 import base64
 import uuid
 from typing import Optional
-from src.server.database import Database
+try:
+    from src.server.database import Database
+except ImportError:
+    try:
+        from database import Database
+    except ImportError:
+        from .database import Database
 
 if sys.stdout is not None:
     try:
