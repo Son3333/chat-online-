@@ -1428,104 +1428,157 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-slate-700 dark:text-slate-200 space-y-1">
                 <div className="flex items-center space-x-2 font-bold text-[#2481cc]">
                   <Mail className="w-4 h-4" />
-                  <span>Xác thực tài khoản Gmail chính chủ</span>
+                  <span>Xác thực tài khoản Gmail</span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                   {currentUser.email && currentUser.is_email_verified
-                    ? `Tài khoản đã liên kết và xác minh thành công với Gmail: ${currentUser.email}. Bạn có thể dùng Gmail này để nhận mã OTP đổi mật khẩu an toàn.`
-                    : 'Nhập địa chỉ Gmail để nhận mã xác thực OTP qua hòm thư điện tử, giúp kích hoạt tài khoản chính chủ và khôi phục mật khẩu.'}
+                    ? 'Tài khoản của bạn đã được xác minh thành công. Bạn có thể sử dụng Gmail này để nhận mã OTP khôi phục hoặc đổi mật khẩu.'
+                    : 'Nhập địa chỉ Gmail để nhận mã xác thực OTP qua hòm thư điện tử, giúp kích hoạt tài khoản chính chủ và bảo vệ tài khoản.'}
                 </p>
               </div>
 
-              {/* Input Email */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-                  Địa chỉ Gmail của bạn:
-                </label>
-                <div className="flex space-x-2">
-                  <input
-                    type="email"
-                    value={emailInput}
-                    onChange={(e) => setEmailInput(e.target.value)}
-                    placeholder="VD: user@gmail.com"
-                    className="flex-1 h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 border border-transparent dark:border-slate-700/60"
-                  />
-                  <button
-                    type="button"
-                    disabled={isSaving || emailOtpCountdown > 0 || !emailInput.trim()}
-                    onClick={handleSendEmailOtp}
-                    className="px-3.5 h-10 rounded-xl bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap cursor-pointer shadow-sm"
-                  >
-                    {isSaving ? 'Đang gửi...' : emailOtpCountdown > 0 ? `Gửi lại (${emailOtpCountdown}s)` : 'Gửi mã OTP'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Email OTP Notification Alert */}
-              {emailOtpCountdown > 0 && (
-                <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/25 text-slate-700 dark:text-slate-200 space-y-1.5 animate-in fade-in slide-in-from-top-2">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-[#2481cc]">
-                    <span className="flex items-center space-x-1.5">
-                      <Mail className="w-3.5 h-3.5" />
-                      <span>ĐÃ GỬI MÃ XÁC THỰC QUA GMAIL</span>
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-normal">Hiệu lực 5 phút</span>
+              {currentUser.email && currentUser.is_email_verified ? (
+                /* Đã xác minh: Hiển thị trạng thái thành công, ẩn ô OTP, chỉ hiển thị thông tin và tùy chọn Gỡ / Thay đổi */
+                <div className="space-y-4 animate-in fade-in">
+                  <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-slate-700 dark:text-slate-200 space-y-2">
+                    <div className="flex items-center space-x-2 font-bold text-emerald-600 dark:text-emerald-400">
+                      <Check className="w-5 h-5 stroke-[2.5]" />
+                      <span className="text-sm">Gmail đã được kích hoạt</span>
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-slate-300 font-mono bg-white dark:bg-[#1a232e] p-2.5 rounded-xl border border-emerald-500/20">
+                      {currentUser.email}
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Trạng thái: <strong className="text-emerald-600 dark:text-emerald-400 font-semibold">Đã xác thực chính chủ</strong>. Tài khoản của bạn được bảo vệ đầy đủ.
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-300">
-                    Mã xác thực OTP gồm 6 chữ số đã được gửi đến: <strong className="text-[#2481cc] font-mono text-sm">{emailInput}</strong>.
-                  </p>
-                  <p className="text-[11px] text-slate-400 italic">
-                    Vui lòng mở hòm thư Gmail (hoặc mục Thư rác/Spam) của bạn và nhập mã vào ô bên dưới.
-                  </p>
+
+                  {successMsg && (
+                    <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-1.5">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{successMsg}</span>
+                    </div>
+                  )}
+
+                  {errorMsg && (
+                    <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs">
+                      {errorMsg}
+                    </div>
+                  )}
+
+                  <div className="pt-2 space-y-2">
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={handleRemoveEmail}
+                      className="w-full py-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center space-x-1.5"
+                    >
+                      <span>Gỡ hoặc Đổi địa chỉ Gmail khác</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveSubView('main')}
+                      className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium text-xs transition-colors cursor-pointer"
+                    >
+                      Quay lại cài đặt
+                    </button>
+                  </div>
                 </div>
-              )}
+              ) : (
+                /* Chưa xác minh: Cho phép nhập Email và mã OTP */
+                <div className="space-y-4">
+                  {/* Input Email */}
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                      Địa chỉ Gmail của bạn:
+                    </label>
+                    <div className="flex space-x-2">
+                      <input
+                        type="email"
+                        value={emailInput}
+                        onChange={(e) => setEmailInput(e.target.value)}
+                        placeholder="VD: user@gmail.com"
+                        className="flex-1 h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 border border-transparent dark:border-slate-700/60"
+                      />
+                      <button
+                        type="button"
+                        disabled={isSaving || emailOtpCountdown > 0 || !emailInput.trim()}
+                        onClick={handleSendEmailOtp}
+                        className="px-3.5 h-10 rounded-xl bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap cursor-pointer shadow-sm"
+                      >
+                        {isSaving ? 'Đang gửi...' : emailOtpCountdown > 0 ? `Gửi lại (${emailOtpCountdown}s)` : 'Gửi mã OTP'}
+                      </button>
+                    </div>
+                  </div>
 
-              {/* OTP Input */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-                  Nhập mã OTP xác thực (6 chữ số):
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={emailOtpCode}
-                  onChange={(e) => setEmailOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="••••••"
-                  className="w-full h-12 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-center text-xl tracking-[0.8em] font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 border border-transparent dark:border-slate-700/60"
-                />
-              </div>
+                  {/* Email OTP Notification Alert */}
+                  {emailOtpCountdown > 0 && (
+                    <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/25 text-slate-700 dark:text-slate-200 space-y-1.5 animate-in fade-in slide-in-from-top-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-[#2481cc]">
+                        <span className="flex items-center space-x-1.5">
+                          <Mail className="w-3.5 h-3.5" />
+                          <span>ĐÃ GỬI MÃ XÁC THỰC QUA GMAIL</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal">Hiệu lực 5 phút</span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        Mã xác thực OTP gồm 6 chữ số đã được gửi đến: <strong className="text-[#2481cc] font-mono text-sm">{emailInput}</strong>.
+                      </p>
+                      <p className="text-[11px] text-slate-400 italic">
+                        Vui lòng mở hòm thư Gmail (hoặc mục Thư rác/Spam) của bạn và nhập mã vào ô bên dưới.
+                      </p>
+                    </div>
+                  )}
 
-              {errorMsg && (
-                <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs">
-                  {errorMsg}
+                  {/* OTP Input */}
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                      Nhập mã OTP xác thực (6 chữ số):
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={emailOtpCode}
+                      onChange={(e) => setEmailOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="••••••"
+                      className="w-full h-12 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-center text-xl tracking-[0.8em] font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 border border-transparent dark:border-slate-700/60"
+                    />
+                  </div>
+
+                  {errorMsg && (
+                    <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs">
+                      {errorMsg}
+                    </div>
+                  )}
+
+                  {successMsg && (
+                    <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-1.5">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{successMsg}</span>
+                    </div>
+                  )}
+
+                  <button
+                    disabled={isSaving || emailOtpCode.length !== 6 || !sentEmailOtp}
+                    onClick={handleVerifyEmailOtp}
+                    className="w-full py-2.5 rounded-xl bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-blue-500/20 cursor-pointer"
+                  >
+                    {isSaving ? 'Đang xác minh...' : 'Xác Minh & Kích Hoạt Gmail'}
+                  </button>
+
+                  {currentUser.email && (
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={handleRemoveEmail}
+                      className="w-full py-2 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs transition-all active:scale-95 cursor-pointer"
+                    >
+                      Xóa Gmail này khỏi tài khoản
+                    </button>
+                  )}
                 </div>
-              )}
-
-              {successMsg && (
-                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-1.5">
-                  <Check className="w-3.5 h-3.5" />
-                  <span>{successMsg}</span>
-                </div>
-              )}
-
-              <button
-                disabled={isSaving || emailOtpCode.length !== 6 || !sentEmailOtp}
-                onClick={handleVerifyEmailOtp}
-                className="w-full py-2.5 rounded-xl bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-blue-500/20 cursor-pointer"
-              >
-                {isSaving ? 'Đang xác minh...' : 'Xác Minh & Kích Hoạt Gmail'}
-              </button>
-
-              {currentUser.email && (
-                <button
-                  type="button"
-                  disabled={isSaving}
-                  onClick={handleRemoveEmail}
-                  className="w-full py-2 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs transition-all active:scale-95 cursor-pointer"
-                >
-                  Xóa Gmail này khỏi tài khoản
-                </button>
               )}
             </div>
           ) : (
@@ -1543,95 +1596,148 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 </p>
               </div>
 
-              {/* Input Phone Number */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-                  Số điện thoại của bạn:
-                </label>
-                <div className="flex space-x-2">
-                  <input
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="VD: 0912345678 hoặc +84..."
-                    className="flex-1 h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-teal-500 border border-transparent dark:border-slate-700/60"
-                  />
-                  <button
-                    type="button"
-                    disabled={isSaving || otpCountdown > 0 || !phoneNumber.trim()}
-                    onClick={handleSendOtp}
-                    className="px-3.5 h-10 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap cursor-pointer shadow-sm"
-                  >
-                    {isSaving ? 'Đang tạo...' : otpCountdown > 0 ? `Gửi lại (${otpCountdown}s)` : 'Gửi mã OTP'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Server OTP Notification Alert */}
-              {otpCountdown > 0 && (
-                <div className="p-3.5 rounded-2xl bg-teal-500/10 border border-teal-500/25 text-slate-700 dark:text-slate-200 space-y-1.5 animate-in fade-in slide-in-from-top-2">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-teal-600 dark:text-teal-400">
-                    <span className="flex items-center space-x-1.5">
-                      <Smartphone className="w-3.5 h-3.5" />
-                      <span>ĐÃ GỬI MÃ XÁC THỰC QUA TIN NHẮN SMS</span>
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-normal">Hiệu lực 5 phút</span>
+              {currentUser.phone_number && currentUser.is_phone_verified ? (
+                /* SĐT đã xác minh: Hiển thị trạng thái thành công, ẩn ô OTP */
+                <div className="space-y-4 animate-in fade-in">
+                  <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-slate-700 dark:text-slate-200 space-y-2">
+                    <div className="flex items-center space-x-2 font-bold text-emerald-600 dark:text-emerald-400">
+                      <Check className="w-5 h-5 stroke-[2.5]" />
+                      <span className="text-sm">Số điện thoại đã được kích hoạt</span>
+                    </div>
+                    <div className="text-xs text-slate-600 dark:text-slate-300 font-mono bg-white dark:bg-[#1a232e] p-2.5 rounded-xl border border-emerald-500/20">
+                      {currentUser.phone_number}
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Trạng thái: <strong className="text-emerald-600 dark:text-emerald-400 font-semibold">Đã xác thực chính chủ</strong>.
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-300">
-                    Mã xác thực OTP gồm 6 chữ số đã được gửi qua tin nhắn SMS tới số: <strong className="text-teal-600 dark:text-teal-400 font-mono text-sm">{phoneNumber}</strong>.
-                  </p>
-                  <p className="text-[11px] text-slate-400 italic">
-                    Vui lòng mở ứng dụng Tin nhắn trên điện thoại của bạn và nhập mã vào ô bên dưới.
-                  </p>
+
+                  {successMsg && (
+                    <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-1.5">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{successMsg}</span>
+                    </div>
+                  )}
+
+                  {errorMsg && (
+                    <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs">
+                      {errorMsg}
+                    </div>
+                  )}
+
+                  <div className="pt-2 space-y-2">
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={handleRemovePhone}
+                      className="w-full py-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center space-x-1.5"
+                    >
+                      <span>Gỡ hoặc Đổi số điện thoại khác</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveSubView('main')}
+                      className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium text-xs transition-colors cursor-pointer"
+                    >
+                      Quay lại cài đặt
+                    </button>
+                  </div>
                 </div>
-              )}
+              ) : (
+                /* SĐT chưa xác minh: Cho phép nhập và xác thực OTP */
+                <div className="space-y-4">
+                  {/* Input Phone Number */}
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                      Số điện thoại của bạn:
+                    </label>
+                    <div className="flex space-x-2">
+                      <input
+                        type="tel"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        placeholder="VD: 0912345678 hoặc +84..."
+                        className="flex-1 h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-teal-500 border border-transparent dark:border-slate-700/60"
+                      />
+                      <button
+                        type="button"
+                        disabled={isSaving || otpCountdown > 0 || !phoneNumber.trim()}
+                        onClick={handleSendOtp}
+                        className="px-3.5 h-10 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap cursor-pointer shadow-sm"
+                      >
+                        {isSaving ? 'Đang gửi...' : otpCountdown > 0 ? `Gửi lại (${otpCountdown}s)` : 'Gửi mã OTP'}
+                      </button>
+                    </div>
+                  </div>
 
-              {/* OTP Input */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-                  Nhập mã OTP xác thực (6 chữ số):
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="••••••"
-                  className="w-full h-12 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-center text-xl tracking-[0.8em] font-mono focus:outline-none focus:ring-2 focus:ring-teal-500 border border-transparent dark:border-slate-700/60"
-                />
-              </div>
+                  {/* Server OTP Notification Alert */}
+                  {otpCountdown > 0 && (
+                    <div className="p-3.5 rounded-2xl bg-teal-500/10 border border-teal-500/25 text-slate-700 dark:text-slate-200 space-y-1.5 animate-in fade-in slide-in-from-top-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-teal-600 dark:text-teal-400">
+                        <span className="flex items-center space-x-1.5">
+                          <Smartphone className="w-3.5 h-3.5" />
+                          <span>ĐÃ GỬI MÃ XÁC THỰC QUA TIN NHẮN SMS</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal">Hiệu lực 5 phút</span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        Mã xác thực OTP gồm 6 chữ số đã được gửi qua tin nhắn SMS tới số: <strong className="text-teal-600 dark:text-teal-400 font-mono text-sm">{phoneNumber}</strong>.
+                      </p>
+                      <p className="text-[11px] text-slate-400 italic">
+                        Vui lòng mở ứng dụng Tin nhắn trên điện thoại của bạn và nhập mã vào ô bên dưới.
+                      </p>
+                    </div>
+                  )}
 
-              {errorMsg && (
-                <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs">
-                  {errorMsg}
+                  {/* OTP Input */}
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                      Nhập mã OTP xác thực (6 chữ số):
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="••••••"
+                      className="w-full h-12 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-center text-xl tracking-[0.8em] font-mono focus:outline-none focus:ring-2 focus:ring-teal-500 border border-transparent dark:border-slate-700/60"
+                    />
+                  </div>
+
+                  {errorMsg && (
+                    <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs">
+                      {errorMsg}
+                    </div>
+                  )}
+
+                  {successMsg && (
+                    <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-1.5">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{successMsg}</span>
+                    </div>
+                  )}
+
+                  <button
+                    disabled={isSaving || otpCode.length !== 6 || !sentOtp}
+                    onClick={handleVerifyOtp}
+                    className="w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-teal-500/20 cursor-pointer"
+                  >
+                    {isSaving ? 'Đang xác minh...' : 'Xác Minh & Kích Hoạt Số Điện Thoại'}
+                  </button>
+
+                  {currentUser.phone_number && (
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={handleRemovePhone}
+                      className="w-full py-2 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs transition-all active:scale-95 cursor-pointer"
+                    >
+                      Xóa số điện thoại này khỏi tài khoản
+                    </button>
+                  )}
                 </div>
-              )}
-
-              {successMsg && (
-                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-1.5">
-                  <Check className="w-3.5 h-3.5" />
-                  <span>{successMsg}</span>
-                </div>
-              )}
-
-              <button
-                disabled={isSaving || otpCode.length !== 6 || !sentOtp}
-                onClick={handleVerifyOtp}
-                className="w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-teal-500/20 cursor-pointer"
-              >
-                {isSaving ? 'Đang xác minh...' : 'Xác Minh & Kích Hoạt Số Điện Thoại'}
-              </button>
-
-              {currentUser.phone_number && (
-                <button
-                  type="button"
-                  disabled={isSaving}
-                  onClick={handleRemovePhone}
-                  className="w-full py-2 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs transition-all active:scale-95 cursor-pointer"
-                >
-                  Xóa số điện thoại này khỏi tài khoản
-                </button>
               )}
             </div>
           )}
