@@ -44,6 +44,71 @@ interface ChatContextType {
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
+// Helper: Web Audio API sound for new message notification (Telegram/Messenger style pleasant double chime)
+function playMessageNotificationSound() {
+  if (localStorage.getItem('vibe_notification_sound') === 'false') return;
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    
+    // First gentle chime (F#5: 739.99 Hz)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(740, ctx.currentTime);
+    gain1.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(ctx.currentTime);
+    osc1.stop(ctx.currentTime + 0.12);
+
+    // Second higher crisp chime (A5: 880 Hz)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(880, ctx.currentTime + 0.08);
+    gain2.gain.setValueAtTime(0.15, ctx.currentTime + 0.08);
+    gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(ctx.currentTime + 0.08);
+    osc2.stop(ctx.currentTime + 0.35);
+  } catch {
+    // Ignore audio context block if user has not interacted with DOM yet
+  }
+}
+
+// Helper: Desktop notification popup for incoming messages
+function triggerDesktopNotification(senderName: string, content: string) {
+  try {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
+      const notif = new Notification(senderName || 'Tin nhắn mới', {
+        body: content || 'Đã gửi một tệp đính kèm',
+        icon: '/app.ico',
+        silent: true,
+      });
+      notif.onclick = () => {
+        window.focus();
+      };
+    } else if (Notification.permission === 'default') {
+      Notification.requestPermission().then((perm) => {
+        if (perm === 'granted') {
+          new Notification(senderName || 'Tin nhắn mới', {
+            body: content || 'Đã gửi một tệp đính kèm',
+            icon: '/app.ico',
+            silent: true,
+          });
+        }
+      });
+    }
+  } catch {
+    // Notification not supported or blocked
+  }
+}
+
 export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('vibe_user') || localStorage.getItem('telegram_user');
@@ -86,6 +151,13 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       localStorage.removeItem('telegram_user');
     }
   }, [currentUser]);
+
+  // Request notification permission once if not determined
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
 
   const refreshConversations = useCallback(async () => {
     if (!currentUser) return;
@@ -436,12 +508,27 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (event.message) {
             const newMsg = normalizeMessage(event.message);
             const currentCid = activeConvIdRef.current || (activeConv ? activeConv.id : null);
-            if (currentCid && String(currentCid) === String(newMsg.conversation_id)) {
+            const isCurrentChat = Boolean(currentCid && String(currentCid) === String(newMsg.conversation_id));
+
+            if (isCurrentChat) {
               setMessages((prev) => {
                 if (prev.some((m) => m.id === newMsg.id)) return prev;
                 return [...prev, newMsg];
               });
             }
+
+            // If message is from someone else, trigger notification sound and desktop alert
+            if (currentUser && Number(newMsg.sender_id) !== Number(currentUser.id)) {
+              playMessageNotificationSound();
+              // Trigger Windows desktop notification if app is in background or looking at another chat
+              if (document.hidden || !isCurrentChat) {
+                triggerDesktopNotification(
+                  newMsg.sender_name || 'Tin nhắn mới',
+                  newMsg.content || 'Đã gửi một tệp đính kèm'
+                );
+              }
+            }
+
             refreshConversations();
           }
           break;
