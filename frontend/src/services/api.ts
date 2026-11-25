@@ -132,6 +132,18 @@ export const apiService = {
     return await this.sendRequest('verify_phone_otp', { user_id: userId, phone_number: phoneNumber, otp_code: otpCode });
   },
 
+  async requestEmailOtp(userId: number, email: string): Promise<{ success: boolean; error?: string; message?: string }> {
+    return await this.sendRequest('request_email_otp', { user_id: userId, email });
+  },
+
+  async verifyEmailOtp(userId: number, email: string, otpCode: string): Promise<{ success: boolean; user?: User; error?: string; message?: string }> {
+    return await this.sendRequest('verify_email_otp', { user_id: userId, email, otp_code: otpCode });
+  },
+
+  async removeEmail(userId: number): Promise<{ success: boolean; user?: User; error?: string; message?: string }> {
+    return await this.sendRequest('remove_email', { user_id: userId });
+  },
+
   // Conversations
   async getConversations(userId: number): Promise<{ success: boolean; conversations: Conversation[] }> {
     const res = await this.sendRequest('get_conversations', { user_id: userId });

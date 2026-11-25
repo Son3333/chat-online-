@@ -496,6 +496,43 @@ class ChatServer:
                 })
             return {"action": "verify_phone_otp_response", **res}
 
+        # 2.5 Yêu cầu tạo mã OTP xác minh Gmail
+        elif action == "request_email_otp":
+            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
+            email = packet.get("email")
+            res = self.db.create_email_otp(user_id, email)
+            client_res = dict(res)
+            client_res.pop("otp_code", None)
+            return {"action": "request_email_otp_response", **client_res}
+
+        # 2.6 Xác minh mã OTP Gmail
+        elif action == "verify_email_otp":
+            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
+            email = packet.get("email")
+            otp_code = packet.get("otp_code")
+            res = self.db.verify_email_otp(user_id, email, otp_code)
+            if res.get("success"):
+                with self.lock:
+                    all_online = list(self.active_clients.keys())
+                self.broadcast_to_users(all_online, {
+                    "type": "profile_updated",
+                    "user": res.get("user")
+                })
+            return {"action": "verify_email_otp_response", **res}
+
+        # 2.7 Gỡ bỏ Gmail
+        elif action == "remove_email":
+            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
+            res = self.db.remove_email(user_id)
+            if res.get("success"):
+                with self.lock:
+                    all_online = list(self.active_clients.keys())
+                self.broadcast_to_users(all_online, {
+                    "type": "profile_updated",
+                    "user": res.get("user")
+                })
+            return {"action": "remove_email_response", **res}
+
         # 3. Lấy danh sách hội thoại
         elif action == "get_conversations":
             user_id = packet.get("user_id")

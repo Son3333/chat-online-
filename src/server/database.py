@@ -353,7 +353,7 @@ class Database:
             cursor = conn.cursor()
             pwd_hash = hash_password(password)
             cursor.execute("""
-                SELECT id, username, full_name, avatar_color, avatar_url, phone_number, is_phone_verified, is_online, pin_code
+                SELECT id, username, full_name, avatar_color, avatar_url, email, COALESCE(is_email_verified, 0) as is_email_verified, phone_number, is_phone_verified, is_online, pin_code
                 FROM users
                 WHERE username = ? AND password_hash = ?
             """, (username, pwd_hash))
@@ -381,7 +381,7 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT id, username, full_name, avatar_color, avatar_url, phone_number, is_phone_verified, is_online, last_seen, pin_code
+                SELECT id, username, full_name, avatar_color, avatar_url, email, COALESCE(is_email_verified, 0) as is_email_verified, phone_number, is_phone_verified, is_online, last_seen, pin_code
                 FROM users WHERE id = ?
             """, (user_id,))
             row = cursor.fetchone()
@@ -517,6 +517,90 @@ class Database:
 
             user = self.get_user_by_id(user_id)
             return {"success": True, "message": "Xác minh số điện thoại thành công!", "user": user}
+
+    def create_email_otp(self, user_id, email):
+        """Tạo mã OTP 6 số xác thực địa chỉ Gmail/Email và lưu vào CSDL với thời hạn 5 phút."""
+        clean_email = str(email or '').strip().lower()
+        if not re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', clean_email):
+            return {"success": False, "error": "Địa chỉ Gmail/Email không đúng định dạng!"}
+
+        otp_code = f"{random.randint(100000, 999999)}"
+        expires_at = (datetime.now() + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE otp_verifications SET is_used = 1
+                WHERE user_id = ? AND target = ? AND purpose = 'email_verification' AND is_used = 0
+            """, (user_id, clean_email))
+            cursor.execute("""
+                INSERT INTO otp_verifications (user_id, target, target_type, otp_code, purpose, expires_at)
+                VALUES (?, ?, 'email', ?, 'email_verification', ?)
+            """, (user_id, clean_email, otp_code, expires_at))
+            conn.commit()
+
+        # Gửi OTP qua dịch vụ Email
+        try:
+            from .otp_service import otp_service
+            otp_service.send_otp(clean_email, otp_code, "email")
+        except Exception as e:
+            print(f"[OTP Service] Không thể gửi Email OTP: {e}")
+
+        print(f"[OTP] Generated Email OTP for user {user_id} ({clean_email}): {otp_code} (expires at {expires_at})")
+        return {
+            "success": True,
+            "otp_code": otp_code,
+            "email": clean_email,
+            "expires_in": 300,
+            "message": f"Mã xác thực OTP đã được gửi đến Gmail {clean_email}."
+        }
+
+    def verify_email_otp(self, user_id, email, otp_code):
+        """Xác thực mã OTP từ CSDL và đánh dấu Gmail đã xác minh cho tài khoản."""
+        clean_email = str(email or '').strip().lower()
+        clean_otp = str(otp_code or '').strip()
+
+        if not clean_email or not clean_otp:
+            return {"success": False, "error": "Thiếu địa chỉ Gmail hoặc mã OTP!"}
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, otp_code, expires_at, is_used
+                FROM otp_verifications
+                WHERE user_id = ? AND target = ? AND purpose = 'email_verification' AND is_used = 0
+                ORDER BY id DESC LIMIT 1
+            """, (user_id, clean_email))
+            record = cursor.fetchone()
+
+            if not record:
+                return {"success": False, "error": "Không tìm thấy yêu cầu xác minh nào! Vui lòng nhấn gửi lại mã OTP."}
+
+            if record["otp_code"] != clean_otp:
+                return {"success": False, "error": "Mã OTP không chính xác! Vui lòng kiểm tra lại."}
+
+            if record["expires_at"] < now_str:
+                return {"success": False, "error": "Mã OTP đã hết hạn (chỉ có hiệu lực trong 5 phút)! Vui lòng yêu cầu mã mới."}
+
+            cursor.execute("UPDATE otp_verifications SET is_used = 1 WHERE id = ?", (record["id"],))
+            cursor.execute("""
+                UPDATE users SET email = ?, is_email_verified = 1 WHERE id = ?
+            """, (clean_email, user_id))
+            conn.commit()
+
+            user = self.get_user_by_id(user_id)
+            return {"success": True, "message": "Xác minh và liên kết Gmail thành công!", "user": user}
+
+    def remove_email(self, user_id):
+        """Gỡ liên kết Gmail khỏi tài khoản."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET email = NULL, is_email_verified = 0 WHERE id = ?", (user_id,))
+            conn.commit()
+            user = self.get_user_by_id(user_id)
+            return {"success": True, "message": "Đã gỡ liên kết Gmail khỏi tài khoản!", "user": user}
 
     def search_users(self, keyword, current_user_id=None):
         keyword = (keyword or "").strip()

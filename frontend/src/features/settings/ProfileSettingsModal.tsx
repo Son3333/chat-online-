@@ -60,7 +60,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     refreshConversations,
   } = useChat();
 
-  const [activeSubView, setActiveSubView] = useState<'main' | 'edit_profile' | 'change_password' | 'pin_code' | 'phone_verification' | 'link_contact'>('main');
+  const [activeSubView, setActiveSubView] = useState<'main' | 'edit_profile' | 'change_password' | 'pin_code' | 'phone_verification' | 'email_verification' | 'link_contact'>('main');
 
   // Edit profile state
   const [fullName, setFullName] = useState(currentUser?.full_name || '');
@@ -80,6 +80,12 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [otpCode, setOtpCode] = useState('');
   const [sentOtp, setSentOtp] = useState<boolean>(false);
   const [otpCountdown, setOtpCountdown] = useState<number>(0);
+
+  // Email verification state
+  const [emailInput, setEmailInput] = useState(currentUser?.email || '');
+  const [emailOtpCode, setEmailOtpCode] = useState('');
+  const [sentEmailOtp, setSentEmailOtp] = useState<boolean>(false);
+  const [emailOtpCountdown, setEmailOtpCountdown] = useState<number>(0);
 
   // Change password with OTP state
   const [pwdTargetType, setPwdTargetType] = useState<'email' | 'phone'>(
@@ -107,6 +113,14 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     }
   }, [otpCountdown]);
 
+  // Countdown timer cho Email OTP
+  useEffect(() => {
+    if (emailOtpCountdown > 0) {
+      const timer = setTimeout(() => setEmailOtpCountdown(emailOtpCountdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [emailOtpCountdown]);
+
   // Countdown timer cho Password OTP
   useEffect(() => {
     if (pwdOtpCountdown > 0) {
@@ -122,6 +136,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       setSelectedColor(currentUser.avatar_color || '#2481cc');
       setPreviewAvatarUrl(currentUser.avatar_url || '');
       setPhoneNumber(currentUser.phone_number || '');
+      setEmailInput(currentUser.email || '');
     }
   }, [currentUser, isOpen]);
 
@@ -285,6 +300,91 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         }, 800);
       } else {
         setErrorMsg(res.error || 'Lỗi khi gỡ số điện thoại!');
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Lỗi kết nối máy chủ!');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Gửi mã OTP xác minh Gmail
+  const handleSendEmailOtp = async () => {
+    const cleanEmail = emailInput.trim().toLowerCase();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setErrorMsg('Vui lòng nhập địa chỉ Gmail hợp lệ (VD: user@gmail.com)!');
+      return;
+    }
+    setIsSaving(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiService.requestEmailOtp(currentUser.id, cleanEmail);
+      if (res && res.success) {
+        setSentEmailOtp(true);
+        setEmailOtpCountdown(60);
+        setSuccessMsg(res.message || `Mã xác thực OTP đã được gửi đến ${cleanEmail}.`);
+      } else {
+        setErrorMsg(res.error || 'Không thể tạo mã OTP xác thực Gmail!');
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Lỗi khi yêu cầu mã OTP Gmail!');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Xác minh mã OTP Gmail
+  const handleVerifyEmailOtp = async () => {
+    if (!emailOtpCode.trim() || emailOtpCode.trim().length !== 6) {
+      setErrorMsg('Mã OTP phải bao gồm đúng 6 chữ số!');
+      return;
+    }
+    setIsSaving(true);
+    setErrorMsg(null);
+    try {
+      const cleanEmail = emailInput.trim().toLowerCase();
+      const res = await apiService.verifyEmailOtp(currentUser.id, cleanEmail, emailOtpCode.trim());
+      if (res && res.success && res.user) {
+        setCurrentUser(res.user);
+        localStorage.setItem('vibe_user', JSON.stringify(res.user));
+        setSuccessMsg('🎉 Địa chỉ Gmail đã được xác thực và liên kết thành công!');
+        setEmailOtpCode('');
+        setSentEmailOtp(false);
+        await refreshConversations();
+        setTimeout(() => {
+          setSuccessMsg(null);
+          setActiveSubView('main');
+        }, 1200);
+      } else {
+        setErrorMsg(res.error || 'Mã OTP không chính xác hoặc đã hết hiệu lực!');
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Lỗi khi xác thực OTP Gmail!');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Gỡ Gmail
+  const handleRemoveEmail = async () => {
+    setIsSaving(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiService.removeEmail(currentUser.id);
+      if (res && res.success && res.user) {
+        setCurrentUser(res.user);
+        localStorage.setItem('vibe_user', JSON.stringify(res.user));
+        setEmailInput('');
+        setEmailOtpCode('');
+        setSentEmailOtp(false);
+        setSuccessMsg('Đã gỡ liên kết Gmail khỏi tài khoản!');
+        await refreshConversations();
+        setTimeout(() => {
+          setSuccessMsg(null);
+          setActiveSubView('main');
+        }, 800);
+      } else {
+        setErrorMsg(res.error || 'Lỗi khi gỡ Gmail!');
       }
     } catch (e: any) {
       setErrorMsg(e.message || 'Lỗi kết nối máy chủ!');
@@ -479,6 +579,8 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 ? 'Đổi mật khẩu qua OTP'
                 : activeSubView === 'pin_code'
                 ? 'Cài đặt mã PIN'
+                : activeSubView === 'email_verification'
+                ? 'Xác minh tài khoản Gmail'
                 : activeSubView === 'link_contact'
                 ? 'Liên kết Gmail / SĐT'
                 : 'Xác minh số điện thoại'}
@@ -563,11 +665,11 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   onClick={() => {
                     setErrorMsg(null);
                     setSuccessMsg(null);
-                    setContactType('email');
-                    setActiveSubView('link_contact');
+                    setEmailInput(currentUser.email || '');
+                    setActiveSubView('email_verification');
                   }}
                   className="flex items-center justify-between text-xs cursor-pointer hover:opacity-80 transition-opacity"
-                  title="Nhấn để liên kết tài khoản Gmail"
+                  title="Nhấn để thiết lập hoặc xác minh Gmail qua mã OTP"
                 >
                   <span className="text-slate-500 dark:text-slate-400 flex items-center space-x-1.5">
                     <Mail className="w-3.5 h-3.5 text-blue-500" />
@@ -577,14 +679,14 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     <span className="font-semibold text-slate-800 dark:text-slate-100 font-mono text-[11px] truncate max-w-[140px]">
                       {currentUser.email || 'Chưa thiết lập'}
                     </span>
-                    {currentUser.email ? (
-                      <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center space-x-0.5">
+                    {currentUser.email && currentUser.is_email_verified ? (
+                      <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center space-x-0.5">
                         <Check className="w-2.5 h-2.5 stroke-[3]" />
-                        <span>Đã liên kết</span>
+                        <span>Đã xác minh</span>
                       </span>
                     ) : (
                       <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400">
-                        Liên kết ngay
+                        {currentUser.email ? 'Chờ xác minh' : 'Thêm ngay'}
                       </span>
                     )}
                   </div>
@@ -657,6 +759,44 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                       {currentUser.phone_number && currentUser.is_phone_verified
                         ? 'Đã xác minh'
                         : currentUser.phone_number
+                        ? 'Chờ xác minh'
+                        : 'Chưa thêm'}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-slate-400" />
+                  </div>
+                </button>
+
+                {/* 2.1 Gmail Verification */}
+                <button
+                  onClick={() => {
+                    setErrorMsg(null);
+                    setSuccessMsg(null);
+                    setEmailInput(currentUser.email || '');
+                    setActiveSubView('email_verification');
+                  }}
+                  className="w-full px-3.5 py-3 text-left hover:bg-slate-100 dark:hover:bg-slate-700/50 flex items-center justify-between text-xs transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="w-7 h-7 rounded-lg bg-blue-500/15 text-blue-500 flex items-center justify-center">
+                      <Mail className="w-4 h-4" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-slate-700 dark:text-slate-200">
+                        Tài khoản Gmail & Xác minh
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-1.5">
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        currentUser.email && currentUser.is_email_verified
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                      }`}
+                    >
+                      {currentUser.email && currentUser.is_email_verified
+                        ? 'Đã xác minh'
+                        : currentUser.email
                         ? 'Chờ xác minh'
                         : 'Chưa thêm'}
                     </span>
@@ -1279,6 +1419,112 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   className="w-full py-2 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs transition-all active:scale-95 cursor-pointer"
                 >
                   Tắt / Xóa Mã PIN Này
+                </button>
+              )}
+            </div>
+          ) : activeSubView === 'email_verification' ? (
+            /* Sub-view: Email & Verification (OTP) */
+            <div className="p-5 flex flex-col space-y-4 text-xs">
+              <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-slate-700 dark:text-slate-200 space-y-1">
+                <div className="flex items-center space-x-2 font-bold text-[#2481cc]">
+                  <Mail className="w-4 h-4" />
+                  <span>Xác thực tài khoản Gmail chính chủ</span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  {currentUser.email && currentUser.is_email_verified
+                    ? `Tài khoản đã liên kết và xác minh thành công với Gmail: ${currentUser.email}. Bạn có thể dùng Gmail này để nhận mã OTP đổi mật khẩu an toàn.`
+                    : 'Nhập địa chỉ Gmail để nhận mã xác thực OTP qua hòm thư điện tử, giúp kích hoạt tài khoản chính chủ và khôi phục mật khẩu.'}
+                </p>
+              </div>
+
+              {/* Input Email */}
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  Địa chỉ Gmail của bạn:
+                </label>
+                <div className="flex space-x-2">
+                  <input
+                    type="email"
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    placeholder="VD: user@gmail.com"
+                    className="flex-1 h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 border border-transparent dark:border-slate-700/60"
+                  />
+                  <button
+                    type="button"
+                    disabled={isSaving || emailOtpCountdown > 0 || !emailInput.trim()}
+                    onClick={handleSendEmailOtp}
+                    className="px-3.5 h-10 rounded-xl bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 whitespace-nowrap cursor-pointer shadow-sm"
+                  >
+                    {isSaving ? 'Đang gửi...' : emailOtpCountdown > 0 ? `Gửi lại (${emailOtpCountdown}s)` : 'Gửi mã OTP'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Email OTP Notification Alert */}
+              {emailOtpCountdown > 0 && (
+                <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/25 text-slate-700 dark:text-slate-200 space-y-1.5 animate-in fade-in slide-in-from-top-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-[#2481cc]">
+                    <span className="flex items-center space-x-1.5">
+                      <Mail className="w-3.5 h-3.5" />
+                      <span>ĐÃ GỬI MÃ XÁC THỰC QUA GMAIL</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal">Hiệu lực 5 phút</span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Mã xác thực OTP gồm 6 chữ số đã được gửi đến: <strong className="text-[#2481cc] font-mono text-sm">{emailInput}</strong>.
+                  </p>
+                  <p className="text-[11px] text-slate-400 italic">
+                    Vui lòng mở hòm thư Gmail (hoặc mục Thư rác/Spam) của bạn và nhập mã vào ô bên dưới.
+                  </p>
+                </div>
+              )}
+
+              {/* OTP Input */}
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  Nhập mã OTP xác thực (6 chữ số):
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={emailOtpCode}
+                  onChange={(e) => setEmailOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="••••••"
+                  className="w-full h-12 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-center text-xl tracking-[0.8em] font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 border border-transparent dark:border-slate-700/60"
+                />
+              </div>
+
+              {errorMsg && (
+                <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs">
+                  {errorMsg}
+                </div>
+              )}
+
+              {successMsg && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-1.5">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{successMsg}</span>
+                </div>
+              )}
+
+              <button
+                disabled={isSaving || emailOtpCode.length !== 6 || !sentEmailOtp}
+                onClick={handleVerifyEmailOtp}
+                className="w-full py-2.5 rounded-xl bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-blue-500/20 cursor-pointer"
+              >
+                {isSaving ? 'Đang xác minh...' : 'Xác Minh & Kích Hoạt Gmail'}
+              </button>
+
+              {currentUser.email && (
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={handleRemoveEmail}
+                  className="w-full py-2 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs transition-all active:scale-95 cursor-pointer"
+                >
+                  Xóa Gmail này khỏi tài khoản
                 </button>
               )}
             </div>
