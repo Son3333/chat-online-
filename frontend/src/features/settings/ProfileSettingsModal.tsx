@@ -1293,7 +1293,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
                   {currentUser.phone_number && currentUser.is_phone_verified
                     ? `Tài khoản đã liên kết và xác minh thành công với số ${currentUser.phone_number}. Người dùng khác có thể tìm thấy bạn qua số điện thoại này.`
-                    : 'Nhập số điện thoại để nhận mã xác minh OTP từ Máy chủ (phát qua Thông báo Windows Toast & SMS), giúp kích hoạt tài khoản chính chủ và tìm kiếm bạn bè.'}
+                    : 'Nhập số điện thoại để nhận mã xác thực OTP qua tin nhắn SMS, giúp kích hoạt tài khoản chính chủ và tìm kiếm bạn bè dễ dàng hơn.'}
                 </p>
               </div>
 
