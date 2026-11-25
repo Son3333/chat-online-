@@ -628,21 +628,28 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               {/* Account Info Section */}
               <div className="mx-4 my-2 p-3 rounded-2xl bg-slate-50 dark:bg-[#202b36] border border-slate-200/60 dark:border-slate-800/80 space-y-2.5">
                 {/* Phone Number row */}
-                <div
-                  onClick={() => {
-                    setErrorMsg(null);
-                    setSuccessMsg(null);
-                    setActiveSubView('phone_verification');
-                  }}
-                  className="flex items-center justify-between text-xs cursor-pointer hover:opacity-80 transition-opacity"
-                  title="Nhấn để thiết lập hoặc xác minh số điện thoại"
-                >
-                  <span className="text-slate-500 dark:text-slate-400 flex items-center space-x-1.5">
+                <div className="flex items-center justify-between text-xs py-0.5">
+                  <div
+                    onClick={() => {
+                      setErrorMsg(null);
+                      setSuccessMsg(null);
+                      setActiveSubView('phone_verification');
+                    }}
+                    className="flex items-center space-x-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+                    title="Nhấn để thiết lập hoặc xác minh số điện thoại"
+                  >
                     <Phone className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>Số điện thoại</span>
-                  </span>
+                    <span className="text-slate-500 dark:text-slate-400">Số điện thoại</span>
+                  </div>
                   <div className="flex items-center space-x-1.5">
-                    <span className="font-semibold text-slate-800 dark:text-slate-100 font-mono">
+                    <span
+                      onClick={() => {
+                        setErrorMsg(null);
+                        setSuccessMsg(null);
+                        setActiveSubView('phone_verification');
+                      }}
+                      className="font-semibold text-slate-800 dark:text-slate-100 font-mono cursor-pointer hover:underline"
+                    >
                       {currentUser.phone_number || 'Chưa thiết lập'}
                     </span>
                     {currentUser.phone_number && currentUser.is_phone_verified ? (
@@ -651,9 +658,31 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                         <span>Đã xác minh</span>
                       </span>
                     ) : (
-                      <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                      <span
+                        onClick={() => {
+                          setErrorMsg(null);
+                          setSuccessMsg(null);
+                          setActiveSubView('phone_verification');
+                        }}
+                        className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 cursor-pointer"
+                      >
                         {currentUser.phone_number ? 'Chưa xác minh' : 'Thêm ngay'}
                       </span>
+                    )}
+                    {currentUser.phone_number && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm('Bạn có chắc chắn muốn gỡ số điện thoại này khỏi tài khoản không?')) {
+                            handleRemovePhone();
+                          }
+                        }}
+                        className="p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-500/15 text-red-500 transition-colors ml-1"
+                        title="Gỡ số điện thoại khỏi tài khoản"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     )}
                   </div>
                 </div>
@@ -661,22 +690,30 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 <div className="h-px bg-slate-200/60 dark:bg-slate-700/60" />
 
                 {/* Email / Gmail row */}
-                <div
-                  onClick={() => {
-                    setErrorMsg(null);
-                    setSuccessMsg(null);
-                    setEmailInput(currentUser.email || '');
-                    setActiveSubView('email_verification');
-                  }}
-                  className="flex items-center justify-between text-xs cursor-pointer hover:opacity-80 transition-opacity"
-                  title="Nhấn để thiết lập hoặc xác minh Gmail qua mã OTP"
-                >
-                  <span className="text-slate-500 dark:text-slate-400 flex items-center space-x-1.5">
+                <div className="flex items-center justify-between text-xs py-0.5">
+                  <div
+                    onClick={() => {
+                      setErrorMsg(null);
+                      setSuccessMsg(null);
+                      setEmailInput(currentUser.email || '');
+                      setActiveSubView('email_verification');
+                    }}
+                    className="flex items-center space-x-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+                    title="Nhấn để thiết lập hoặc xác minh Gmail qua mã OTP"
+                  >
                     <Mail className="w-3.5 h-3.5 text-blue-500" />
-                    <span>Tài khoản Gmail</span>
-                  </span>
+                    <span className="text-slate-500 dark:text-slate-400">Tài khoản Gmail</span>
+                  </div>
                   <div className="flex items-center space-x-1.5">
-                    <span className="font-semibold text-slate-800 dark:text-slate-100 font-mono text-[11px] truncate max-w-[140px]">
+                    <span
+                      onClick={() => {
+                        setErrorMsg(null);
+                        setSuccessMsg(null);
+                        setEmailInput(currentUser.email || '');
+                        setActiveSubView('email_verification');
+                      }}
+                      className="font-semibold text-slate-800 dark:text-slate-100 font-mono text-[11px] truncate max-w-[130px] cursor-pointer hover:underline"
+                    >
                       {currentUser.email || 'Chưa thiết lập'}
                     </span>
                     {currentUser.email && currentUser.is_email_verified ? (
@@ -685,9 +722,32 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                         <span>Đã xác minh</span>
                       </span>
                     ) : (
-                      <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                      <span
+                        onClick={() => {
+                          setErrorMsg(null);
+                          setSuccessMsg(null);
+                          setEmailInput(currentUser.email || '');
+                          setActiveSubView('email_verification');
+                        }}
+                        className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 cursor-pointer"
+                      >
                         {currentUser.email ? 'Chờ xác minh' : 'Thêm ngay'}
                       </span>
+                    )}
+                    {currentUser.email && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm('Bạn có chắc chắn muốn gỡ địa chỉ Gmail này khỏi tài khoản không?')) {
+                            handleRemoveEmail();
+                          }
+                        }}
+                        className="p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-500/15 text-red-500 transition-colors ml-1"
+                        title="Gỡ Gmail khỏi tài khoản"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     )}
                   </div>
                 </div>
