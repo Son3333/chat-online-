@@ -222,7 +222,8 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         setCurrentUser(res.user);
         localStorage.setItem('vibe_user', JSON.stringify(res.user));
         setSuccessMsg('Đã cập nhật hồ sơ & ảnh đại diện thành công!');
-        await refreshConversations();
+        setIsSaving(false);
+        refreshConversations().catch(() => {});
         setTimeout(() => {
           setSuccessMsg(null);
           setActiveSubView('main');
@@ -279,11 +280,12 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         setSuccessMsg('🎉 Số điện thoại đã được xác minh thành công trên hệ thống!');
         setOtpCode('');
         setSentOtp(false);
-        await refreshConversations();
+        setIsSaving(false);
+        refreshConversations().catch(() => {});
         setTimeout(() => {
           setSuccessMsg(null);
           setActiveSubView('main');
-        }, 1200);
+        }, 800);
       } else {
         setErrorMsg(res.error || 'Mã OTP không chính xác hoặc đã hết hiệu lực (5 phút)!');
       }
@@ -344,11 +346,12 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         }
         setSuccessMsg(res.message || 'Đã hủy liên kết thành công!');
         setUnlinkOtpCode('');
-        await refreshConversations();
+        setIsSaving(false);
+        refreshConversations().catch(() => {});
         setTimeout(() => {
           setSuccessMsg(null);
           setActiveSubView('main');
-        }, 1200);
+        }, 800);
       } else {
         setErrorMsg(res.error || 'Mã OTP không chính xác hoặc đã hết hiệu lực (5 phút)!');
       }
@@ -401,11 +404,12 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         setSuccessMsg('🎉 Địa chỉ Gmail đã được xác thực và liên kết thành công!');
         setEmailOtpCode('');
         setSentEmailOtp(false);
-        await refreshConversations();
+        setIsSaving(false);
+        refreshConversations().catch(() => {});
         setTimeout(() => {
           setSuccessMsg(null);
           setActiveSubView('main');
-        }, 1200);
+        }, 800);
       } else {
         setErrorMsg(res.error || 'Mã OTP không chính xác hoặc đã hết hiệu lực!');
       }
@@ -429,7 +433,8 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         setEmailOtpCode('');
         setSentEmailOtp(false);
         setSuccessMsg('Đã gỡ liên kết Gmail khỏi tài khoản!');
-        await refreshConversations();
+        setIsSaving(false);
+        refreshConversations().catch(() => {});
         setTimeout(() => {
           setSuccessMsg(null);
           setActiveSubView('main');
