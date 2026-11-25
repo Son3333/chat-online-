@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
-import { Pin, X, Download, MessageCircle, ShieldAlert, UserPlus, Ban, Check, Clock, Move } from 'lucide-react';
+import { Pin, X, Download, MessageCircle, ShieldAlert, UserPlus, Ban, Check, Clock, Move, UploadCloud } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { apiService } from '../../services/api';
 import APP_LOGO from '../../assets/logo';
@@ -38,6 +38,52 @@ export const ChatArea: React.FC = () => {
   const [isSavingReposition, setIsSavingReposition] = useState(false);
   const repositionViewportRef = useRef<HTMLDivElement>(null);
   const repositionImgRef = useRef<HTMLImageElement>(null);
+
+  // Drag & Drop File Upload States
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [droppedFile, setDroppedFile] = useState<File | null>(null);
+  const fileDragCounterRef = useRef(0);
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const types = e.dataTransfer?.types ? Array.from(e.dataTransfer.types) : [];
+    const hasFiles = types.includes('Files') || types.includes('application/x-moz-file') || (e.dataTransfer?.items && e.dataTransfer.items.length > 0);
+    if (hasFiles) {
+      fileDragCounterRef.current += 1;
+      setIsDraggingFile(true);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    fileDragCounterRef.current -= 1;
+    if (fileDragCounterRef.current <= 0) {
+      fileDragCounterRef.current = 0;
+      setIsDraggingFile(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    fileDragCounterRef.current = 0;
+    setIsDraggingFile(false);
+
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      setDroppedFile(file);
+    }
+  };
 
   // Reset pan whenever a new image is selected
   useEffect(() => {
@@ -224,6 +270,11 @@ export const ChatArea: React.FC = () => {
 
   return (
     <div
+      id="chat-area-container"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       className={`flex-1 min-w-0 h-full flex flex-col relative overflow-hidden ${
         !isCustomBg && themePreset ? themePreset.bgClass : 'bg-slate-50 dark:bg-[#0e1621]'
       }`}
@@ -472,7 +523,22 @@ export const ChatArea: React.FC = () => {
       </div>
 
       {/* 4. Bottom Composer */}
-      <ChatComposer />
+      <ChatComposer droppedFile={droppedFile} onClearDroppedFile={() => setDroppedFile(null)} />
+
+      {/* Drag & Drop File Upload Overlay */}
+      {isDraggingFile && (
+        <div className="absolute inset-0 z-50 bg-[#0e1621]/85 backdrop-blur-md border-3 border-dashed border-[#2481cc] rounded-2xl flex flex-col items-center justify-center p-6 select-none animate-in fade-in duration-150 pointer-events-none">
+          <div className="w-20 h-20 rounded-3xl bg-[#2481cc]/25 text-[#2481cc] flex items-center justify-center mb-4 animate-bounce shadow-2xl ring-8 ring-[#2481cc]/15">
+            <UploadCloud className="w-10 h-10" />
+          </div>
+          <span className="text-xl font-bold text-white tracking-wide">
+            Kéo thả nhanh tại đây
+          </span>
+          <span className="text-xs text-slate-300 mt-2 font-medium bg-black/40 px-4 py-1.5 rounded-full border border-white/10">
+            Hỗ trợ Hình ảnh, Video, Tài liệu lên đến 40MB
+          </span>
+        </div>
+      )}
 
       {/* 5. Fullscreen Image Preview Modal */}
       {previewImage && (
