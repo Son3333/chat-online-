@@ -12,7 +12,7 @@ import { useChat } from '../context/ChatContext';
 import { apiService } from '../services/api';
 
 export const App: React.FC = () => {
-  const { currentUser, isLocked, setIsLocked, refreshConversations, isSidebarCollapsed, activeConv } = useChat();
+  const { currentUser, isLocked, setIsLocked, refreshConversations, isSidebarCollapsed } = useChat();
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -56,9 +56,9 @@ export const App: React.FC = () => {
       <div className="flex-1 flex overflow-hidden relative">
         <div
           className={`h-full flex-shrink-0 transition-all duration-200 ${
-            isSidebarCollapsed && activeConv
+            isSidebarCollapsed
               ? 'hidden'
-              : 'w-full lg:w-[320px] block'
+              : 'w-full sm:w-[280px] block'
           }`}
         >
           <Sidebar
@@ -68,9 +68,9 @@ export const App: React.FC = () => {
         </div>
         <div
           className={`h-full flex-1 overflow-hidden transition-all duration-200 ${
-            isSidebarCollapsed && activeConv
+            isSidebarCollapsed
               ? 'flex w-full'
-              : 'hidden lg:flex'
+              : 'hidden sm:flex'
           }`}
         >
           <ChatArea />

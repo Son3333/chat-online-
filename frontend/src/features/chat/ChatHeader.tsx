@@ -129,7 +129,7 @@ export const ChatHeader: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsSidebarCollapsed(true)}
-              className="hidden lg:flex p-1.5 -ml-1 rounded-lg text-slate-500 hover:text-[#2481cc] hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer flex-shrink-0 items-center justify-center"
+              className="hidden sm:flex p-1.5 -ml-1 rounded-lg text-slate-500 hover:text-[#2481cc] hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer flex-shrink-0 items-center justify-center"
               title="Thu gọn danh sách hội thoại"
             >
               <PanelLeftClose className="w-5 h-5" />

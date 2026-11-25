@@ -313,13 +313,13 @@ const LocationBubbleContent: React.FC<{
   };
 
   return (
-    <div className="my-1.5 p-2 rounded-2xl bg-slate-50 dark:bg-[#192430] border border-slate-200 dark:border-slate-700/80 shadow-md min-w-[240px] max-w-sm select-none">
+    <div className="my-1.5 p-2 rounded-2xl bg-slate-50 dark:bg-[#192430] border border-slate-200 dark:border-slate-700/80 shadow-md w-full max-w-[280px] sm:max-w-[300px] select-none">
       {/* 1. Visual Map Preview */}
       {lat && lng ? (
         <div
           onClick={handleOpenDirections}
           title="Bấm để mở Google Maps chỉ đường"
-          className="relative w-full h-36 rounded-xl overflow-hidden cursor-pointer group/map border border-slate-200 dark:border-slate-700 bg-slate-200 dark:bg-slate-800"
+          className="relative w-full h-32 rounded-xl overflow-hidden cursor-pointer group/map border border-slate-200 dark:border-slate-700 bg-slate-200 dark:bg-slate-800"
         >
           <iframe
             title="Location Map Preview"
