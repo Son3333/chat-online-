@@ -593,6 +593,116 @@ class Database:
             user = self.get_user_by_id(user_id)
             return {"success": True, "message": "Xác minh và liên kết Gmail thành công!", "user": user}
 
+    def request_unlink_otp(self, user_id, target_type):
+        """Tạo mã OTP 6 số để xác nhận hủy liên kết Số điện thoại hoặc Gmail."""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return {"success": False, "error": "Người dùng không tồn tại!"}
+
+        target_type = str(target_type or '').strip().lower()
+        if target_type == 'email':
+            target = user.get('email')
+            if not target:
+                return {"success": False, "error": "Tài khoản chưa liên kết Gmail!"}
+            purpose = 'unlink_email'
+        elif target_type == 'phone':
+            target = user.get('phone_number')
+            if not target:
+                return {"success": False, "error": "Tài khoản chưa liên kết số điện thoại!"}
+            purpose = 'unlink_phone'
+        else:
+            return {"success": False, "error": "Loại xác thực không hợp lệ!"}
+
+        otp_code = f"{random.randint(100000, 999999)}"
+        expires_at = (datetime.now() + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE otp_verifications SET is_used = 1
+                WHERE user_id = ? AND target = ? AND purpose = ? AND is_used = 0
+            """, (user_id, target, purpose))
+            cursor.execute("""
+                INSERT INTO otp_verifications (user_id, target, target_type, otp_code, purpose, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (user_id, target, target_type, otp_code, purpose, expires_at))
+            conn.commit()
+
+        try:
+            from .otp_service import otp_service
+            otp_service.send_otp(target, otp_code, target_type)
+        except Exception as e:
+            print(f"[OTP Service] Không thể gửi OTP hủy liên kết: {e}")
+
+        print(f"[OTP] Generated Unlink OTP for user {user_id} ({target_type}={target}): {otp_code}")
+        return {
+            "success": True,
+            "target": target,
+            "target_type": target_type,
+            "expires_in": 300,
+            "message": f"Mã xác thực OTP đã được gửi đến {target} để xác nhận hủy liên kết."
+        }
+
+    def verify_unlink_otp(self, user_id, target_type, otp_code):
+        """Xác thực mã OTP trước khi chính thức xóa Số điện thoại hoặc Gmail."""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return {"success": False, "error": "Người dùng không tồn tại!"}
+
+        target_type = str(target_type or '').strip().lower()
+        clean_otp = str(otp_code or '').strip()
+        if not clean_otp or len(clean_otp) != 6:
+            return {"success": False, "error": "Vui lòng nhập đúng mã OTP 6 chữ số!"}
+
+        if target_type == 'email':
+            target = user.get('email')
+            purpose = 'unlink_email'
+        elif target_type == 'phone':
+            target = user.get('phone_number')
+            purpose = 'unlink_phone'
+        else:
+            return {"success": False, "error": "Loại xác thực không hợp lệ!"}
+
+        if not target:
+            return {"success": False, "error": f"Tài khoản chưa liên kết {target_type}!"}
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, otp_code, expires_at, is_used
+                FROM otp_verifications
+                WHERE user_id = ? AND target = ? AND purpose = ? AND is_used = 0
+                ORDER BY id DESC LIMIT 1
+            """, (user_id, target, purpose))
+            record = cursor.fetchone()
+
+            if not record:
+                return {"success": False, "error": "Không tìm thấy yêu cầu xác minh OTP hợp lệ! Vui lòng nhấn gửi lại mã."}
+
+            if record["otp_code"] != clean_otp:
+                return {"success": False, "error": "Mã OTP xác thực không chính xác! Vui lòng kiểm tra lại."}
+
+            if record["expires_at"] < now_str:
+                return {"success": False, "error": "Mã OTP đã hết hạn (5 phút)! Vui lòng yêu cầu mã mới."}
+
+            # Đánh dấu mã đã sử dụng
+            cursor.execute("UPDATE otp_verifications SET is_used = 1 WHERE id = ?", (record["id"],))
+
+            # Thực hiện hủy liên kết chính thức
+            if target_type == 'email':
+                cursor.execute("UPDATE users SET email = NULL, is_email_verified = 0 WHERE id = ?", (user_id,))
+                msg = "Đã xác thực OTP thành công. Đã hủy liên kết Gmail!"
+            else:
+                cursor.execute("UPDATE users SET phone_number = NULL, is_phone_verified = 0 WHERE id = ?", (user_id,))
+                msg = "Đã xác thực OTP thành công. Đã hủy liên kết số điện thoại!"
+
+            conn.commit()
+
+        updated_user = self.get_user_by_id(user_id)
+        return {"success": True, "message": msg, "user": updated_user}
+
     def remove_email(self, user_id):
         """Gỡ liên kết Gmail khỏi tài khoản."""
         with self.get_connection() as conn:

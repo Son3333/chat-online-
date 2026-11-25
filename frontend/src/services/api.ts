@@ -144,6 +144,14 @@ export const apiService = {
     return await this.sendRequest('remove_email', { user_id: userId });
   },
 
+  async requestUnlinkOtp(userId: number, targetType: 'email' | 'phone'): Promise<{ success: boolean; target?: string; error?: string; message?: string }> {
+    return await this.sendRequest('request_unlink_otp', { user_id: userId, target_type: targetType });
+  },
+
+  async verifyUnlinkOtp(userId: number, targetType: 'email' | 'phone', otpCode: string): Promise<{ success: boolean; user?: User; error?: string; message?: string }> {
+    return await this.sendRequest('verify_unlink_otp', { user_id: userId, target_type: targetType, otp_code: otpCode });
+  },
+
   // Conversations
   async getConversations(userId: number): Promise<{ success: boolean; conversations: Conversation[] }> {
     const res = await this.sendRequest('get_conversations', { user_id: userId });

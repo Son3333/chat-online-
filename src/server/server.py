@@ -533,6 +533,29 @@ class ChatServer:
                 })
             return {"action": "remove_email_response", **res}
 
+        # Yêu cầu OTP hủy liên kết SĐT / Gmail
+        elif action == "request_unlink_otp":
+            user_id = packet.get("user_id")
+            target_type = packet.get("target_type")
+            res = self.db.request_unlink_otp(user_id, target_type)
+            res.pop("otp_code", None)
+            return {"action": "request_unlink_otp_response", **res}
+
+        # Xác thực OTP để chính thức hủy liên kết SĐT / Gmail
+        elif action == "verify_unlink_otp":
+            user_id = packet.get("user_id")
+            target_type = packet.get("target_type")
+            otp_code = packet.get("otp_code")
+            res = self.db.verify_unlink_otp(user_id, target_type, otp_code)
+            if res.get("success") and res.get("user"):
+                with self.lock:
+                    all_online = list(self.active_clients.keys())
+                self.broadcast_to_users(all_online, {
+                    "type": "profile_updated",
+                    "user": res.get("user")
+                })
+            return {"action": "verify_unlink_otp_response", **res}
+
         # 3. Lấy danh sách hội thoại
         elif action == "get_conversations":
             user_id = packet.get("user_id")

@@ -60,7 +60,13 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     refreshConversations,
   } = useChat();
 
-  const [activeSubView, setActiveSubView] = useState<'main' | 'edit_profile' | 'change_password' | 'pin_code' | 'phone_verification' | 'email_verification' | 'link_contact'>('main');
+  const [activeSubView, setActiveSubView] = useState<'main' | 'edit_profile' | 'change_password' | 'pin_code' | 'phone_verification' | 'email_verification' | 'link_contact' | 'unlink_otp'>('main');
+
+  // Unlink via OTP state
+  const [unlinkType, setUnlinkType] = useState<'email' | 'phone'>('email');
+  const [unlinkTarget, setUnlinkTarget] = useState<string>('');
+  const [unlinkOtpCode, setUnlinkOtpCode] = useState<string>('');
+  const [unlinkCountdown, setUnlinkCountdown] = useState<number>(0);
 
   // Edit profile state
   const [fullName, setFullName] = useState(currentUser?.full_name || '');
@@ -128,6 +134,14 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       return () => clearTimeout(timer);
     }
   }, [pwdOtpCountdown]);
+
+  // Countdown timer cho Unlink OTP
+  useEffect(() => {
+    if (unlinkCountdown > 0) {
+      const timer = setTimeout(() => setUnlinkCountdown(unlinkCountdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [unlinkCountdown]);
 
   // Cập nhật state khi currentUser thay đổi
   useEffect(() => {
@@ -280,26 +294,63 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     }
   };
 
-  // Gỡ số điện thoại
-  const handleRemovePhone = async () => {
+  // Khởi động quy trình hủy liên kết yêu cầu mã OTP
+  const startUnlinkProcess = async (type: 'email' | 'phone') => {
+    const target = type === 'email' ? currentUser?.email : currentUser?.phone_number;
+    if (!target) return;
+    setUnlinkType(type);
+    setUnlinkTarget(target);
+    setUnlinkOtpCode('');
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setActiveSubView('unlink_otp');
+    setIsSaving(true);
+    try {
+      const res = await apiService.requestUnlinkOtp(currentUser.id, type);
+      if (res && res.success) {
+        setUnlinkCountdown(60);
+        setSuccessMsg(res.message || `Mã xác thực OTP đã được gửi đến ${type === 'email' ? 'Gmail' : 'Số điện thoại'} của bạn.`);
+      } else {
+        setErrorMsg(res.error || 'Không thể gửi mã OTP xác nhận hủy liên kết!');
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Lỗi khi yêu cầu mã OTP hủy liên kết!');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Xác thực mã OTP để chính thức hủy liên kết
+  const handleConfirmUnlinkWithOtp = async () => {
+    if (!unlinkOtpCode.trim() || unlinkOtpCode.trim().length !== 6) {
+      setErrorMsg('Vui lòng nhập đúng mã OTP 6 chữ số!');
+      return;
+    }
     setIsSaving(true);
     setErrorMsg(null);
     try {
-      const res = await apiService.updateProfile(currentUser.id, {
-        phone_number: '',
-        is_phone_verified: 0,
-      });
+      const res = await apiService.verifyUnlinkOtp(currentUser.id, unlinkType, unlinkOtpCode.trim());
       if (res && res.success && res.user) {
         setCurrentUser(res.user);
         localStorage.setItem('vibe_user', JSON.stringify(res.user));
-        setPhoneNumber('');
-        setSuccessMsg('Đã xóa số điện thoại khỏi tài khoản!');
+        if (unlinkType === 'email') {
+          setEmailInput('');
+          setEmailOtpCode('');
+          setSentEmailOtp(false);
+        } else {
+          setPhoneNumber('');
+          setOtpCode('');
+          setSentOtp(false);
+        }
+        setSuccessMsg(res.message || 'Đã hủy liên kết thành công!');
+        setUnlinkOtpCode('');
+        await refreshConversations();
         setTimeout(() => {
           setSuccessMsg(null);
           setActiveSubView('main');
-        }, 800);
+        }, 1200);
       } else {
-        setErrorMsg(res.error || 'Lỗi khi gỡ số điện thoại!');
+        setErrorMsg(res.error || 'Mã OTP không chính xác hoặc đã hết hiệu lực (5 phút)!');
       }
     } catch (e: any) {
       setErrorMsg(e.message || 'Lỗi kết nối máy chủ!');
@@ -581,6 +632,8 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 ? 'Cài đặt mã PIN'
                 : activeSubView === 'email_verification'
                 ? 'Xác minh tài khoản Gmail'
+                : activeSubView === 'unlink_otp'
+                ? `Hủy liên kết ${unlinkType === 'email' ? 'Gmail' : 'Số điện thoại'}`
                 : activeSubView === 'link_contact'
                 ? 'Liên kết Gmail / SĐT'
                 : 'Xác minh số điện thoại'}
@@ -674,12 +727,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (window.confirm('Bạn có chắc chắn muốn gỡ số điện thoại này khỏi tài khoản không?')) {
-                            handleRemovePhone();
-                          }
+                          startUnlinkProcess('phone');
                         }}
                         className="p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-500/15 text-red-500 transition-colors ml-1"
-                        title="Gỡ số điện thoại khỏi tài khoản"
+                        title="Hủy liên kết số điện thoại qua mã OTP"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -739,12 +790,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (window.confirm('Bạn có chắc chắn muốn gỡ địa chỉ Gmail này khỏi tài khoản không?')) {
-                            handleRemoveEmail();
-                          }
+                          startUnlinkProcess('email');
                         }}
                         className="p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-500/15 text-red-500 transition-colors ml-1"
-                        title="Gỡ Gmail khỏi tài khoản"
+                        title="Hủy liên kết Gmail qua mã OTP"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1530,10 +1579,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     <button
                       type="button"
                       disabled={isSaving}
-                      onClick={handleRemoveEmail}
+                      onClick={() => startUnlinkProcess('email')}
                       className="w-full py-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center space-x-1.5"
                     >
-                      <span>Gỡ hoặc Đổi địa chỉ Gmail khác</span>
+                      <span>Hủy liên kết Gmail (Yêu cầu mã OTP)</span>
                     </button>
 
                     <button
@@ -1641,6 +1690,84 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 </div>
               )}
             </div>
+          ) : activeSubView === 'unlink_otp' ? (
+            /* Sub-view: Confirm Unlink with OTP */
+            <div className="p-5 flex flex-col space-y-4 text-xs">
+              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-slate-700 dark:text-slate-200 space-y-1">
+                <div className="flex items-center space-x-2 font-bold text-amber-600 dark:text-amber-400">
+                  <Shield className="w-4 h-4" />
+                  <span>Xác thực OTP hủy liên kết bảo mật</span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Để đảm bảo an toàn tuyệt đối, hệ thống đã gửi mã OTP 6 chữ số đến <strong>{unlinkTarget}</strong>. Vui lòng xác thực mã này để hoàn tất hủy liên kết.
+                </p>
+              </div>
+
+              {/* Countdown Alert */}
+              <div className="p-3 rounded-xl bg-slate-100 dark:bg-[#202b36] border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
+                <div className="flex items-center space-x-2 text-slate-600 dark:text-slate-300">
+                  {unlinkType === 'email' ? <Mail className="w-4 h-4 text-[#2481cc]" /> : <Phone className="w-4 h-4 text-emerald-500" />}
+                  <span className="font-mono text-xs">{unlinkTarget}</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={isSaving || unlinkCountdown > 0}
+                  onClick={() => startUnlinkProcess(unlinkType)}
+                  className="px-2.5 py-1 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-[11px] font-semibold transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {unlinkCountdown > 0 ? `Gửi lại (${unlinkCountdown}s)` : 'Gửi lại mã'}
+                </button>
+              </div>
+
+              {/* OTP Input */}
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  Nhập mã OTP xác nhận hủy liên kết:
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={unlinkOtpCode}
+                  onChange={(e) => setUnlinkOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="••••••"
+                  className="w-full h-12 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-center text-xl tracking-[0.8em] font-mono focus:outline-none focus:ring-2 focus:ring-amber-500 border border-transparent dark:border-slate-700/60"
+                />
+              </div>
+
+              {errorMsg && (
+                <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs">
+                  {errorMsg}
+                </div>
+              )}
+
+              {successMsg && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-1.5">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{successMsg}</span>
+                </div>
+              )}
+
+              <button
+                disabled={isSaving || unlinkOtpCode.length !== 6}
+                onClick={handleConfirmUnlinkWithOtp}
+                className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-red-500/20 cursor-pointer"
+              >
+                {isSaving ? 'Đang xác thực...' : 'Xác Nhận Hủy Liên Kết'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorMsg(null);
+                  setSuccessMsg(null);
+                  setActiveSubView('main');
+                }}
+                className="w-full py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium text-xs transition-colors cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+            </div>
           ) : (
             /* Sub-view: Phone Number & Verification (OTP) */
             <div className="p-5 flex flex-col space-y-4 text-xs">
@@ -1689,10 +1816,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     <button
                       type="button"
                       disabled={isSaving}
-                      onClick={handleRemovePhone}
+                      onClick={() => startUnlinkProcess('phone')}
                       className="w-full py-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center space-x-1.5"
                     >
-                      <span>Gỡ hoặc Đổi số điện thoại khác</span>
+                      <span>Hủy liên kết số điện thoại (Yêu cầu mã OTP)</span>
                     </button>
 
                     <button
@@ -1791,10 +1918,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     <button
                       type="button"
                       disabled={isSaving}
-                      onClick={handleRemovePhone}
+                      onClick={() => startUnlinkProcess('phone')}
                       className="w-full py-2 rounded-xl bg-red-50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-xs transition-all active:scale-95 cursor-pointer"
                     >
-                      Xóa số điện thoại này khỏi tài khoản
+                      Hủy liên kết số điện thoại (Yêu cầu mã OTP)
                     </button>
                   )}
                 </div>
