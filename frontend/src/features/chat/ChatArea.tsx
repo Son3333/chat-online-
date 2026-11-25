@@ -122,7 +122,7 @@ export const ChatArea: React.FC = () => {
 
   // Custom theme or preset theme resolution
   const themePreset = PRESET_THEMES.find((t) => t.id === activeConv.theme);
-  const isCustomBg = activeConv.theme && activeConv.theme.startsWith('data:image/');
+  const isCustomBg = Boolean(activeConv.theme && (activeConv.theme.startsWith('data:image/') || activeConv.theme.startsWith('http')));
 
   return (
     <div
