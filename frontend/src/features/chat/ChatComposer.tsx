@@ -84,7 +84,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({ droppedFile, onClear
         fileData: b64,
         fileSize: file.size,
         category: cat,
-        caption: '',
+        caption: text.trim(),
       });
       onClearDroppedFile?.();
     };
@@ -296,7 +296,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({ droppedFile, onClear
         fileData: b64,
         fileSize: file.size,
         category: activeCategory,
-        caption: '',
+        caption: text.trim(),
       });
       if (fileInputRef.current) fileInputRef.current.value = '';
     };
@@ -312,6 +312,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({ droppedFile, onClear
       stagingAttachment.category,
       stagingAttachment.caption
     );
+    if (text.trim()) {
+      setText('');
+    }
     setStagingAttachment(null);
   };
 
