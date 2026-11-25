@@ -3,6 +3,7 @@ import os
 import hashlib
 import re
 import random
+import secrets
 from datetime import datetime, timedelta
 from contextlib import contextmanager
 
@@ -252,7 +253,8 @@ class Database:
                 "ALTER TABLE conversation_members ADD COLUMN is_muted INTEGER DEFAULT 0",
                 "ALTER TABLE conversation_members ADD COLUMN muted_by_name TEXT DEFAULT NULL",
                 "ALTER TABLE conversation_members ADD COLUMN muted_at TIMESTAMP DEFAULT NULL",
-                "ALTER TABLE conversation_members ADD COLUMN status TEXT DEFAULT 'active'"
+                "ALTER TABLE conversation_members ADD COLUMN status TEXT DEFAULT 'active'",
+                "ALTER TABLE users ADD COLUMN session_token TEXT DEFAULT NULL"
             ]:
                 try:
                     cursor.execute(migration_sql)
@@ -347,11 +349,12 @@ class Database:
 
             pwd_hash = hash_password(password)
             new_id = self.generate_random_user_id(cursor)
+            session_token = secrets.token_urlsafe(32)
 
             cursor.execute("""
-                INSERT INTO users (id, username, password_hash, full_name, avatar_color)
-                VALUES (?, ?, ?, ?, ?)
-            """, (new_id, username, pwd_hash, full_name, avatar_color))
+                INSERT INTO users (id, username, password_hash, full_name, avatar_color, session_token)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (new_id, username, pwd_hash, full_name, avatar_color, session_token))
 
             # Tự động thêm vào nhóm chat chung nếu có
             cursor.execute("SELECT id FROM conversations WHERE name = 'Nhóm 05 - Đồ Án CNPM'")
@@ -363,7 +366,17 @@ class Database:
                 """, (grp["id"], new_id))
 
             conn.commit()
-            return {"success": True, "user": {"id": new_id, "username": username, "full_name": full_name, "avatar_color": avatar_color}}
+            return {
+                "success": True,
+                "session_token": session_token,
+                "user": {
+                    "id": new_id,
+                    "username": username,
+                    "full_name": full_name,
+                    "avatar_color": avatar_color,
+                    "session_token": session_token
+                }
+            }
 
     def authenticate_user(self, username, password):
         username = username.strip().lower().lstrip("@")
@@ -377,8 +390,42 @@ class Database:
             """, (username, pwd_hash))
             row = cursor.fetchone()
             if row:
-                return {"success": True, "user": dict(row)}
+                user_dict = dict(row)
+                session_token = secrets.token_urlsafe(32)
+                cursor.execute("UPDATE users SET session_token = ? WHERE id = ?", (session_token, user_dict["id"]))
+                conn.commit()
+                user_dict["session_token"] = session_token
+                return {"success": True, "session_token": session_token, "user": user_dict}
             return {"success": False, "message": "Sai tên đăng nhập hoặc mật khẩu!"}
+
+    def verify_session_token(self, user_id, token: str) -> bool:
+        if not user_id or not token:
+            return False
+        try:
+            uid = int(user_id)
+        except Exception:
+            return False
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT session_token FROM users WHERE id = ?", (uid,))
+            row = cursor.fetchone()
+            if not row or not row["session_token"]:
+                return False
+            return secrets.compare_digest(str(row["session_token"]), str(token))
+
+    def is_conversation_member(self, conversation_id, user_id) -> bool:
+        try:
+            cid = int(conversation_id)
+            uid = int(user_id)
+        except Exception:
+            return False
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 1 FROM conversation_members
+                WHERE conversation_id = ? AND user_id = ? AND (status IS NULL OR status = 'active')
+            """, (cid, uid))
+            return cursor.fetchone() is not None
 
     def reset_all_online_status(self):
         with self.get_connection() as conn:
@@ -1958,17 +2005,54 @@ class Database:
                 "new_admin_id": next_admin["user_id"] if next_admin and user_role in ('admin', 'owner') else None
             }
 
-    def add_group_member(self, conversation_id: int, user_id: int, role: str = 'member') -> bool:
-        """Thêm lại hoặc kích hoạt thành viên vào nhóm."""
+    def add_group_member(self, conversation_id: int, operator_id: int, target_id: int) -> dict:
+        """Thêm thành viên mới vào nhóm (chỉ quản trị nhóm có quyền và luôn gán vai trò member)."""
+        try:
+            conversation_id = int(conversation_id)
+            operator_id = int(operator_id)
+            target_id = int(target_id)
+        except Exception:
+            return {"success": False, "message": "Tham số không hợp lệ!"}
+
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            cursor.execute("SELECT type FROM conversations WHERE id = ?", (conversation_id,))
+            conv = cursor.fetchone()
+            if not conv or conv["type"] != "group":
+                return {"success": False, "message": "Nhóm trò chuyện không tồn tại!"}
+
+            cursor.execute("""
+                SELECT role FROM conversation_members
+                WHERE conversation_id = ? AND user_id = ? AND (status IS NULL OR status = 'active')
+            """, (conversation_id, operator_id))
+            op_row = cursor.fetchone()
+            if not op_row:
+                return {"success": False, "message": "Bạn không phải thành viên của nhóm này!"}
+
+            op_rank = self.ROLE_RANKS.get(op_row["role"], 1)
+            if op_rank < 2:
+                return {"success": False, "message": "Chỉ ban quản trị nhóm mới có quyền thêm thành viên!"}
+
+            cursor.execute("SELECT id, full_name FROM users WHERE id = ?", (target_id,))
+            target_user = cursor.fetchone()
+            if not target_user:
+                return {"success": False, "message": "Không tìm thấy người dùng!"}
+
+            cursor.execute("""
+                SELECT status FROM conversation_members
+                WHERE conversation_id = ? AND user_id = ?
+            """, (conversation_id, target_id))
+            existing = cursor.fetchone()
+            if existing and (existing["status"] is None or existing["status"] == "active"):
+                return {"success": False, "message": "Người dùng này đã là thành viên trong nhóm!"}
+
             cursor.execute("""
                 INSERT INTO conversation_members (conversation_id, user_id, role, status)
-                VALUES (?, ?, ?, 'active')
-                ON CONFLICT(conversation_id, user_id) DO UPDATE SET role = ?, status = 'active', is_muted = 0
-            """, (conversation_id, user_id, role, role))
+                VALUES (?, ?, 'member', 'active')
+                ON CONFLICT(conversation_id, user_id) DO UPDATE SET role = 'member', status = 'active', is_muted = 0
+            """, (conversation_id, target_id))
             conn.commit()
-            return True
+            return {"success": True, "target_name": target_user["full_name"]}
 
     # =========================================================================
     # --- PHÂN HỆ: ĐỔI TÊN/AVATAR NHÓM, ĐẶT BIỆT DANH & CHỦ ĐỀ/THEME ĐOẠN CHAT ---
@@ -1997,6 +2081,9 @@ class Database:
 
             if row["type"] != 'group':
                 return {"success": False, "message": "Chỉ có thể đổi thông tin cho nhóm trò chuyện!"}
+
+            if self.ROLE_RANKS.get(row["role"], 1) < 3:
+                return {"success": False, "message": "Chỉ Trưởng nhóm hoặc Đồng thủ lĩnh mới có quyền chỉnh sửa thông tin nhóm!"}
 
             updates = []
             params = []

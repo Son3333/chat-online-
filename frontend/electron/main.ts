@@ -16,7 +16,7 @@ if (typeof _electronCheck === 'string' || !_electronCheck.app) {
   process.exit(0);
 }
 
-import { app, BrowserWindow, ipcMain, dialog, session, desktopCapturer, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, session, desktopCapturer, shell, Tray, Menu, nativeImage } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as net from 'net';
@@ -35,6 +35,8 @@ process.on('uncaughtException', (err) => {
 });
 
 let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let isQuitting = false;
 let pythonProcess: ChildProcess | null = null;
 let pythonBridge: PythonBridge | null = null;
 let gitUpdater: GitUpdater | null = null;
@@ -127,6 +129,7 @@ async function resolveServerEndpoint(): Promise<{ host: string; port: number; is
           cwd: rootDir,
           detached: true,
           stdio: 'ignore',
+          windowsHide: true,
         });
         pythonProcess.unref();
 
@@ -172,10 +175,11 @@ function ensureDesktopShortcut(): void {
     const rootDir = path.resolve(__dirname, '../../');
     const psScript = path.join(rootDir, 'scripts', 'create_desktop_shortcut.ps1');
     if (fs.existsSync(psScript)) {
-      const p = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psScript], {
+      const p = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', psScript], {
         cwd: rootDir,
         detached: true,
         stdio: 'ignore',
+        windowsHide: true,
       });
       p.unref();
     }
@@ -186,6 +190,53 @@ function ensureDesktopShortcut(): void {
 
 async function startPythonBackendIfNeeded(): Promise<void> {
   // Đã được tự động xử lý an toàn trong resolveServerEndpoint()
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function createTray() {
+  if (tray) return;
+  try {
+    const icoPath = path.join(__dirname, '../../app.ico');
+    const pngPath = path.join(__dirname, '../public/logo.png');
+    const iconFile = fs.existsSync(icoPath) ? icoPath : (fs.existsSync(pngPath) ? pngPath : null);
+    const trayIcon = iconFile ? nativeImage.createFromPath(iconFile) : nativeImage.createEmpty();
+
+    tray = new Tray(trayIcon);
+    tray.setToolTip('Vibe Người Tốt');
+
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: 'Mở Vibe Người Tốt',
+        click: () => showMainWindow(),
+      },
+      { type: 'separator' },
+      {
+        label: 'Thoát hoàn toàn',
+        click: () => {
+          isQuitting = true;
+          app.quit();
+        },
+      },
+    ]);
+
+    tray.setContextMenu(contextMenu);
+    tray.on('click', () => {
+      if (mainWindow && mainWindow.isVisible() && !mainWindow.isMinimized()) {
+        mainWindow.focus();
+      } else {
+        showMainWindow();
+      }
+    });
+    tray.on('double-click', () => showMainWindow());
+  } catch (err) {
+    console.warn('[Main] Khong the tao khay he thong:', err);
+  }
 }
 
 async function createWindow() {
@@ -218,6 +269,10 @@ async function createWindow() {
   // Forward push events from Python to React renderer
   pythonBridge.onEvent((event) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
+      if (event.type === 'call_incoming') {
+        showMainWindow();
+        mainWindow.flashFrame(true);
+      }
       mainWindow.webContents.send('server:event', event);
     }
   });
@@ -244,6 +299,13 @@ async function createWindow() {
       shell.openExternal(url);
     }
     return { action: 'deny' };
+  });
+
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow?.hide();
+    }
   });
 
   mainWindow.on('closed', () => {
@@ -428,6 +490,15 @@ ipcMain.handle('media:get-screen-source-id', async () => {
   return null;
 });
 
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    showMainWindow();
+  });
+}
+
 app.whenReady().then(async () => {
   // Grant all media permissions (Microphone, Camera, Screen Share, Geolocation)
   session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
@@ -464,6 +535,7 @@ app.whenReady().then(async () => {
   registerUpdaterIpc(gitUpdater);
   gitUpdater.startListening(120000);
 
+  createTray();
   await createWindow();
 
   app.on('activate', () => {
@@ -480,6 +552,11 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  isQuitting = true;
+  if (tray) {
+    tray.destroy();
+    tray = null;
+  }
   if (gitUpdater) {
     gitUpdater.stopListening();
   }

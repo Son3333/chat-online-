@@ -437,6 +437,9 @@ class ChatServer:
         # 2.1 Nhận diện lại sau khi rớt mạng / máy chủ khởi động lại (Session Resume)
         elif action == "identify":
             user_id = packet.get("user_id")
+            session_token = packet.get("session_token")
+            if not self.db.verify_session_token(user_id, session_token):
+                return {"action": "identify_response", "success": False, "message": "Phiên xác thực không hợp lệ hoặc đã hết hạn!"}
             user = self.db.get_user_by_id(user_id)
             if user:
                 return {"action": "identify_response", "success": True, "user": user}
@@ -812,8 +815,11 @@ class ChatServer:
 
         # 10. Tạo nhóm chat (Có chống spam & kiểm tra hợp lệ)
         elif action == "create_group":
-            creator_id = packet.get("creator_id")
-            name = packet.get("name", "").strip()
+            auth_uid = self._get_auth_user_id(client_sock)
+            if not auth_uid:
+                return {"action": "create_group_response", "success": False, "message": "Bạn cần đăng nhập để tạo nhóm!"}
+            creator_id = auth_uid
+            name = (packet.get("name") or packet.get("title") or "").strip()
             raw_member_ids = packet.get("member_ids", [])
 
             if not name:
@@ -1384,8 +1390,10 @@ class ChatServer:
         # --- PHÂN HỆ QUẢN LÝ NHÓM: PHÂN CẤP CHỨC TƯỚC, KICK & CẤM NGÔN ---
         # =========================================================================
         elif action == "update_member_role":
+            operator_id = self._get_auth_user_id(client_sock)
+            if not operator_id:
+                return {"action": "update_member_role_response", "success": False, "message": "Bạn cần đăng nhập để thực hiện thao tác này!"}
             conv_id = packet.get("conversation_id")
-            operator_id = packet.get("operator_id") or self._get_auth_user_id(client_sock)
             target_id = packet.get("target_id")
             new_role = packet.get("new_role")
             res = self.db.update_member_role(conv_id, operator_id, target_id, new_role)
@@ -1403,19 +1411,23 @@ class ChatServer:
             return {"action": "update_member_role_response", **res}
 
         elif action == "add_group_member":
+            operator_id = self._get_auth_user_id(client_sock)
+            if not operator_id:
+                return {"action": "add_group_member_response", "success": False, "message": "Bạn cần đăng nhập để thêm thành viên!"}
             conv_id = packet.get("conversation_id")
-            target_id = packet.get("user_id") or packet.get("target_id")
-            role = packet.get("role", "member")
-            ok = self.db.add_group_member(conv_id, target_id, role)
-            if ok:
+            target_id = packet.get("target_id") or packet.get("user_id")
+            res = self.db.add_group_member(conv_id, operator_id, target_id)
+            if res.get("success"):
                 members = self.db.get_conversation_members(conv_id)
                 member_ids = [m["id"] for m in members]
                 self.broadcast_to_users(member_ids, {"type": "refresh_conversations"})
-            return {"action": "add_group_member_response", "success": ok}
+            return {"action": "add_group_member_response", **res}
 
         elif action == "kick_member":
+            operator_id = self._get_auth_user_id(client_sock)
+            if not operator_id:
+                return {"action": "kick_member_response", "success": False, "message": "Bạn cần đăng nhập để thực hiện thao tác này!"}
             conv_id = packet.get("conversation_id")
-            operator_id = packet.get("operator_id") or self._get_auth_user_id(client_sock)
             target_id = packet.get("target_id")
             res = self.db.kick_group_member(conv_id, operator_id, target_id)
             if res.get("success"):
@@ -1440,8 +1452,10 @@ class ChatServer:
             return {"action": "kick_member_response", **res}
 
         elif action == "set_member_mute":
+            operator_id = self._get_auth_user_id(client_sock)
+            if not operator_id:
+                return {"action": "set_member_mute_response", "success": False, "message": "Bạn cần đăng nhập để thực hiện thao tác này!"}
             conv_id = packet.get("conversation_id")
-            operator_id = packet.get("operator_id") or self._get_auth_user_id(client_sock)
             target_id = packet.get("target_id")
             is_muted = packet.get("is_muted", True)
             custom_text = packet.get("custom_text")
@@ -1461,8 +1475,10 @@ class ChatServer:
             return {"action": "set_member_mute_response", **res}
 
         elif action == "set_group_mute":
+            operator_id = self._get_auth_user_id(client_sock)
+            if not operator_id:
+                return {"action": "set_group_mute_response", "success": False, "message": "Bạn cần đăng nhập để thực hiện thao tác này!"}
             conv_id = packet.get("conversation_id")
-            operator_id = packet.get("operator_id") or self._get_auth_user_id(client_sock)
             is_muted = packet.get("is_muted", True)
             custom_text = packet.get("custom_text")
             res = self.db.set_group_mute(conv_id, operator_id, is_muted, custom_text)
@@ -1479,8 +1495,10 @@ class ChatServer:
             return {"action": "set_group_mute_response", **res}
 
         elif action == "leave_group":
+            user_id = self._get_auth_user_id(client_sock)
+            if not user_id:
+                return {"action": "leave_group_response", "success": False, "message": "Bạn cần đăng nhập để rời nhóm!"}
             conv_id = packet.get("conversation_id")
-            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
             silent = packet.get("silent", False)
             res = self.db.leave_group(conv_id, user_id, silent)
             if res.get("success"):
@@ -1503,9 +1521,14 @@ class ChatServer:
             return {"action": "leave_group_response", **res}
 
         elif action == "get_conversation_members":
+            auth_uid = self._get_auth_user_id(client_sock)
+            if not auth_uid:
+                return {"action": "get_conversation_members_response", "success": False, "error": "Bạn cần đăng nhập để xem thành viên!"}
             conv_id = packet.get("conversation_id")
             if not conv_id:
                 return {"action": "get_conversation_members_response", "success": False, "error": "Thiếu conversation_id"}
+            if not self.db.is_conversation_member(conv_id, auth_uid):
+                return {"action": "get_conversation_members_response", "success": False, "error": "Bạn không có quyền truy cập danh sách thành viên của hội thoại này!"}
             members = self.db.get_conversation_members(conv_id)
             return {"action": "get_conversation_members_response", "success": True, "members": members}
 
@@ -1513,8 +1536,10 @@ class ChatServer:
         # --- CẬP NHẬT THÔNG TIN NHÓM (TÊN & AVATAR), BIỆT DANH & CHỦ ĐỀ CHAT ---
         # -------------------------------------------------------------------------
         elif action == "update_group_info":
+            user_id = self._get_auth_user_id(client_sock)
+            if not user_id:
+                return {"action": "update_group_info_response", "success": False, "message": "Bạn cần đăng nhập để thực hiện thao tác này!"}
             conv_id = packet.get("conversation_id")
-            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
             title = packet.get("title")
             avatar_url = packet.get("avatar_url")
             res = self.db.update_group_info(conv_id, user_id, title, avatar_url)
@@ -1531,8 +1556,10 @@ class ChatServer:
             return {"action": "update_group_info_response", **res}
 
         elif action == "set_conversation_nickname":
+            user_id = self._get_auth_user_id(client_sock)
+            if not user_id:
+                return {"action": "set_conversation_nickname_response", "success": False, "message": "Bạn cần đăng nhập để thực hiện thao tác này!"}
             conv_id = packet.get("conversation_id")
-            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
             target_user_id = packet.get("target_user_id")
             nickname = packet.get("nickname")
             res = self.db.set_conversation_nickname(conv_id, user_id, target_user_id, nickname)

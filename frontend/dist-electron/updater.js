@@ -238,7 +238,7 @@ class GitUpdater {
     }
     execCommand(cmd, cwd = this.rootDir) {
         return new Promise((resolve, reject) => {
-            (0, child_process_1.exec)(cmd, { cwd, env: { ...process.env, PATH: this.nodeEnvPath } }, (error, stdout) => {
+            (0, child_process_1.exec)(cmd, { cwd, windowsHide: true, env: { ...process.env, PATH: this.nodeEnvPath } }, (error, stdout) => {
                 if (error) {
                     reject(error);
                 }

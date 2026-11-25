@@ -163,15 +163,48 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [theme]);
 
-  // Persist session & Auto-identify on socket connection
   useEffect(() => {
+    let cancelled = false;
     if (currentUser) {
+      if (!currentUser.session_token) {
+        localStorage.removeItem('vibe_user');
+        setCurrentUser(null);
+        return;
+      }
       localStorage.setItem('vibe_user', JSON.stringify(currentUser));
-      apiService.sendRequest('identify', { user_id: currentUser.id }).catch(() => {});
+      apiService
+        .sendRequest('identify', {
+          user_id: currentUser.id,
+          session_token: currentUser.session_token,
+        })
+        .then((res) => {
+          if (cancelled) return;
+          if (!res || !res.success) {
+            localStorage.removeItem('vibe_user');
+            setCurrentUser(null);
+            return;
+          }
+          apiService.getConversations(currentUser.id).then((cRes) => {
+            if (!cancelled && cRes?.conversations) {
+              setConversations(cRes.conversations.filter((c) => c.type !== 'saved'));
+            }
+          }).catch(() => {});
+          apiService.getFriends(currentUser.id).then((fRes) => {
+            if (!cancelled && fRes) {
+              if (fRes.friends) setFriends(fRes.friends);
+              if (fRes.pending_requests) setPendingFriends(fRes.pending_requests);
+              if (fRes.sent_request_ids) setSentFriendRequestIds(fRes.sent_request_ids);
+            }
+          }).catch(() => {});
+        })
+        .catch(() => {});
     } else {
       localStorage.removeItem('vibe_user');
       localStorage.removeItem('telegram_user');
     }
+    return () => {
+      cancelled = true;
+    };
   }, [currentUser]);
 
   // Request notification permission once if not determined
@@ -627,6 +660,10 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               callerName: event.caller_name || 'Người dùng',
               callType: event.call_type || 'voice',
             });
+            triggerDesktopNotification(
+              `Cuộc gọi ${event.call_type === 'video' ? 'Video' : 'thoại'} đến`,
+              `${event.caller_name || 'Người dùng'} đang gọi cho bạn...`
+            );
           }
           break;
 
@@ -811,9 +848,19 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         case 'connection_status':
-          if (event.connected) {
-            refreshConversations();
-            refreshFriends();
+          if (event.connected && currentUser?.session_token) {
+            apiService
+              .sendRequest('identify', {
+                user_id: currentUser.id,
+                session_token: currentUser.session_token,
+              })
+              .then((res) => {
+                if (res?.success) {
+                  refreshConversations();
+                  refreshFriends();
+                }
+              })
+              .catch(() => {});
           }
           break;
 
@@ -827,19 +874,6 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       unsubscribe();
     };
   }, [activeConv, refreshConversations, refreshFriends]);
-
-  // Initial load
-  useEffect(() => {
-    if (currentUser) {
-      refreshConversations();
-      refreshFriends();
-      const t = setTimeout(() => {
-        refreshConversations();
-        refreshFriends();
-      }, 1200);
-      return () => clearTimeout(t);
-    }
-  }, [currentUser, refreshConversations, refreshFriends]);
 
   return (
     <ChatContext.Provider

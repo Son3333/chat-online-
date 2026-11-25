@@ -348,8 +348,12 @@ export const apiService = {
   },
 
   // Groups
-  async createGroup(title: string, creatorId: number, memberIds: number[]): Promise<{ success: boolean; conversation_id?: number }> {
-    return await this.sendRequest('create_group', { title, creator_id: creatorId, member_ids: memberIds });
+  async createGroup(name: string, creatorId: number, memberIds: number[]): Promise<{ success: boolean; conversation_id?: number; message?: string }> {
+    return await this.sendRequest('create_group', { name, creator_id: creatorId, member_ids: memberIds });
+  },
+
+  async addGroupMember(convId: string | number, targetUserId: number): Promise<{ success: boolean; message?: string; target_name?: string }> {
+    return await this.sendRequest('add_group_member', { conversation_id: convId, target_id: targetUserId });
   },
 
   // Typing & Call

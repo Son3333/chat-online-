@@ -28,6 +28,7 @@ export class PythonBridge {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private connectingPromise: Promise<boolean> | null = null;
   public currentUserId: number | null = null;
+  public sessionToken: string | null = null;
 
   constructor(host = '127.0.0.1', port = 8888) {
     this.host = host;
@@ -95,11 +96,11 @@ export class PythonBridge {
           this.reconnectTimer = null;
         }
 
-        // Tự động định danh kênh Data
-        if (this.currentUserId) {
+        if (this.currentUserId && this.sessionToken) {
           this.sendSocketPacket(this.dataSocket, {
             action: 'identify',
             user_id: this.currentUserId,
+            session_token: this.sessionToken,
             channel_type: 'data',
           });
         }
@@ -150,11 +151,11 @@ export class PythonBridge {
         this.mediaSocket?.setKeepAlive(true, 5000);
         this.mediaBuffer = Buffer.alloc(0);
 
-        // Tự động định danh kênh Media
-        if (this.currentUserId) {
+        if (this.currentUserId && this.sessionToken) {
           this.sendSocketPacket(this.mediaSocket, {
             action: 'identify',
             user_id: this.currentUserId,
+            session_token: this.sessionToken,
             channel_type: 'media',
           });
         }
@@ -326,6 +327,9 @@ export class PythonBridge {
       this.pendingRequests.delete(action);
       if (packet.success && packet.user?.id) {
         this.currentUserId = Number(packet.user.id);
+        if (packet.session_token || packet.user.session_token) {
+          this.sessionToken = String(packet.session_token || packet.user.session_token);
+        }
         this.reIdentifyBothChannels(this.currentUserId);
       }
       req.resolve(packet);
@@ -346,6 +350,9 @@ export class PythonBridge {
         this.pendingRequests.delete(reqAction);
         if (packet.success && packet.user?.id) {
           this.currentUserId = Number(packet.user.id);
+          if (packet.session_token || packet.user.session_token) {
+            this.sessionToken = String(packet.session_token || packet.user.session_token);
+          }
           this.reIdentifyBothChannels(this.currentUserId);
         }
         req.resolve(packet);
@@ -358,11 +365,12 @@ export class PythonBridge {
   }
 
   private reIdentifyBothChannels(userId: number) {
+    if (!this.sessionToken) return;
     if (this.dataSocket && this.dataConnected) {
-      this.sendSocketPacket(this.dataSocket, { action: 'identify', user_id: userId, channel_type: 'data' });
+      this.sendSocketPacket(this.dataSocket, { action: 'identify', user_id: userId, session_token: this.sessionToken, channel_type: 'data' });
     }
     if (this.mediaSocket && this.mediaConnected) {
-      this.sendSocketPacket(this.mediaSocket, { action: 'identify', user_id: userId, channel_type: 'media' });
+      this.sendSocketPacket(this.mediaSocket, { action: 'identify', user_id: userId, session_token: this.sessionToken, channel_type: 'media' });
     } else {
       this.connectMediaChannel().catch(() => {});
     }
@@ -407,6 +415,11 @@ export class PythonBridge {
         trackingKey = `download_file_${payload.file_id}`;
       } else if (action === 'get_messages' && payload.conversation_id !== undefined) {
         trackingKey = `get_messages_${payload.conversation_id}`;
+      }
+
+      if (action === 'identify' && payload.user_id && payload.session_token) {
+        this.currentUserId = Number(payload.user_id);
+        this.sessionToken = String(payload.session_token);
       }
 
       const reqPayload = { action, ...payload };
@@ -463,6 +476,7 @@ export class PythonBridge {
     this.dataConnected = false;
     this.mediaConnected = false;
     this.currentUserId = null;
+    this.sessionToken = null;
     if (this.dataSocket) {
       try { this.dataSocket.destroy(); } catch {}
       this.dataSocket = null;

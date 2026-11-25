@@ -214,7 +214,7 @@ export class GitUpdater {
 
   private execCommand(cmd: string, cwd = this.rootDir): Promise<string> {
     return new Promise((resolve, reject) => {
-      exec(cmd, { cwd, env: { ...process.env, PATH: this.nodeEnvPath } }, (error, stdout) => {
+      exec(cmd, { cwd, windowsHide: true, env: { ...process.env, PATH: this.nodeEnvPath } }, (error, stdout) => {
         if (error) {
           reject(error);
         } else {

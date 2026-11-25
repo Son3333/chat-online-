@@ -26,6 +26,10 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ onClose }) =
       setErrorMsg('Vui lòng nhập tên nhóm!');
       return;
     }
+    if (selectedIds.length === 0) {
+      setErrorMsg('Nhóm phải có ít nhất 1 thành viên khác!');
+      return;
+    }
     if (!currentUser) return;
 
     setLoading(true);
@@ -35,7 +39,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ onClose }) =
         await refreshConversations();
         onClose();
       } else {
-        setErrorMsg('Tạo nhóm thất bại!');
+        setErrorMsg(res?.message || 'Tạo nhóm thất bại!');
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Lỗi tạo nhóm!');
@@ -93,7 +97,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ onClose }) =
           <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
             {friends.length === 0 ? (
               <p className="text-xs text-slate-400 text-center py-4">
-                Chưa có bạn bè nào trong danh bạ. Bạn vẫn có thể tạo nhóm và thêm thành viên sau.
+                Bạn cần kết bạn với ít nhất 1 người để tạo nhóm trò chuyện.
               </p>
             ) : (
               friends.map((friend) => {

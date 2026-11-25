@@ -21,6 +21,7 @@ import { getInitials } from '../../lib/utils';
 import { ChatInfoModal } from './ChatInfoModal';
 import { ChatThemeModal } from './ChatThemeModal';
 import { Edit3, Sparkles } from 'lucide-react';
+import { isGroupPrivileged } from '../../lib/groupPermissions';
 
 export const ChatHeader: React.FC = () => {
   const {
@@ -39,6 +40,7 @@ export const ChatHeader: React.FC = () => {
     setIsSidebarCollapsed,
   } = useChat();
   const [showInfo, setShowInfo] = useState(false);
+  const [openAddMemberOnOpen, setOpenAddMemberOnOpen] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [showMenu, setShowMenu] = useState(false);
@@ -211,6 +213,20 @@ export const ChatHeader: React.FC = () => {
             </>
           )}
 
+          {isGroup && isGroupPrivileged(activeConv.my_role) && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpenAddMemberOnOpen(true);
+                setShowInfo(true);
+              }}
+              title="Thêm thành viên vào nhóm"
+              className="p-2 rounded-lg text-slate-500 hover:text-[#2481cc] hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+            </button>
+          )}
+
           <button
             onClick={() => setShowSearch(!showSearch)}
             title="Tìm kiếm trong cuộc trò chuyện"
@@ -377,7 +393,14 @@ export const ChatHeader: React.FC = () => {
       )}
 
       {/* Popout Info Modal */}
-      <ChatInfoModal isOpen={showInfo} onClose={() => setShowInfo(false)} />
+      <ChatInfoModal
+        isOpen={showInfo}
+        initialOpenAddMember={openAddMemberOnOpen}
+        onClose={() => {
+          setShowInfo(false);
+          setOpenAddMemberOnOpen(false);
+        }}
+      />
 
       {/* Popout Chat Theme Modal */}
       <ChatThemeModal isOpen={showThemeModal} onClose={() => setShowThemeModal(false)} />

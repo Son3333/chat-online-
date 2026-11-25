@@ -68,6 +68,8 @@ process.on('uncaughtException', (err) => {
     console.error('[Uncaught Exception]', err);
 });
 let mainWindow = null;
+let tray = null;
+let isQuitting = false;
 let pythonProcess = null;
 let pythonBridge = null;
 let gitUpdater = null;
@@ -151,6 +153,7 @@ async function resolveServerEndpoint() {
                     cwd: rootDir,
                     detached: true,
                     stdio: 'ignore',
+                    windowsHide: true,
                 });
                 pythonProcess.unref();
                 for (let i = 0; i < 25; i++) {
@@ -193,10 +196,11 @@ function ensureDesktopShortcut() {
         const rootDir = path.resolve(__dirname, '../../');
         const psScript = path.join(rootDir, 'scripts', 'create_desktop_shortcut.ps1');
         if (fs.existsSync(psScript)) {
-            const p = (0, child_process_1.spawn)('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', psScript], {
+            const p = (0, child_process_1.spawn)('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', psScript], {
                 cwd: rootDir,
                 detached: true,
                 stdio: 'ignore',
+                windowsHide: true,
             });
             p.unref();
         }
@@ -207,6 +211,53 @@ function ensureDesktopShortcut() {
 }
 async function startPythonBackendIfNeeded() {
     // Đã được tự động xử lý an toàn trong resolveServerEndpoint()
+}
+function showMainWindow() {
+    if (!mainWindow || mainWindow.isDestroyed())
+        return;
+    if (mainWindow.isMinimized())
+        mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+}
+function createTray() {
+    if (tray)
+        return;
+    try {
+        const icoPath = path.join(__dirname, '../../app.ico');
+        const pngPath = path.join(__dirname, '../public/logo.png');
+        const iconFile = fs.existsSync(icoPath) ? icoPath : (fs.existsSync(pngPath) ? pngPath : null);
+        const trayIcon = iconFile ? electron_1.nativeImage.createFromPath(iconFile) : electron_1.nativeImage.createEmpty();
+        tray = new electron_1.Tray(trayIcon);
+        tray.setToolTip('Vibe Người Tốt');
+        const contextMenu = electron_1.Menu.buildFromTemplate([
+            {
+                label: 'Mở Vibe Người Tốt',
+                click: () => showMainWindow(),
+            },
+            { type: 'separator' },
+            {
+                label: 'Thoát hoàn toàn',
+                click: () => {
+                    isQuitting = true;
+                    electron_1.app.quit();
+                },
+            },
+        ]);
+        tray.setContextMenu(contextMenu);
+        tray.on('click', () => {
+            if (mainWindow && mainWindow.isVisible() && !mainWindow.isMinimized()) {
+                mainWindow.focus();
+            }
+            else {
+                showMainWindow();
+            }
+        });
+        tray.on('double-click', () => showMainWindow());
+    }
+    catch (err) {
+        console.warn('[Main] Khong the tao khay he thong:', err);
+    }
 }
 async function createWindow() {
     ensureDesktopShortcut();
@@ -235,6 +286,10 @@ async function createWindow() {
     // Forward push events from Python to React renderer
     pythonBridge.onEvent((event) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
+            if (event.type === 'call_incoming') {
+                showMainWindow();
+                mainWindow.flashFrame(true);
+            }
             mainWindow.webContents.send('server:event', event);
         }
     });
@@ -260,6 +315,12 @@ async function createWindow() {
             electron_1.shell.openExternal(url);
         }
         return { action: 'deny' };
+    });
+    mainWindow.on('close', (event) => {
+        if (!isQuitting) {
+            event.preventDefault();
+            mainWindow?.hide();
+        }
     });
     mainWindow.on('closed', () => {
         mainWindow = null;
@@ -430,6 +491,15 @@ electron_1.ipcMain.handle('media:get-screen-source-id', async () => {
     }
     return null;
 });
+const gotTheLock = electron_1.app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    electron_1.app.quit();
+}
+else {
+    electron_1.app.on('second-instance', () => {
+        showMainWindow();
+    });
+}
 electron_1.app.whenReady().then(async () => {
     // Grant all media permissions (Microphone, Camera, Screen Share, Geolocation)
     electron_1.session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
@@ -462,6 +532,7 @@ electron_1.app.whenReady().then(async () => {
     gitUpdater = new updater_1.GitUpdater(rootDir);
     (0, updater_1.registerUpdaterIpc)(gitUpdater);
     gitUpdater.startListening(120000);
+    createTray();
     await createWindow();
     electron_1.app.on('activate', () => {
         if (electron_1.BrowserWindow.getAllWindows().length === 0) {
@@ -475,6 +546,11 @@ electron_1.app.on('window-all-closed', () => {
     }
 });
 electron_1.app.on('before-quit', () => {
+    isQuitting = true;
+    if (tray) {
+        tray.destroy();
+        tray = null;
+    }
     if (gitUpdater) {
         gitUpdater.stopListening();
     }

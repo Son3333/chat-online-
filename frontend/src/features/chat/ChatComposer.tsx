@@ -2,7 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Paperclip, Smile, Send, X, MapPin, Image as ImageIcon, Video, FileText, Loader2, VolumeX } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { EmojiPicker } from '../../components/EmojiPicker';
+import { ExpressionHub } from '../expression/ExpressionHub';
+import { StickerSuggestionsBar } from '../expression/StickerSuggestionsBar';
+import { StickerItem, StickerPack, GifItem } from '../../types';
 import { apiService } from '../../services/api';
+import { isGroupPrivileged } from '../../lib/groupPermissions';
 import { LocationModal } from './LocationModal';
 import { formatFileSize } from '../../lib/utils';
 
@@ -38,7 +42,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({ droppedFile, onClear
   // Mute logic
   const isGroup = activeConv?.type === 'group';
   const myRole = activeConv?.my_role || 'member';
-  const isPrivileged = myRole === 'admin' || myRole === 'co_leader' || myRole === 'deputy';
+  const isPrivileged = isGroupPrivileged(myRole);
 
   const isPersonallyMuted = Boolean(activeConv?.my_is_muted);
   const isGroupMuted = Boolean(activeConv?.is_muted) && !isPrivileged;
@@ -318,6 +322,31 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({ droppedFile, onClear
     setStagingAttachment(null);
   };
 
+  const handleSendSticker = async (sticker: StickerItem, pack?: StickerPack) => {
+    if (isMuted) return;
+    const stickerPayload = JSON.stringify({
+      packId: pack?.id || 'default',
+      stickerId: sticker.id,
+      name: sticker.name,
+      url: sticker.url,
+      isAnimated: Boolean(sticker.isAnimated),
+    });
+    await sendMessage(stickerPayload, 'sticker');
+    setShowEmojiPicker(false);
+  };
+
+  const handleSendGif = async (gif: GifItem) => {
+    if (isMuted) return;
+    const gifPayload = JSON.stringify({
+      gifId: gif.id,
+      title: gif.title,
+      url: gif.url,
+      previewUrl: gif.previewUrl,
+    });
+    await sendMessage(gifPayload, 'gif');
+    setShowEmojiPicker(false);
+  };
+
   const handleEmojiSelect = (emoji: string) => {
     setText((prev) => prev + emoji);
     inputRef.current?.focus();
@@ -340,6 +369,15 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({ droppedFile, onClear
           <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
           <span className="font-medium">{uploadStatus}</span>
         </div>
+      )}
+
+      {/* Context-Aware Sticker Suggestion Bar (Gợi ý tự động khi gõ tin nhắn) */}
+      {!isMuted && (
+        <StickerSuggestionsBar
+          inputText={text}
+          onSelectSticker={(sticker) => handleSendSticker(sticker)}
+          onSelectEmoji={(emoji) => handleEmojiSelect(emoji)}
+        />
       )}
 
       {/* Quoted Message / Reply Banner */}
@@ -561,10 +599,15 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({ droppedFile, onClear
             </button>
           )}
 
-          {/* Emoji Picker Popup */}
+          {/* Expression Hub Popup (All-in-One: Emoji, Sticker, GIF, Recent, Favorites) */}
           {!isMuted && showEmojiPicker && (
             <div className="absolute bottom-12 right-0 z-50">
-              <EmojiPicker onSelect={handleEmojiSelect} onClose={() => setShowEmojiPicker(false)} />
+              <ExpressionHub
+                onSelectEmoji={handleEmojiSelect}
+                onSelectSticker={(stk, pack) => handleSendSticker(stk, pack)}
+                onSelectGif={(gif) => handleSendGif(gif)}
+                onClose={() => setShowEmojiPicker(false)}
+              />
             </div>
           )}
         </div>

@@ -11,10 +11,40 @@ export interface User {
   status?: string;
   pin_code?: string;
   is_online?: number | boolean;
+  session_token?: string;
   created_at?: string;
 }
 
-export type MessageType = 'text' | 'image' | 'video' | 'file' | 'location' | 'call';
+export type MessageType = 'text' | 'image' | 'video' | 'file' | 'location' | 'call' | 'sticker' | 'gif';
+
+export interface StickerItem {
+  id: string;
+  name: string;
+  url: string;
+  keywords: string[];
+  isAnimated?: boolean;
+}
+
+export interface StickerPack {
+  id: string;
+  name: string;
+  author: string;
+  avatarUrl: string;
+  category: string;
+  description?: string;
+  stickers: StickerItem[];
+  isInstalled?: boolean;
+}
+
+export interface GifItem {
+  id: string;
+  title: string;
+  url: string;
+  previewUrl: string;
+  category: string;
+  width?: number;
+  height?: number;
+}
 
 export interface LastMessage {
   id?: number;

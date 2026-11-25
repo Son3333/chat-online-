@@ -219,6 +219,21 @@ const VideoBubbleContent: React.FC<{
   );
 };
 
+const isEmojiOnlyText = (text: string): boolean => {
+  if (!text) return false;
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length > 20) return false;
+  // Emoji regex matching Unicode emoji symbols, modifiers, joiners, flags
+  const emojiRegex = /^(?:[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F1E6}-\u{1F1FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1FA00}-\u{1FAFF}]|[\u{2300}-\u{23FF}]|[\u{200D}]|[\u{FE0F}]|[\u{2702}-\u{27B0}]|\s)+$/u;
+  if (!emojiRegex.test(trimmed)) return false;
+  try {
+    const segments = [...new Intl.Segmenter().segment(trimmed)].filter(s => s.segment.trim().length > 0);
+    return segments.length >= 1 && segments.length <= 4;
+  } catch {
+    return true;
+  }
+};
+
 const LinkifiedText: React.FC<{ text: string }> = ({ text }) => {
   // Regex matching http/https URLs and www. links
   const urlRegex = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s]|www\.[^\s<]+[^<.,:;"')\]\s])/gi;
@@ -488,6 +503,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
   const isVideo = !isCall && effectiveType === 'video';
   const isLocation = !isCall && effectiveType === 'location';
   const isFile = !isCall && effectiveType === 'file';
+  const isSticker = !isCall && effectiveType === 'sticker';
+  const isGif = !isCall && effectiveType === 'gif';
+  const isPureEmoji = !isDeleted && !isCall && !isImage && !isVideo && !isLocation && !isFile && !isSticker && !isGif && isEmojiOnlyText(message.content || '');
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -526,10 +544,12 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
     >
       {/* Bubble Card */}
       <div
-        className={`relative px-3.5 py-2 rounded-2xl shadow-sm text-sm break-words transition-all ${
-          isSelf
-            ? 'bg-[#effdde] dark:bg-[#2b5278] text-slate-800 dark:text-slate-100 rounded-tr-none'
-            : 'bg-white dark:bg-[#182533] text-slate-800 dark:text-slate-100 rounded-tl-none border border-slate-100 dark:border-transparent'
+        className={`relative ${
+          isSticker || isPureEmoji
+            ? 'bg-transparent shadow-none border-none p-1'
+            : isSelf
+            ? 'px-3.5 py-2 rounded-2xl shadow-sm text-sm break-words bg-[#effdde] dark:bg-[#2b5278] text-slate-800 dark:text-slate-100 rounded-tr-none'
+            : 'px-3.5 py-2 rounded-2xl shadow-sm text-sm break-words bg-white dark:bg-[#182533] text-slate-800 dark:text-slate-100 rounded-tl-none border border-slate-100 dark:border-transparent'
         } ${isDeleted ? 'opacity-60 italic' : ''}`}
       >
         {/* Sender Name in Group Chat */}
@@ -649,6 +669,54 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
           />
         )}
 
+        {/* 4.6. Sticker Message (Transparent, high-res animated/static sticker) */}
+        {isSticker && !isDeleted && (() => {
+          let stkData: { url?: string; name?: string; isAnimated?: boolean } = {};
+          try {
+            stkData = JSON.parse(message.content);
+          } catch {
+            stkData = { url: message.content, name: 'Sticker' };
+          }
+          return (
+            <div className="relative group/sticker flex flex-col items-center select-none py-1">
+              <div className="w-28 h-28 sm:w-32 sm:h-32 flex items-center justify-center transition-transform hover:scale-105 duration-200">
+                <img
+                  src={stkData.url}
+                  alt={stkData.name || 'Sticker'}
+                  className="w-full h-full object-contain filter drop-shadow-md"
+                  loading="lazy"
+                />
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* 4.7. Animated GIF Message */}
+        {isGif && !isDeleted && (() => {
+          let gData: { url?: string; title?: string } = {};
+          try {
+            gData = JSON.parse(message.content);
+          } catch {
+            gData = { url: message.content, title: 'GIF' };
+          }
+          return (
+            <div
+              onClick={() => onOpenImage && gData.url && onOpenImage('gif', gData.title || 'GIF', gData.url)}
+              className="relative rounded-2xl overflow-hidden max-w-[240px] sm:max-w-[280px] cursor-pointer group/gif bg-slate-900 border border-black/10 dark:border-white/10 shadow-md my-1"
+            >
+              <img
+                src={gData.url}
+                alt={gData.title || 'GIF'}
+                className="w-full h-auto max-h-60 object-cover group-hover/gif:scale-[1.02] transition-transform duration-200"
+                loading="lazy"
+              />
+              <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-black/60 text-white font-black text-[10px] tracking-wider uppercase backdrop-blur-xs">
+                GIF
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Caption text for Image, Video, File */}
         {!isDeleted && (isImage || isVideo || isFile) && message.content && (() => {
           const c = message.content.trim();
@@ -669,9 +737,11 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
         })()}
 
         {/* 5. Text Message Content */}
-        {message.content && (!isImage && !isVideo && !isLocation && !isFile && !isCall || isDeleted) && (
+        {message.content && (!isImage && !isVideo && !isLocation && !isFile && !isCall && !isSticker && !isGif || isDeleted) && (
           isDeleted ? (
             <p className="leading-relaxed whitespace-pre-wrap select-text">{message.content}</p>
+          ) : isPureEmoji ? (
+            <p className="text-3xl sm:text-4xl leading-tight select-text py-0.5 tracking-wide drop-shadow-sm">{message.content}</p>
           ) : (
             <LinkifiedText text={message.content} />
           )
