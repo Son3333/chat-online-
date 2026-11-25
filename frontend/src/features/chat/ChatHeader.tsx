@@ -116,7 +116,7 @@ export const ChatHeader: React.FC = () => {
       <div className="h-14 px-4 bg-white dark:bg-[#17212b] border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between select-none relative z-30">
         {/* Left: Back button (on compact) + Avatar & Title */}
         <div className="flex items-center space-x-1.5 overflow-hidden mr-2">
-          {isSidebarCollapsed ? (
+          {isSidebarCollapsed || (typeof window !== 'undefined' && window.innerWidth < 980) ? (
             <button
               type="button"
               onClick={() => {
@@ -132,7 +132,7 @@ export const ChatHeader: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsSidebarCollapsed(true)}
-              className="hidden min-[900px]:flex p-1.5 -ml-1 rounded-lg text-slate-500 hover:text-[#2481cc] hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer flex-shrink-0 items-center justify-center"
+              className="hidden min-[980px]:flex p-1.5 -ml-1 rounded-lg text-slate-500 hover:text-[#2481cc] hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-300 transition-colors cursor-pointer flex-shrink-0 items-center justify-center"
               title="Thu gọn danh sách hội thoại"
             >
               <PanelLeftClose className="w-5 h-5" />

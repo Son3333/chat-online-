@@ -224,7 +224,7 @@ export const ChatArea: React.FC = () => {
 
   return (
     <div
-      className={`flex-1 h-full flex flex-col relative overflow-hidden transition-all duration-300 ${
+      className={`flex-1 min-w-0 h-full flex flex-col relative overflow-hidden ${
         !isCustomBg && themePreset ? themePreset.bgClass : 'bg-slate-50 dark:bg-[#0e1621]'
       }`}
       style={
@@ -434,7 +434,7 @@ export const ChatArea: React.FC = () => {
       )}
 
       {/* 4. Messages List */}
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col space-y-1">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 p-4 flex flex-col space-y-1">
         {loadingMessages ? (
           <div className="flex-1 flex flex-col items-center justify-center text-slate-400 text-xs py-16 select-none animate-in fade-in duration-150">
             <div className="w-9 h-9 border-3 border-[#2481cc]/25 border-t-[#2481cc] rounded-full animate-spin mb-3 shadow-xs" />
