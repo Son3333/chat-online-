@@ -649,6 +649,25 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
           />
         )}
 
+        {/* Caption text for Image, Video, File */}
+        {!isDeleted && (isImage || isVideo || isFile) && message.content && (() => {
+          const c = message.content.trim();
+          const isSystemDefault =
+            c === 'Đã gửi một hình ảnh' ||
+            c === 'Đã gửi hình ảnh' ||
+            c === 'Đã gửi video' ||
+            c.startsWith('Đã gửi video:') ||
+            c === 'Đã gửi tài liệu' ||
+            c.startsWith('Đã gửi tài liệu:') ||
+            c.startsWith('Đã gửi tệp tin:');
+          if (isSystemDefault) return null;
+          return (
+            <div className="mt-1.5 px-0.5 text-xs sm:text-sm text-slate-800 dark:text-slate-100 select-text leading-relaxed break-words font-normal">
+              <LinkifiedText text={message.content} />
+            </div>
+          );
+        })()}
+
         {/* 5. Text Message Content */}
         {message.content && (!isImage && !isVideo && !isLocation && !isFile && !isCall || isDeleted) && (
           isDeleted ? (
