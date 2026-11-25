@@ -194,8 +194,9 @@ async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 820,
-    minWidth: 920,
-    minHeight: 640,
+    minWidth: 380,
+    minHeight: 500,
+    resizable: true,
     frame: false, // Custom Telegram-style titlebar
     titleBarStyle: 'hidden',
     backgroundColor: '#0e1621',

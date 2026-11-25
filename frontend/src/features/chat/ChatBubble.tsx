@@ -520,7 +520,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
   return (
     <div
       onContextMenu={handleContextMenu}
-      className={`group relative flex flex-col my-1 max-w-[75%] ${
+      className={`group relative flex flex-col my-1 max-w-[85%] sm:max-w-[75%] min-w-0 ${
         isSelf ? 'self-end items-end' : 'self-start items-start'
       }`}
     >
