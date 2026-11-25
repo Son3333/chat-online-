@@ -33,12 +33,6 @@ class OtpDeliveryService:
         return cfg
 
     def send_otp(self, target: str, otp_code: str, target_type: str = "phone") -> dict:
-        """
-        Gửi mã OTP đến Số điện thoại (SMS) hoặc Gmail (Email).
-        target: Số điện thoại (VD: 0964671719, +84964671719) hoặc Email (VD: example@gmail.com)
-        otp_code: Mã 6 chữ số
-        target_type: 'phone' hoặc 'email'
-        """
         target = str(target or "").strip()
         otp_code = str(otp_code or "").strip()
 
@@ -112,7 +106,6 @@ class OtpDeliveryService:
         if twilio_sid and twilio_auth and twilio_from:
             try:
                 import base64
-                # Chuẩn hóa số điện thoại theo chuẩn quốc tế E.164 (VD: 0964... -> +84964...)
                 clean_e164 = phone
                 if clean_e164.startswith("0"):
                     clean_e164 = "+84" + clean_e164[1:]

@@ -58,3 +58,10 @@ description: Bộ nguyên tắc cốt lõi bắt buộc phải đọc và tuân 
 - Lúc đó mới được phép:
   - Merge từ `staging-feature-upgrade` vào bản chính thức `main`.
   - Push lên kho chứa GitHub.
+
+---
+
+### NGUYÊN TẮC 7: TUYỆT ĐỐI KHÔNG ĐƯỢC ĐÁNH NOTE / GHI CHÚ TRONG CODE
+- **Tuyệt đối nghiêm cấm**: Việc viết các ghi chú, comment (`//`, `#`, `/* */`, docstring ví dụ) trong mã nguồn làm để lộ bất kỳ thông tin nhạy cảm nào (số điện thoại, email, tài khoản, mật khẩu, token bảo mật, đường dẫn nội bộ hoặc logic nghiệp vụ quan trọng).
+- **Mã nguồn tự tường minh**: Viết code sạch (clean code), đặt tên biến và hàm rõ ràng. Tuyệt đối không để lại các note nháp, note ví dụ chứa dữ liệu thật hay các comment rác trong toàn bộ codebase dự án.
+
