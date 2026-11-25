@@ -7,7 +7,9 @@ interface ChatContextType {
   setCurrentUser: (user: User | null) => void;
   conversations: Conversation[];
   activeConv: Conversation | null;
+  setActiveConv: (conv: Conversation | null) => void;
   messages: Message[];
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   friends: Friend[];
   pendingFriends: User[];
   sentFriendRequestIds: number[];
@@ -548,6 +550,68 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           refreshFriends();
           break;
 
+        case 'kicked_from_group': {
+          const kickConvId = event.conversation_id;
+          if (activeConv && String(activeConv.id) === String(kickConvId)) {
+            setActiveConv(null);
+            setMessages([]);
+            alert(event.message || 'Bạn đã bị quản trị viên kích khỏi nhóm trò chuyện!');
+          }
+          refreshConversations();
+          break;
+        }
+
+        case 'member_kicked':
+          refreshConversations();
+          break;
+
+        case 'member_role_updated': {
+          const rConvId = event.conversation_id;
+          if (activeConv && String(activeConv.id) === String(rConvId)) {
+            if (currentUser && Number(event.target_id) === Number(currentUser.id)) {
+              setActiveConv((prev) => (prev ? { ...prev, my_role: event.new_role } : null));
+            }
+          }
+          refreshConversations();
+          break;
+        }
+
+        case 'member_mute_updated': {
+          const mConvId = event.conversation_id;
+          if (activeConv && String(activeConv.id) === String(mConvId)) {
+            if (currentUser && Number(event.target_id) === Number(currentUser.id)) {
+              setActiveConv((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      my_is_muted: event.is_muted ? 1 : 0,
+                      my_muted_by: event.muted_by_name,
+                    }
+                  : null
+              );
+            }
+          }
+          refreshConversations();
+          break;
+        }
+
+        case 'group_mute_updated': {
+          const gConvId = event.conversation_id;
+          if (activeConv && String(activeConv.id) === String(gConvId)) {
+            setActiveConv((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    is_muted: event.is_muted ? 1 : 0,
+                    custom_mute_text: event.custom_text,
+                  }
+                : null
+            );
+          }
+          refreshConversations();
+          break;
+        }
+
         case 'profile_updated':
           if (event.user) {
             const u = event.user;
@@ -613,7 +677,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setCurrentUser,
         conversations,
         activeConv,
+        setActiveConv,
         messages,
+        setMessages,
         loadingMessages,
         friends,
         pendingFriends,

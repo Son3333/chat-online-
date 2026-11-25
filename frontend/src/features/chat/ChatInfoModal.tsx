@@ -1,8 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { X, Image as ImageIcon, FileText, Pin, Download, User, Phone, Video } from 'lucide-react';
+import {
+  X,
+  Image as ImageIcon,
+  FileText,
+  Pin,
+  Download,
+  User,
+  Phone,
+  Video,
+  Users,
+  Crown,
+  Shield,
+  VolumeX,
+  Volume2,
+  UserMinus,
+  LogOut,
+  MoreVertical,
+  AlertTriangle
+} from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { getInitials, formatTime } from '../../lib/utils';
 import { apiService } from '../../services/api';
+import { ConversationMember } from '../../types';
 
 interface ChatInfoModalProps {
   isOpen: boolean;
@@ -54,7 +73,6 @@ const MediaThumbnailItem: React.FC<{
         </div>
       )}
 
-      {/* Hover action overlay */}
       <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 flex items-center justify-center space-x-2 transition-opacity">
         <button
           onClick={(e) => {
@@ -78,7 +96,6 @@ const MediaThumbnailItem: React.FC<{
         </button>
       </div>
 
-      {/* Name banner at bottom */}
       <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-1 px-1.5">
         <p className="text-[9px] text-white/90 truncate">{name}</p>
       </div>
@@ -87,19 +104,95 @@ const MediaThumbnailItem: React.FC<{
 };
 
 export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose }) => {
-  const { activeConv, messages, startCall } = useChat();
-  const [activeTab, setActiveTab] = useState<'media' | 'files' | 'pinned'>('media');
+  const { activeConv, setActiveConv, setMessages, refreshConversations, messages, startCall, currentUser } = useChat();
+  const isGroup = activeConv?.type === 'group';
+  const isDirect = activeConv?.type === 'direct';
+
+  const [activeTab, setActiveTab] = useState<'members' | 'media' | 'files' | 'pinned'>(
+    isGroup ? 'members' : 'media'
+  );
   const [previewImage, setPreviewImage] = useState<{ fileId: string; name: string; url?: string } | null>(null);
 
-  if (!isOpen || !activeConv) return null;
+  // Group members state
+  const [members, setMembers] = useState<ConversationMember[]>([]);
+  const [selectedMember, setSelectedMember] = useState<ConversationMember | null>(null);
 
-  const isGroup = activeConv.type === 'group';
-  const isDirect = activeConv.type === 'direct';
+  // Modals & Popups
+  const [kickModalMember, setKickModalMember] = useState<ConversationMember | null>(null);
+  const [muteModalMember, setMuteModalMember] = useState<ConversationMember | null>(null);
+  const [customMuteText, setCustomMuteText] = useState('');
+  const [showGroupMuteModal, setShowGroupMuteModal] = useState(false);
+  const [customGroupMuteText, setCustomGroupMuteText] = useState(activeConv?.custom_mute_text || '');
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [leaveSilent, setLeaveSilent] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Fetch members when group modal opens
+  const fetchMembers = async () => {
+    if (!activeConv || !isGroup) return;
+    try {
+      const res = await apiService.getConversationMembers(activeConv.id);
+      if (res && res.members) {
+        setMembers(res.members);
+      }
+    } catch (e) {
+      console.warn('Error fetching group members:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && isGroup) {
+      fetchMembers();
+      setActiveTab('members');
+    } else if (isOpen) {
+      setActiveTab('media');
+    }
+  }, [isOpen, activeConv?.id, isGroup]);
+
+  if (!isOpen || !activeConv || !currentUser) return null;
 
   // Filter media, files, pinned messages
   const mediaMsgs = messages.filter((m) => m.msg_type === 'image' && !m.is_deleted);
   const fileMsgs = messages.filter((m) => m.msg_type === 'file' && !m.is_deleted);
   const pinnedMsgs = messages.filter((m) => m.is_pinned && !m.is_deleted);
+
+  const myRole = activeConv.my_role || 'member';
+
+  const getRank = (role?: string) => {
+    if (role === 'admin') return 4;
+    if (role === 'co_leader') return 3;
+    if (role === 'deputy') return 2;
+    return 1;
+  };
+
+  // Permission checks
+  const canKick = (target: ConversationMember) => {
+    const tId = Number(target.user_id || target.id);
+    if (tId === currentUser.id) return false;
+    const targetRank = getRank(target.role);
+    if (myRole === 'admin') return true;
+    if (myRole === 'co_leader' && targetRank < 3) return true; // kicks deputy, member
+    if (myRole === 'deputy' && targetRank < 2) return true; // kicks member
+    return false;
+  };
+
+  const canMute = (target: ConversationMember) => {
+    const tId = Number(target.user_id || target.id);
+    if (tId === currentUser.id) return false;
+    const targetRank = getRank(target.role);
+    if (myRole === 'admin') return true;
+    if (myRole === 'co_leader' && targetRank < 3) return true;
+    if (myRole === 'deputy' && targetRank < 2) return true;
+    return false;
+  };
+
+  const canPromote = (target: ConversationMember) => {
+    const tId = Number(target.user_id || target.id);
+    if (tId === currentUser.id) return false;
+    if (myRole === 'admin') return true;
+    if (myRole === 'co_leader' && getRank(target.role) < 3) return true;
+    return false;
+  };
 
   const handleDownload = async (fileId?: string | null, origName?: string) => {
     if (!fileId) return;
@@ -113,27 +206,141 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
     }
   };
 
+  // Kick member action
+  const handleConfirmKick = async () => {
+    if (!kickModalMember) return;
+    setIsProcessing(true);
+    try {
+      const targetId = Number(kickModalMember.user_id || kickModalMember.id);
+      const res = await apiService.kickMember(activeConv.id, currentUser.id, targetId);
+      if (res && res.success) {
+        setKickModalMember(null);
+        setSelectedMember(null);
+        await fetchMembers();
+        refreshConversations();
+      } else {
+        alert(res.error || 'Không thể kích thành viên này!');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Lỗi kết nối máy chủ!');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Set member mute
+  const handleConfirmMute = async (isMuted: boolean) => {
+    if (!muteModalMember) return;
+    setIsProcessing(true);
+    try {
+      const targetId = Number(muteModalMember.user_id || muteModalMember.id);
+      const res = await apiService.setMemberMute(
+        activeConv.id,
+        currentUser.id,
+        targetId,
+        isMuted,
+        customMuteText.trim()
+      );
+      if (res && res.success) {
+        setMuteModalMember(null);
+        setSelectedMember(null);
+        setCustomMuteText('');
+        await fetchMembers();
+      } else {
+        alert(res.error || 'Lỗi thao tác cấm ngôn!');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Lỗi kết nối máy chủ!');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Update member role
+  const handleSetRole = async (targetUserId: number, newRole: string) => {
+    setIsProcessing(true);
+    try {
+      const res = await apiService.updateMemberRole(activeConv.id, currentUser.id, targetUserId, newRole);
+      if (res && res.success) {
+        setSelectedMember(null);
+        await fetchMembers();
+        refreshConversations();
+      } else {
+        alert(res.error || 'Không thể thay đổi quyền hạn thành viên!');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Lỗi kết nối máy chủ!');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Group mute toggle
+  const handleToggleGroupMute = async (enable: boolean) => {
+    setIsProcessing(true);
+    try {
+      const res = await apiService.setGroupMute(
+        activeConv.id,
+        currentUser.id,
+        enable,
+        customGroupMuteText.trim() || 'Nhóm đang ở chế độ cấm chat (Chỉ Ban quản trị được phát ngôn)'
+      );
+      if (res && res.success) {
+        setShowGroupMuteModal(false);
+        setActiveConv({ ...activeConv, is_muted: enable ? 1 : 0, custom_mute_text: customGroupMuteText.trim() });
+        refreshConversations();
+      } else {
+        alert(res.error || 'Lỗi cài đặt cấm chat nhóm!');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Lỗi kết nối máy chủ!');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Leave group
+  const handleConfirmLeaveGroup = async () => {
+    setIsProcessing(true);
+    try {
+      const res = await apiService.leaveGroup(activeConv.id, currentUser.id, leaveSilent);
+      if (res && res.success) {
+        setShowLeaveModal(false);
+        onClose();
+        setActiveConv(null);
+        setMessages([]);
+        refreshConversations();
+      } else {
+        alert(res.error || 'Lỗi khi rời khỏi nhóm!');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Lỗi kết nối máy chủ!');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in select-none">
-      <div className="w-[420px] max-h-[85vh] bg-white dark:bg-[#17212b] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden">
+      <div className="w-[440px] max-h-[88vh] bg-white dark:bg-[#17212b] rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="h-14 px-5 border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <User className="w-5 h-5 text-[#2481cc]" />
-            <h3 className="font-semibold text-base text-slate-800 dark:text-slate-100">
-              Thông tin hội thoại
+            {isGroup ? <Users className="w-5 h-5 text-[#2481cc]" /> : <User className="w-5 h-5 text-[#2481cc]" />}
+            <h3 className="font-bold text-base text-slate-800 dark:text-slate-100">
+              {isGroup ? 'Thông tin nhóm' : 'Thông tin hội thoại'}
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Profile Card */}
-        <div className="p-6 flex flex-col items-center border-b border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-[#1c2733]/40">
+        <div className="p-5 flex flex-col items-center border-b border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-[#1c2733]/40">
           <div
             className="w-20 h-20 rounded-full flex items-center justify-center font-bold text-white text-2xl shadow-lg mb-3 overflow-hidden ring-4 ring-blue-500/10"
             style={{ backgroundColor: activeConv.avatar_color || (isGroup ? '#06b6d4' : '#2481cc') }}
@@ -154,7 +361,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
           )}
           <span className="text-xs mt-1">
             {isGroup ? (
-              <span className="text-slate-400 font-medium">Nhóm trò chuyện</span>
+              <span className="text-slate-400 font-medium">Nhóm trò chuyện • {members.length} thành viên</span>
             ) : activeConv.is_online ? (
               <span className="text-emerald-500 font-medium flex items-center space-x-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -165,31 +372,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
             )}
           </span>
 
-          {/* Partner Info Details (Phone, etc.) */}
-          {isDirect && (
-            <div className="w-full mt-3.5 space-y-2">
-              {activeConv.phone_number ? (
-                <div className="px-3 py-2 rounded-xl bg-white dark:bg-[#202b36] border border-slate-200/60 dark:border-slate-700/50 flex items-center justify-between text-xs">
-                  <div className="flex items-center space-x-2.5">
-                    <Phone className="w-4 h-4 text-[#2481cc]" />
-                    <div className="text-left">
-                      <span className="font-semibold font-mono text-slate-800 dark:text-slate-200 block">
-                        {activeConv.phone_number}
-                      </span>
-                      <span className="text-[10px] text-slate-400">Số điện thoại</span>
-                    </div>
-                  </div>
-                  {Boolean(activeConv.is_phone_verified) && (
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-[10px] font-bold">
-                      ✓ Đã xác minh
-                    </span>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          )}
-
-          {/* Quick call buttons */}
+          {/* Quick call buttons for Direct */}
           {isDirect && (
             <div className="flex items-center space-x-3 mt-4">
               <button
@@ -218,6 +401,19 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
 
         {/* Tab Selector */}
         <div className="flex border-b border-slate-200 dark:border-slate-800 text-xs font-semibold">
+          {isGroup && (
+            <button
+              onClick={() => setActiveTab('members')}
+              className={`flex-1 py-3 flex items-center justify-center space-x-1.5 border-b-2 transition-colors ${
+                activeTab === 'members'
+                  ? 'border-[#2481cc] text-[#2481cc]'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Thành viên ({members.length})</span>
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('media')}
             className={`flex-1 py-3 flex items-center justify-center space-x-1.5 border-b-2 transition-colors ${
@@ -254,7 +450,218 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-4 min-h-[220px]">
+        <div className="flex-1 overflow-y-auto p-4 min-h-[260px]">
+          {/* Members Tab */}
+          {isGroup && activeTab === 'members' && (
+            <div className="space-y-3">
+              {/* Group Mute Admin Banner */}
+              {(myRole === 'admin' || myRole === 'co_leader') && (
+                <div className="p-3 rounded-2xl bg-slate-50 dark:bg-[#202b36] border border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-xs">
+                  <div className="flex items-center space-x-2.5">
+                    {activeConv.is_muted ? (
+                      <VolumeX className="w-4 h-4 text-red-500" />
+                    ) : (
+                      <Volume2 className="w-4 h-4 text-emerald-500" />
+                    )}
+                    <div>
+                      <span className="font-semibold text-slate-800 dark:text-slate-100 block">
+                        Cấm chat toàn nhóm
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {activeConv.is_muted ? 'Chỉ Ban quản trị được gửi tin' : 'Mọi thành viên đều được gửi tin'}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (activeConv.is_muted) {
+                        handleToggleGroupMute(false);
+                      } else {
+                        setShowGroupMuteModal(true);
+                      }
+                    }}
+                    className={`px-3 py-1 rounded-xl font-bold text-[11px] transition-colors cursor-pointer ${
+                      activeConv.is_muted
+                        ? 'bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25'
+                        : 'bg-red-500/15 text-red-600 hover:bg-red-500/25'
+                    }`}
+                  >
+                    {activeConv.is_muted ? 'Mở lại chat' : 'Khóa mõm cả nhóm'}
+                  </button>
+                </div>
+              )}
+
+              {/* Members List */}
+              <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                {members.map((m) => {
+                  const mId = Number(m.user_id || m.id);
+                  const isMe = mId === currentUser.id;
+                  const memberRole = m.role || 'member';
+
+                  return (
+                    <div
+                      key={mId}
+                      className="py-2.5 flex items-center justify-between text-xs hover:bg-slate-50/60 dark:hover:bg-slate-800/30 px-2 rounded-xl transition-colors"
+                    >
+                      <div className="flex items-center space-x-3 overflow-hidden">
+                        <div
+                          className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-white text-xs flex-shrink-0 overflow-hidden ring-2 ring-blue-500/10"
+                          style={{ backgroundColor: m.avatar_color || '#2481cc' }}
+                        >
+                          {m.avatar_url ? (
+                            <img src={m.avatar_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            getInitials(m.full_name)
+                          )}
+                        </div>
+                        <div className="truncate">
+                          <div className="flex items-center space-x-1.5">
+                            <span className="font-semibold text-slate-800 dark:text-slate-100 truncate">
+                              {m.full_name} {isMe && '(Bạn)'}
+                            </span>
+                            {/* Role Badge */}
+                            {memberRole === 'admin' ? (
+                              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center space-x-0.5">
+                                <Crown className="w-2.5 h-2.5" />
+                                <span>Trưởng nhóm</span>
+                              </span>
+                            ) : memberRole === 'co_leader' ? (
+                              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center space-x-0.5">
+                                <Shield className="w-2.5 h-2.5" />
+                                <span>Đồng thủ lĩnh</span>
+                              </span>
+                            ) : memberRole === 'deputy' ? (
+                              <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center space-x-0.5">
+                                <Shield className="w-2.5 h-2.5" />
+                                <span>Phó nhóm</span>
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.2 rounded-full text-[9px] text-slate-400 bg-slate-100 dark:bg-slate-800">
+                                Thành viên
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-1.5 mt-0.5">
+                            <span className="text-[10px] text-slate-400 font-mono">@{m.username}</span>
+                            {Boolean(m.is_muted) && (
+                              <span className="text-[9px] font-bold text-red-500 bg-red-500/10 px-1 rounded flex items-center space-x-0.5">
+                                <VolumeX className="w-2.5 h-2.5" />
+                                <span>Bị khóa mõm</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Menu Trigger (Only if operator has rank over this member) */}
+                      {!isMe && (canKick(m) || canMute(m) || canPromote(m)) && (
+                        <div className="relative">
+                          <button
+                            onClick={() => setSelectedMember(Number(selectedMember?.user_id || selectedMember?.id) === mId ? null : m)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 cursor-pointer"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+
+                          {/* Dropdown Menu */}
+                          {Number(selectedMember?.user_id || selectedMember?.id) === mId && (
+                            <div className="absolute right-0 top-8 z-20 w-44 bg-white dark:bg-[#1f2b38] rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700/80 p-1.5 divide-y divide-slate-100 dark:divide-slate-700/50 animate-in fade-in zoom-in-95">
+                              {/* Promotion Options */}
+                              {canPromote(m) && (
+                                <div className="py-1">
+                                  {myRole === 'admin' && memberRole !== 'co_leader' && (
+                                    <button
+                                      onClick={() => handleSetRole(mId, 'co_leader')}
+                                      className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+                                    >
+                                      <Shield className="w-3.5 h-3.5" />
+                                      <span>Lên Đồng thủ lĩnh</span>
+                                    </button>
+                                  )}
+                                  {memberRole !== 'deputy' && (
+                                    <button
+                                      onClick={() => handleSetRole(mId, 'deputy')}
+                                      className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+                                    >
+                                      <Shield className="w-3.5 h-3.5" />
+                                      <span>Lên Phó nhóm</span>
+                                    </button>
+                                  )}
+                                  {memberRole !== 'member' && (
+                                    <button
+                                      onClick={() => handleSetRole(mId, 'member')}
+                                      className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+                                    >
+                                      <User className="w-3.5 h-3.5" />
+                                      <span>Về Thành viên</span>
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Mute / Unmute Option */}
+                              {canMute(m) && (
+                                <div className="py-1">
+                                  {m.is_muted ? (
+                                    <button
+                                      onClick={() => {
+                                        setMuteModalMember(m);
+                                        handleConfirmMute(false);
+                                      }}
+                                      className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+                                    >
+                                      <Volume2 className="w-3.5 h-3.5" />
+                                      <span>Mở khóa mõm</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => {
+                                        setMuteModalMember(m);
+                                        setCustomMuteText(`Bạn bị khóa mõm bởi ${currentUser.full_name}`);
+                                      }}
+                                      className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+                                    >
+                                      <VolumeX className="w-3.5 h-3.5" />
+                                      <span>Khóa mõm cá nhân</span>
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Kick Option */}
+                              {canKick(m) && (
+                                <div className="pt-1">
+                                  <button
+                                    onClick={() => setKickModalMember(m)}
+                                    className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+                                  >
+                                    <UserMinus className="w-3.5 h-3.5" />
+                                    <span>Kích khỏi nhóm</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Leave Group Button */}
+              <div className="pt-4 mt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  onClick={() => setShowLeaveModal(true)}
+                  className="w-full py-2.5 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-400 font-bold text-xs flex items-center justify-center space-x-2 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Rời khỏi nhóm này</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Media Tab */}
           {activeTab === 'media' && (
             <div>
@@ -307,7 +714,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
                     {m.file_id && (
                       <button
                         onClick={() => handleDownload(m.file_id, m.original_name || 'document')}
-                        className="p-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors flex-shrink-0"
+                        className="p-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors flex-shrink-0 cursor-pointer"
                         title="Tải về"
                       >
                         <Download className="w-3.5 h-3.5" />
@@ -349,6 +756,190 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
           )}
         </div>
 
+        {/* Kick Confirmation Modal */}
+        {kickModalMember && (
+          <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+            <div className="w-full max-w-xs bg-white dark:bg-[#1a232f] rounded-2xl p-5 shadow-2xl border border-red-500/20 space-y-3">
+              <div className="flex items-center space-x-2 text-red-600 dark:text-red-400 font-bold text-sm">
+                <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                <span>Xác nhận kích thành viên</span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                Bạn có chắc chắn muốn kích <strong>{kickModalMember.full_name}</strong> khỏi nhóm không?
+              </p>
+              <div className="p-2.5 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 text-[11px] font-medium leading-relaxed">
+                ⚠️ Cảnh báo: Toàn bộ đoạn chat và quyền truy cập nhóm này sẽ bị <strong>xóa vĩnh viễn</strong> đối với thành viên bị kích!
+              </div>
+              <div className="flex space-x-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => setKickModalMember(null)}
+                  className="flex-1 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold text-xs cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={handleConfirmKick}
+                  className="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-md shadow-red-500/20 cursor-pointer"
+                >
+                  {isProcessing ? 'Đang kích...' : 'Kích ngay'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Custom Mute Member Modal */}
+        {muteModalMember && (
+          <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+            <div className="w-full max-w-xs bg-white dark:bg-[#1a232f] rounded-2xl p-5 shadow-2xl border border-amber-500/20 space-y-3 text-xs">
+              <div className="flex items-center space-x-2 text-amber-600 dark:text-amber-400 font-bold text-sm">
+                <VolumeX className="w-5 h-5 flex-shrink-0" />
+                <span>Khóa mõm: {muteModalMember.full_name}</span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-300">
+                Nhập thông báo hiển thị tại ô nhập chat của thành viên khi bị đóng băng:
+              </p>
+              <input
+                type="text"
+                value={customMuteText}
+                onChange={(e) => setCustomMuteText(e.target.value)}
+                placeholder="VD: Bạn bị khóa mõm bởi [Tên]..."
+                className="w-full h-10 px-3 rounded-xl bg-slate-100 dark:bg-[#242f3d] text-slate-800 dark:text-slate-100 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+              />
+              <div className="flex space-x-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => setMuteModalMember(null)}
+                  className="flex-1 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => handleConfirmMute(true)}
+                  className="flex-1 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold shadow-md cursor-pointer"
+                >
+                  {isProcessing ? 'Đang lưu...' : 'Khóa mõm'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Group Mute Settings Modal */}
+        {showGroupMuteModal && (
+          <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+            <div className="w-full max-w-xs bg-white dark:bg-[#1a232f] rounded-2xl p-5 shadow-2xl border border-red-500/20 space-y-3 text-xs">
+              <div className="flex items-center space-x-2 text-red-600 dark:text-red-400 font-bold text-sm">
+                <VolumeX className="w-5 h-5 flex-shrink-0" />
+                <span>Cấm chat toàn bộ nhóm</span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-300">
+                Toàn bộ thành viên thường sẽ bị đóng băng ô nhập. Nhập thông báo hiển thị cho nhóm:
+              </p>
+              <input
+                type="text"
+                value={customGroupMuteText}
+                onChange={(e) => setCustomGroupMuteText(e.target.value)}
+                placeholder="Nhóm đang ở chế độ cấm chat..."
+                className="w-full h-10 px-3 rounded-xl bg-slate-100 dark:bg-[#242f3d] text-slate-800 dark:text-slate-100 text-xs focus:ring-2 focus:ring-red-500 outline-none"
+              />
+              <div className="flex space-x-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => setShowGroupMuteModal(false)}
+                  className="flex-1 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => handleToggleGroupMute(true)}
+                  className="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-md cursor-pointer"
+                >
+                  {isProcessing ? 'Đang bật...' : 'Bật cấm chat'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Leave Group Modal (Silent vs Notice) */}
+        {showLeaveModal && (
+          <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+            <div className="w-full max-w-xs bg-white dark:bg-[#1a232f] rounded-2xl p-5 shadow-2xl border border-red-500/20 space-y-3 text-xs">
+              <div className="flex items-center space-x-2 text-red-600 dark:text-red-400 font-bold text-sm">
+                <LogOut className="w-5 h-5 flex-shrink-0" />
+                <span>Rời khỏi nhóm trò chuyện</span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-300">
+                Chọn phương thức bạn muốn rời khỏi nhóm:
+              </p>
+
+              <div className="space-y-2">
+                <label className="flex items-center space-x-2.5 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <input
+                    type="radio"
+                    name="leave_type"
+                    checked={leaveSilent === true}
+                    onChange={() => setLeaveSilent(true)}
+                    className="text-[#2481cc]"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-800 dark:text-slate-100 block">Rời trong im lặng</span>
+                    <span className="text-[10px] text-slate-400">Không gửi thông báo vào nhóm</span>
+                  </div>
+                </label>
+
+                <label className="flex items-center space-x-2.5 p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <input
+                    type="radio"
+                    name="leave_type"
+                    checked={leaveSilent === false}
+                    onChange={() => setLeaveSilent(false)}
+                    className="text-[#2481cc]"
+                  />
+                  <div>
+                    <span className="font-bold text-slate-800 dark:text-slate-100 block">Rời có thông báo</span>
+                    <span className="text-[10px] text-slate-400">Gửi tin thông báo vào nhóm</span>
+                  </div>
+                </label>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 text-[11px] font-medium">
+                Mặc định toàn bộ lịch sử tin nhắn của nhóm sẽ được xóa sạch khỏi tài khoản của bạn.
+              </div>
+
+              <div className="flex space-x-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => setShowLeaveModal(false)}
+                  className="flex-1 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={handleConfirmLeaveGroup}
+                  className="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-md cursor-pointer"
+                >
+                  {isProcessing ? 'Đang rời...' : 'Rời nhóm'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Fullscreen Image Preview Lightbox inside Info Modal */}
         {previewImage && (
           <div
@@ -362,14 +953,14 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
               <div className="absolute -top-11 right-0 flex items-center space-x-2">
                 <button
                   onClick={() => handleDownload(previewImage.fileId, previewImage.name)}
-                  className="p-2 text-white/80 hover:text-white rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                  className="p-2 text-white/80 hover:text-white rounded-full bg-white/10 hover:bg-white/20 transition-colors cursor-pointer"
                   title="Tải ảnh về máy"
                 >
                   <Download className="w-5 h-5" />
                 </button>
                 <button
                   onClick={() => setPreviewImage(null)}
-                  className="p-2 text-white/80 hover:text-white rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                  className="p-2 text-white/80 hover:text-white rounded-full bg-white/10 hover:bg-white/20 transition-colors cursor-pointer"
                   title="Đóng"
                 >
                   <X className="w-5 h-5" />
@@ -396,4 +987,3 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
     </div>
   );
 };
-

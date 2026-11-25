@@ -408,5 +408,77 @@ export const apiService = {
     window.open(url, '_blank');
     return true;
   },
+
+  // --- OTP & ĐỔI MẬT KHẨU APIS ---
+  async requestPasswordOtp(userId: number, targetType: 'phone' | 'email' | 'auto' = 'auto'): Promise<any> {
+    return await this.sendRequest('request_password_otp', { user_id: userId, target_type: targetType });
+  },
+
+  async changePasswordWithOtp(userId: number, otpCode: string, newPassword: string): Promise<any> {
+    return await this.sendRequest('change_password_with_otp', {
+      user_id: userId,
+      otp_code: otpCode,
+      new_password: newPassword,
+    });
+  },
+
+  async linkContactInfo(userId: number, contact: string, contactType: 'phone' | 'email' | 'auto' = 'auto'): Promise<any> {
+    return await this.sendRequest('link_contact_info', {
+      user_id: userId,
+      contact,
+      contact_type: contactType,
+    });
+  },
+
+  // --- QUẢN LÝ NHÓM & PHÂN CẤP CHỨC TƯỚC, KICK & CẤM NGÔN APIS ---
+  async updateMemberRole(convId: number | string, operatorId: number, targetId: number, newRole: string): Promise<any> {
+    return await this.sendRequest('update_member_role', {
+      conversation_id: convId,
+      operator_id: operatorId,
+      target_id: targetId,
+      new_role: newRole,
+    });
+  },
+
+  async kickMember(convId: number | string, operatorId: number, targetId: number): Promise<any> {
+    return await this.sendRequest('kick_member', {
+      conversation_id: convId,
+      operator_id: operatorId,
+      target_id: targetId,
+    });
+  },
+
+  async setMemberMute(convId: number | string, operatorId: number, targetId: number, isMuted: boolean, customText?: string): Promise<any> {
+    return await this.sendRequest('set_member_mute', {
+      conversation_id: convId,
+      operator_id: operatorId,
+      target_id: targetId,
+      is_muted: isMuted,
+      custom_text: customText,
+    });
+  },
+
+  async setGroupMute(convId: number | string, operatorId: number, isMuted: boolean, customText?: string): Promise<any> {
+    return await this.sendRequest('set_group_mute', {
+      conversation_id: convId,
+      operator_id: operatorId,
+      is_muted: isMuted,
+      custom_text: customText,
+    });
+  },
+
+  async leaveGroup(convId: number | string, userId: number, silent: boolean = false): Promise<any> {
+    return await this.sendRequest('leave_group', {
+      conversation_id: convId,
+      user_id: userId,
+      silent,
+    });
+  },
+
+  async getConversationMembers(convId: number | string): Promise<{ success: boolean; members: any[] }> {
+    return await this.sendRequest('get_conversation_members', {
+      conversation_id: convId,
+    });
+  },
 };
 

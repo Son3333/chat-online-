@@ -394,8 +394,28 @@ class ChatServer:
             all_online = list(self.active_clients.keys())
         self.broadcast_to_users(all_online, payload)
 
+    def _get_auth_user_id(self, client_sock: socket.socket) -> Optional[int]:
+        """Lấy user_id đã xác thực thành công gắn liền với socket hiện tại."""
+        with self.lock:
+            val = self.socket_to_user.get(client_sock)
+            if isinstance(val, tuple):
+                return val[0]
+            return val
+
     def process_action(self, client_sock: socket.socket, packet: dict) -> dict:
         action = packet.get("action")
+
+        # Chống mạo danh (Anti-Spoofing): Xác thực nghiêm ngặt sender_id từ socket đã đăng nhập
+        auth_uid = self._get_auth_user_id(client_sock)
+        if auth_uid is not None:
+            req_sender = packet.get("sender_id")
+            if req_sender is not None and req_sender != "":
+                try:
+                    if int(req_sender) != int(auth_uid):
+                        log(f"[!] PHÁT HIỆN MẠO DANH: Socket User #{auth_uid} cố tình gửi sender_id #{req_sender}! Chặn lập tức.")
+                        return {"action": "error", "success": False, "message": "Cảnh báo bảo mật: Hành vi mạo danh người gửi bị chặn!"}
+                except Exception:
+                    pass
 
         # 1. Đăng nhập
         if action == "login":
@@ -493,14 +513,30 @@ class ChatServer:
         # 4. Lấy lịch sử tin nhắn
         elif action == "get_messages":
             conv_id = packet.get("conversation_id")
+            caller_id = self._get_auth_user_id(client_sock) or packet.get("user_id")
+
+            # CHỐNG NGHE LÉN: Chỉ thành viên hợp lệ của cuộc trò chuyện mới được lấy tin nhắn
+            if not conv_id or not caller_id or not self.db.is_conversation_member(conv_id, caller_id):
+                log(f"[!] TU CHOI TRUY CAP: User #{caller_id} co gang doc tin nhan Hoi thoai #{conv_id} khi khong phai thanh vien!")
+                return {
+                    "action": "messages_history",
+                    "success": False,
+                    "message": "Từ chối truy cập: Bạn không phải thành viên của cuộc trò chuyện này!",
+                    "conversation_id": conv_id,
+                    "messages": [],
+                    "members": []
+                }
+
             messages = self.db.get_messages(conv_id)
             members = self.db.get_conversation_members(conv_id)
+            conv_info = self.db.get_conversation_info(conv_id)
             return {
                 "action": "messages_history",
                 "success": True,
                 "conversation_id": conv_id,
                 "messages": messages,
-                "members": members
+                "members": members,
+                "conv_info": conv_info
             }
 
         # 5. Gửi tin nhắn văn bản / emoji / tệp / vị trí
@@ -514,10 +550,41 @@ class ChatServer:
             if not content and not file_id:
                 return {"action": "send_message_response", "success": False, "message": "Nội dung rỗng"}
 
-            # Kiểm tra xem cuộc trò chuyện có bị chặn không (đối với chat 1-1)
+            # CHỐNG GỬI LẬU: Kiểm tra sender có phải thành viên hợp lệ của cuộc trò chuyện không
+            if not conv_id or not sender_id or not self.db.is_conversation_member(conv_id, sender_id):
+                log(f"[!] CHẶN GỬI TIN LẬU: User #{sender_id} cố tình gửi tin vào Hội thoại #{conv_id} mà không phải thành viên!")
+                return {
+                    "action": "send_message_response",
+                    "success": False,
+                    "message": "Từ chối gửi: Bạn không phải thành viên của cuộc trò chuyện này!"
+                }
+
+            # Kiểm tra CẤM NGÔN / KHÓA MÕM (Nhóm chat)
+            conv_info = self.db.get_conversation_info(conv_id)
             members = self.db.get_conversation_members(conv_id)
+            sender_member = next((m for m in members if int(m["id"]) == int(sender_id)), None)
+
+            if sender_member:
+                sender_role = sender_member.get("role", "member")
+                # 1. Nhóm bị cấm chat toàn bộ (chỉ Ban quản trị: admin, owner, co_leader, deputy được nói)
+                if conv_info and conv_info.get("is_muted"):
+                    if sender_role not in ("admin", "owner", "co_leader", "deputy"):
+                        custom_mute = conv_info.get("custom_mute_text") or "Nhóm đang ở chế độ cấm chat. Bạn không có quyền phát ngôn!"
+                        return {"action": "send_message_response", "success": False, "message": custom_mute, "error": custom_mute, "is_muted": True}
+
+                # 2. Cá nhân bị cấm ngôn (khóa mõm)
+                if sender_member.get("is_muted"):
+                    muted_by = sender_member.get("muted_by_name") or "Ban quản trị"
+                    custom_mute = (conv_info.get("custom_mute_text") if conv_info else None) or f"Bạn bị khóa mõm bởi {muted_by}"
+                    if "{name}" in custom_mute or "{admin_name}" in custom_mute:
+                        custom_mute = custom_mute.replace("{name}", muted_by).replace("{admin_name}", muted_by)
+                    elif muted_by not in custom_mute:
+                        custom_mute = f"{custom_mute} ({muted_by})"
+                    return {"action": "send_message_response", "success": False, "message": custom_mute, "error": custom_mute, "is_muted": True}
+
+            # Kiểm tra xem cuộc trò chuyện có bị chặn không (đối với chat 1-1)
             if len(members) == 2:
-                other_members = [m for m in members if m["id"] != sender_id]
+                other_members = [m for m in members if int(m["id"]) != int(sender_id)]
                 if other_members:
                     other_id = other_members[0]["id"]
                     if self.db.is_blocked(sender_id, other_id):
@@ -530,7 +597,7 @@ class ChatServer:
             reply_to_id = packet.get("reply_to_id")
             saved_msg = self.db.save_message(conv_id, sender_id, msg_type, content, file_id=file_id, reply_to_id=reply_to_id)
             if saved_msg:
-                # Gửi cho tất cả thành viên trong nhóm đang online
+                # Gửi CHÍNH XÁC cho các thành viên trong cuộc trò chuyện đang online (không rò rỉ ra ngoài)
                 members = self.db.get_conversation_members(conv_id)
                 member_ids = [m["id"] for m in members]
 
@@ -556,11 +623,31 @@ class ChatServer:
             if not file_base64:
                 return {"action": "upload_response", "success": False, "message": "Dữ liệu tệp rỗng!"}
 
-            # Kiểm tra xem cuộc trò chuyện có bị chặn không nếu có conv_id
+            # CHỐNG GỬI TỆP LẬU: Kiểm tra sender có phải thành viên của cuộc trò chuyện không
+            if conv_id and sender_id and not self.db.is_conversation_member(conv_id, sender_id):
+                log(f"[!] CHẶN GỬI TỆP LẬU: User #{sender_id} cố tình tải tệp vào Hội thoại #{conv_id} khi không phải thành viên!")
+                return {
+                    "action": "upload_response",
+                    "success": False,
+                    "message": "Từ chối gửi tệp: Bạn không phải thành viên của cuộc trò chuyện này!"
+                }
+
+            # Kiểm tra CẤM NGÔN / KHÓA MÕM
             if conv_id and sender_id:
+                conv_info = self.db.get_conversation_info(conv_id)
                 members = self.db.get_conversation_members(conv_id)
+                sender_member = next((m for m in members if int(m["id"]) == int(sender_id)), None)
+                if sender_member:
+                    sender_role = sender_member.get("role", "member")
+                    if conv_info and conv_info.get("is_muted") and sender_role not in ("admin", "owner", "co_leader", "deputy"):
+                        return {"action": "upload_response", "success": False, "message": "Nhóm đang cấm chat, không thể gửi tệp!"}
+                    if sender_member.get("is_muted"):
+                        muted_by = sender_member.get("muted_by_name") or "Ban quản trị"
+                        return {"action": "upload_response", "success": False, "message": f"Bạn bị khóa mõm bởi {muted_by}, không thể gửi tệp!"}
+
+                # Kiểm tra chặn 1-1
                 if len(members) == 2:
-                    other_members = [m for m in members if m["id"] != sender_id]
+                    other_members = [m for m in members if int(m["id"]) != int(sender_id)]
                     if other_members:
                         other_id = other_members[0]["id"]
                         if self.db.is_blocked(sender_id, other_id):
@@ -582,7 +669,7 @@ class ChatServer:
                 actual_size = file_size if file_size else len(file_bytes)
                 file_id = self.db.save_file_record(filename, unique_name, actual_size, file_type, sender_id or 0)
 
-                # Nếu truyền kèm conv_id -> Lưu luôn tin nhắn kèm file và broadcast
+                # Nếu truyền kèm conv_id -> Lưu luôn tin nhắn kèm file và broadcast CHÍNH XÁC tới thành viên
                 if conv_id and sender_id:
                     caption = packet.get("caption", "") or f"Đã gửi tệp: {filename}"
                     reply_to_id = packet.get("reply_to_id")
@@ -753,7 +840,7 @@ class ChatServer:
 
         elif action in ("add_friend", "send_friend_request"):
             user_id = packet.get("user_id") or packet.get("sender_id")
-            friend_id = packet.get("friend_id") or packet.get("target_id")
+            friend_id = packet.get("friend_id") or packet.get("target_id") or packet.get("receiver_id")
             res = self.db.send_friend_request(user_id, friend_id)
             # Thông báo tức thời cho bên nhận nếu đang online
             if res.get("success"):
@@ -768,9 +855,9 @@ class ChatServer:
                     })
             return {"action": "add_friend_response", **res}
 
-        elif action == "accept_friend":
+        elif action in ("accept_friend", "accept_friend_request"):
             user_id = packet.get("user_id")
-            requester_id = packet.get("requester_id")
+            requester_id = packet.get("requester_id") or packet.get("friend_id")
             res = self.db.accept_friend_request(user_id, requester_id)
             if res.get("success"):
                 # Cập nhật danh bạ và cuộc trò chuyện ngay lập tức cho cả 2 bên
@@ -1191,6 +1278,163 @@ class ChatServer:
                     "data": packet.get("data")
                 })
             return None
+
+        # =========================================================================
+        # --- PHÂN HỆ ĐỔI MẬT KHẨU & LIÊN KẾT GMAIL / SĐT XÁC THỰC OTP ---
+        # =========================================================================
+        elif action == "request_password_otp":
+            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
+            target_type = packet.get("target_type", "auto")
+            res = self.db.create_password_reset_otp(user_id, target_type)
+            return {"action": "request_password_otp_response", **res}
+
+        elif action == "change_password_with_otp":
+            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
+            otp_code = packet.get("otp_code")
+            new_password = packet.get("new_password")
+            res = self.db.verify_and_change_password(user_id, otp_code, new_password)
+            return {"action": "change_password_with_otp_response", **res}
+
+        elif action == "link_contact_info":
+            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
+            contact = packet.get("contact", "")
+            contact_type = packet.get("contact_type", "auto")
+            res = self.db.link_user_contact(user_id, contact, contact_type)
+            if res.get("success"):
+                self.broadcast_to_users([user_id], {
+                    "type": "profile_updated",
+                    "user": res.get("user")
+                })
+            return {"action": "link_contact_info_response", **res}
+
+        elif action == "change_password":
+            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
+            old_pwd = packet.get("old_password")
+            new_pwd = packet.get("new_password")
+            res = self.db.change_password_direct(user_id, old_pwd, new_pwd)
+            return {"action": "change_password_response", **res}
+
+        # =========================================================================
+        # --- PHÂN HỆ QUẢN LÝ NHÓM: PHÂN CẤP CHỨC TƯỚC, KICK & CẤM NGÔN ---
+        # =========================================================================
+        elif action == "update_member_role":
+            conv_id = packet.get("conversation_id")
+            operator_id = packet.get("operator_id") or self._get_auth_user_id(client_sock)
+            target_id = packet.get("target_id")
+            new_role = packet.get("new_role")
+            res = self.db.update_member_role(conv_id, operator_id, target_id, new_role)
+            if res.get("success"):
+                members = self.db.get_conversation_members(conv_id)
+                member_ids = [m["id"] for m in members]
+                self.broadcast_to_users(member_ids, {
+                    "type": "member_role_updated",
+                    "conversation_id": conv_id,
+                    "target_id": target_id,
+                    "new_role": new_role,
+                    "new_role_title": res.get("new_role_title")
+                })
+                self.broadcast_to_users(member_ids, {"type": "refresh_conversations"})
+            return {"action": "update_member_role_response", **res}
+
+        elif action == "add_group_member":
+            conv_id = packet.get("conversation_id")
+            target_id = packet.get("user_id") or packet.get("target_id")
+            role = packet.get("role", "member")
+            ok = self.db.add_group_member(conv_id, target_id, role)
+            if ok:
+                members = self.db.get_conversation_members(conv_id)
+                member_ids = [m["id"] for m in members]
+                self.broadcast_to_users(member_ids, {"type": "refresh_conversations"})
+            return {"action": "add_group_member_response", "success": ok}
+
+        elif action == "kick_member":
+            conv_id = packet.get("conversation_id")
+            operator_id = packet.get("operator_id") or self._get_auth_user_id(client_sock)
+            target_id = packet.get("target_id")
+            res = self.db.kick_group_member(conv_id, operator_id, target_id)
+            if res.get("success"):
+                # 1. Gửi thông báo trực tiếp cho người bị kích để xóa sạch vĩnh viễn đoạn chat khỏi màn hình của họ
+                self.broadcast_to_users([target_id], {
+                    "type": "kicked_from_group",
+                    "conversation_id": conv_id,
+                    "message": f"Bạn đã bị {res.get('operator_name', 'Ban quản trị')} kích khỏi nhóm trò chuyện!"
+                })
+                self.broadcast_to_users([target_id], {"type": "refresh_conversations"})
+
+                # 2. Thông báo cho các thành viên còn lại trong nhóm cập nhật danh sách
+                members = self.db.get_conversation_members(conv_id)
+                remaining_ids = [m["id"] for m in members]
+                self.broadcast_to_users(remaining_ids, {
+                    "type": "member_kicked",
+                    "conversation_id": conv_id,
+                    "kicked_user_id": target_id,
+                    "kicked_user_name": res.get("kicked_user_name")
+                })
+                self.broadcast_to_users(remaining_ids, {"type": "refresh_conversations"})
+            return {"action": "kick_member_response", **res}
+
+        elif action == "set_member_mute":
+            conv_id = packet.get("conversation_id")
+            operator_id = packet.get("operator_id") or self._get_auth_user_id(client_sock)
+            target_id = packet.get("target_id")
+            is_muted = packet.get("is_muted", True)
+            custom_text = packet.get("custom_text")
+            res = self.db.set_member_mute(conv_id, operator_id, target_id, is_muted, custom_text)
+            if res.get("success"):
+                members = self.db.get_conversation_members(conv_id)
+                member_ids = [m["id"] for m in members]
+                self.broadcast_to_users(member_ids, {
+                    "type": "member_mute_updated",
+                    "conversation_id": conv_id,
+                    "target_id": target_id,
+                    "is_muted": is_muted,
+                    "muted_by_name": res.get("muted_by_name"),
+                    "target_name": res.get("target_name")
+                })
+                self.broadcast_to_users(member_ids, {"type": "refresh_conversations"})
+            return {"action": "set_member_mute_response", **res}
+
+        elif action == "set_group_mute":
+            conv_id = packet.get("conversation_id")
+            operator_id = packet.get("operator_id") or self._get_auth_user_id(client_sock)
+            is_muted = packet.get("is_muted", True)
+            custom_text = packet.get("custom_text")
+            res = self.db.set_group_mute(conv_id, operator_id, is_muted, custom_text)
+            if res.get("success"):
+                members = self.db.get_conversation_members(conv_id)
+                member_ids = [m["id"] for m in members]
+                self.broadcast_to_users(member_ids, {
+                    "type": "group_mute_updated",
+                    "conversation_id": conv_id,
+                    "is_muted": is_muted,
+                    "custom_text": custom_text
+                })
+                self.broadcast_to_users(member_ids, {"type": "refresh_conversations"})
+            return {"action": "set_group_mute_response", **res}
+
+        elif action == "leave_group":
+            conv_id = packet.get("conversation_id")
+            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
+            silent = packet.get("silent", False)
+            res = self.db.leave_group(conv_id, user_id, silent)
+            if res.get("success"):
+                # Người rời được xóa sạch hội thoại khỏi danh sách
+                self.broadcast_to_users([user_id], {"type": "refresh_conversations"})
+
+                # Nếu rời không im lặng: gửi thông báo đến các thành viên còn lại
+                members = self.db.get_conversation_members(conv_id)
+                remaining_ids = [m["id"] for m in members]
+                if not silent and remaining_ids:
+                    # Lưu thông báo thành viên đã rời nhóm
+                    leave_msg = f"{res.get('user_name', 'Một thành viên')} đã rời khỏi nhóm trò chuyện."
+                    saved_m = self.db.save_message(conv_id, user_id, "text", leave_msg)
+                    self.broadcast_to_users(remaining_ids, {
+                        "type": "new_message",
+                        "conversation_id": conv_id,
+                        "message": saved_m
+                    })
+                self.broadcast_to_users(remaining_ids, {"type": "refresh_conversations"})
+            return {"action": "leave_group_response", **res}
 
 if __name__ == "__main__":
     server = ChatServer()

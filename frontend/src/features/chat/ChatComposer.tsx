@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Paperclip, Smile, Send, X, MapPin, Image as ImageIcon, Video, FileText, Loader2 } from 'lucide-react';
+import { Paperclip, Smile, Send, X, MapPin, Image as ImageIcon, Video, FileText, Loader2, VolumeX } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { EmojiPicker } from '../../components/EmojiPicker';
 import { apiService } from '../../services/api';
@@ -30,9 +30,26 @@ export const ChatComposer: React.FC = () => {
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const [activeCategory, setActiveCategory] = useState<'image' | 'video' | 'file'>('file');
 
+  // Mute logic
+  const isGroup = activeConv?.type === 'group';
+  const myRole = activeConv?.my_role || 'member';
+  const isPrivileged = myRole === 'admin' || myRole === 'co_leader' || myRole === 'deputy';
+
+  const isPersonallyMuted = Boolean(activeConv?.my_is_muted);
+  const isGroupMuted = Boolean(activeConv?.is_muted) && !isPrivileged;
+  const isMuted = isGroup && (isPersonallyMuted || isGroupMuted);
+
+  const freezeMessage = isPersonallyMuted
+    ? (activeConv?.my_muted_by
+        ? `Bạn bị khóa mõm bởi ${activeConv.my_muted_by}`
+        : (activeConv?.custom_mute_text || 'Bạn bị khóa mõm trong cuộc trò chuyện này'))
+    : (activeConv?.custom_mute_text || 'Nhóm đang ở chế độ cấm chat (Chỉ Ban quản trị được gửi tin)');
+
   useEffect(() => {
-    inputRef.current?.focus();
-  }, [activeConv, replyTo]);
+    if (!isMuted) {
+      inputRef.current?.focus();
+    }
+  }, [activeConv, replyTo, isMuted]);
 
   // Click outside to close attachment menu
   useEffect(() => {
@@ -67,6 +84,7 @@ export const ChatComposer: React.FC = () => {
   };
 
   const handleSend = async () => {
+    if (isMuted) return;
     if (!text.trim() || isSending) return;
     setIsSending(true);
     const sent = await sendMessage(text.trim(), 'text');
@@ -78,7 +96,7 @@ export const ChatComposer: React.FC = () => {
   };
 
   const handleShareLocation = () => {
-    if (!activeConv || !currentUser) return;
+    if (isMuted || !activeConv || !currentUser) return;
     setShowLocationModal(true);
   };
 
@@ -90,6 +108,10 @@ export const ChatComposer: React.FC = () => {
     customCaption?: string
   ) => {
     if (!activeConv || !currentUser) return;
+    if (isMuted) {
+      alert(freezeMessage);
+      return;
+    }
 
     if (fileSize > 40 * 1024 * 1024) {
       alert('Tệp tin vượt quá giới hạn 40MB. Vui lòng chọn tệp nhỏ hơn.');
@@ -438,12 +460,15 @@ export const ChatComposer: React.FC = () => {
       <div className="flex items-center space-x-1.5">
         {/* Attach File Button - Toggles Menu */}
         <button
-          onClick={() => setShowAttachMenu(!showAttachMenu)}
-          title="Đính kèm Hình ảnh, Video hoặc Tệp tin"
-          className={`p-2 rounded-xl transition-all cursor-pointer ${
-            showAttachMenu
-              ? 'bg-[#2481cc]/15 text-[#2481cc] dark:bg-[#2481cc]/25'
-              : 'text-slate-400 hover:text-[#2481cc] hover:bg-slate-100 dark:hover:bg-slate-800'
+          onClick={() => !isMuted && setShowAttachMenu(!showAttachMenu)}
+          disabled={isMuted}
+          title={isMuted ? freezeMessage : "Đính kèm Hình ảnh, Video hoặc Tệp tin"}
+          className={`p-2 rounded-xl transition-all ${
+            isMuted
+              ? 'opacity-35 cursor-not-allowed text-slate-400'
+              : showAttachMenu
+              ? 'bg-[#2481cc]/15 text-[#2481cc] dark:bg-[#2481cc]/25 cursor-pointer'
+              : 'text-slate-400 hover:text-[#2481cc] hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer'
           }`}
         >
           <Paperclip className="w-5 h-5" />
@@ -452,35 +477,49 @@ export const ChatComposer: React.FC = () => {
         {/* Share Location Button */}
         <button
           onClick={handleShareLocation}
-          title="Chia sẻ vị trí thời gian thực"
-          className="p-2 rounded-xl text-slate-400 hover:text-emerald-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+          disabled={isMuted}
+          title={isMuted ? freezeMessage : "Chia sẻ vị trí thời gian thực"}
+          className={`p-2 rounded-xl transition-colors ${
+            isMuted
+              ? 'opacity-35 cursor-not-allowed text-slate-400'
+              : 'text-slate-400 hover:text-emerald-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer'
+          }`}
         >
           <MapPin className="w-5 h-5" />
         </button>
 
-        {/* Text Input */}
+        {/* Text Input - Frozen when Muted */}
         <div className="flex-1 relative flex items-center">
-          <input
-            ref={inputRef}
-            type="text"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Viết tin nhắn... (Nhấn Enter để gửi)"
-            className="w-full h-10 px-4 pr-10 rounded-xl bg-slate-100 dark:bg-[#242f3d] text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#2481cc] transition-all"
-          />
+          {isMuted ? (
+            <div className="w-full h-10 px-4 rounded-xl bg-red-500/10 dark:bg-red-500/15 border border-red-500/30 flex items-center space-x-2 text-red-600 dark:text-red-400 select-none shadow-inner">
+              <VolumeX className="w-4 h-4 flex-shrink-0 animate-pulse" />
+              <span className="text-xs font-semibold truncate tracking-wide">{freezeMessage}</span>
+            </div>
+          ) : (
+            <input
+              ref={inputRef}
+              type="text"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Viết tin nhắn... (Nhấn Enter để gửi)"
+              className="w-full h-10 px-4 pr-10 rounded-xl bg-slate-100 dark:bg-[#242f3d] text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#2481cc] transition-all"
+            />
+          )}
 
           {/* Inline Emoji Trigger */}
-          <button
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            title="Biểu tượng cảm xúc"
-            className="absolute right-2 p-1.5 rounded-lg text-slate-400 hover:text-amber-500 hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-colors"
-          >
-            <Smile className="w-4 h-4" />
-          </button>
+          {!isMuted && (
+            <button
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              title="Biểu tượng cảm xúc"
+              className="absolute right-2 p-1.5 rounded-lg text-slate-400 hover:text-amber-500 hover:bg-slate-200 dark:hover:bg-slate-700/50 transition-colors"
+            >
+              <Smile className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Emoji Picker Popup */}
-          {showEmojiPicker && (
+          {!isMuted && showEmojiPicker && (
             <div className="absolute bottom-12 right-0 z-50">
               <EmojiPicker onSelect={handleEmojiSelect} onClose={() => setShowEmojiPicker(false)} />
             </div>
@@ -490,10 +529,10 @@ export const ChatComposer: React.FC = () => {
         {/* Send Button */}
         <button
           onClick={handleSend}
-          disabled={!text.trim() || isSending}
-          title="Gửi tin nhắn"
+          disabled={isMuted || !text.trim() || isSending}
+          title={isMuted ? freezeMessage : "Gửi tin nhắn"}
           className={`p-2.5 rounded-xl transition-all ${
-            text.trim() && !isSending
+            !isMuted && text.trim() && !isSending
               ? 'bg-[#2481cc] text-white hover:bg-[#1d73b8] hover:scale-105 active:scale-95 shadow-md shadow-[#2481cc]/20 cursor-pointer'
               : 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
           }`}

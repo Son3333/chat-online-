@@ -6,6 +6,8 @@ export interface User {
   avatar_url?: string;
   phone_number?: string;
   is_phone_verified?: number | boolean;
+  email?: string;
+  is_email_verified?: number | boolean;
   status?: string;
   pin_code?: string;
   is_online?: number | boolean;
@@ -32,11 +34,33 @@ export interface Conversation {
   partner_username?: string;
   phone_number?: string;
   is_phone_verified?: number | boolean;
+  email?: string;
+  is_email_verified?: number | boolean;
   is_online?: number | boolean;
   member_count?: number;
   last_message?: LastMessage | null;
   unread_count?: number;
   is_pinned?: boolean | number;
+  is_muted?: number | boolean;
+  custom_mute_text?: string;
+  my_role?: 'admin' | 'owner' | 'co_leader' | 'deputy' | 'member';
+  my_is_muted?: number | boolean;
+  my_muted_by?: string;
+}
+
+export interface ConversationMember {
+  id: number;
+  user_id?: number;
+  username: string;
+  full_name: string;
+  avatar_color?: string;
+  avatar_url?: string;
+  is_online?: number | boolean;
+  role: 'admin' | 'owner' | 'co_leader' | 'deputy' | 'member';
+  is_muted?: number | boolean;
+  muted_by_name?: string;
+  status?: string;
+  joined_at?: string;
 }
 
 export interface ReactionUser {

@@ -16,6 +16,9 @@ import {
   Camera,
   Phone,
   Smartphone,
+  Mail,
+  AlertTriangle,
+  RefreshCw,
   Trash2
 } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
@@ -57,7 +60,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     refreshConversations,
   } = useChat();
 
-  const [activeSubView, setActiveSubView] = useState<'main' | 'edit_profile' | 'change_password' | 'pin_code' | 'phone_verification'>('main');
+  const [activeSubView, setActiveSubView] = useState<'main' | 'edit_profile' | 'change_password' | 'pin_code' | 'phone_verification' | 'link_contact'>('main');
 
   // Edit profile state
   const [fullName, setFullName] = useState(currentUser?.full_name || '');
@@ -68,14 +71,24 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Contact linking state
+  const [contactInput, setContactInput] = useState('');
+  const [contactType, setContactType] = useState<'email' | 'phone'>('email');
+
   // Phone verification state
   const [phoneNumber, setPhoneNumber] = useState(currentUser?.phone_number || '');
   const [otpCode, setOtpCode] = useState('');
   const [sentOtp, setSentOtp] = useState<string | null>(null);
   const [otpCountdown, setOtpCountdown] = useState<number>(0);
-  const [smsAlert, setSmsAlert] = useState<{ code: string; time: string } | null>(null);
+  const [smsAlert, setSmsAlert] = useState<{ code: string; time: string; target?: string } | null>(null);
 
-  // Change password state
+  // Change password with OTP state
+  const [pwdTargetType, setPwdTargetType] = useState<'email' | 'phone'>(
+    currentUser?.email ? 'email' : 'phone'
+  );
+  const [pwdOtpCode, setPwdOtpCode] = useState('');
+  const [pwdOtpCountdown, setPwdOtpCountdown] = useState(0);
+  const [pwdOtpAlert, setPwdOtpAlert] = useState<{ code: string; target: string } | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -95,6 +108,14 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       return () => clearTimeout(timer);
     }
   }, [otpCountdown]);
+
+  // Countdown timer cho Password OTP
+  useEffect(() => {
+    if (pwdOtpCountdown > 0) {
+      const timer = setTimeout(() => setPwdOtpCountdown(pwdOtpCountdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [pwdOtpCountdown]);
 
   // Cập nhật state khi currentUser thay đổi
   useEffect(() => {
@@ -300,9 +321,77 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     }
   };
 
-  const handleChangePassword = async () => {
+  const handleLinkContact = async () => {
+    const clean = contactInput.trim();
+    if (!clean) {
+      setErrorMsg(contactType === 'email' ? 'Vui lòng nhập địa chỉ Gmail!' : 'Vui lòng nhập số điện thoại!');
+      return;
+    }
+    if (contactType === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) {
+      setErrorMsg('Địa chỉ email không hợp lệ (VD: user@gmail.com)!');
+      return;
+    }
+    if (contactType === 'phone' && clean.length < 8) {
+      setErrorMsg('Số điện thoại không hợp lệ!');
+      return;
+    }
+    setIsSaving(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiService.linkContactInfo(currentUser.id, clean, contactType);
+      if (res && res.success && res.user) {
+        setCurrentUser(res.user);
+        localStorage.setItem('vibe_user', JSON.stringify(res.user));
+        setSuccessMsg(`🎉 Đã liên kết ${contactType === 'email' ? 'Gmail' : 'Số điện thoại'} thành công!`);
+        setContactInput('');
+        setPwdTargetType(contactType);
+        setTimeout(() => {
+          setSuccessMsg(null);
+          setActiveSubView('change_password');
+        }, 1000);
+      } else {
+        setErrorMsg(res.error || 'Liên kết thông tin thất bại!');
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Lỗi kết nối máy chủ!');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRequestPasswordOtp = async () => {
+    setIsSaving(true);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      const res = await apiService.requestPasswordOtp(currentUser.id, pwdTargetType);
+      if (res && res.success) {
+        setPwdOtpCountdown(60);
+        if (res.otp_code) {
+          setPwdOtpAlert({ code: res.otp_code, target: res.target || (pwdTargetType === 'email' ? currentUser.email || '' : currentUser.phone_number || '') });
+        }
+        setSuccessMsg(`Mã OTP đã được gửi đến ${res.target || pwdTargetType}!`);
+      } else {
+        setErrorMsg(res.error || 'Không thể tạo mã OTP. Vui lòng thử lại!');
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Lỗi khi yêu cầu mã OTP!');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleChangePasswordWithOtp = async () => {
+    if (!pwdOtpCode.trim() || pwdOtpCode.trim().length !== 6) {
+      setErrorMsg('Vui lòng nhập đúng mã OTP 6 chữ số!');
+      return;
+    }
     if (!newPassword) {
       setErrorMsg('Vui lòng nhập mật khẩu mới!');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setErrorMsg('Mật khẩu mới phải có tối thiểu 6 ký tự!');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -312,22 +401,22 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     setIsSaving(true);
     setErrorMsg(null);
     try {
-      const res = await apiService.updateProfile(currentUser.id, {
-        new_password: newPassword,
-      });
+      const res = await apiService.changePasswordWithOtp(currentUser.id, pwdOtpCode.trim(), newPassword);
       if (res && res.success) {
-        setSuccessMsg('Đã đổi mật khẩu thành công!');
+        setSuccessMsg('🎉 Đổi mật khẩu thành công!');
         setNewPassword('');
         setConfirmPassword('');
+        setPwdOtpCode('');
+        setPwdOtpAlert(null);
         setTimeout(() => {
           setSuccessMsg(null);
           setActiveSubView('main');
-        }, 1000);
+        }, 1200);
       } else {
-        setErrorMsg(res.error || 'Đổi mật khẩu thất bại!');
+        setErrorMsg(res.error || 'Mã OTP không chính xác hoặc đã hết hiệu lực (5 phút)!');
       }
     } catch (e: any) {
-      setErrorMsg(e.message || 'Lỗi khi đổi mật khẩu!');
+      setErrorMsg(e.message || 'Lỗi kết nối máy chủ!');
     } finally {
       setIsSaving(false);
     }
@@ -419,9 +508,11 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 : activeSubView === 'edit_profile'
                 ? 'Chỉnh sửa hồ sơ'
                 : activeSubView === 'change_password'
-                ? 'Đổi mật khẩu'
+                ? 'Đổi mật khẩu qua OTP'
                 : activeSubView === 'pin_code'
                 ? 'Cài đặt mã PIN'
+                : activeSubView === 'link_contact'
+                ? 'Liên kết Gmail / SĐT'
                 : 'Xác minh số điện thoại'}
             </h3>
           </div>
@@ -492,6 +583,40 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     ) : (
                       <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400">
                         {currentUser.phone_number ? 'Chưa xác minh' : 'Thêm ngay'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="h-px bg-slate-200/60 dark:bg-slate-700/60" />
+
+                {/* Email / Gmail row */}
+                <div
+                  onClick={() => {
+                    setErrorMsg(null);
+                    setSuccessMsg(null);
+                    setContactType('email');
+                    setActiveSubView('link_contact');
+                  }}
+                  className="flex items-center justify-between text-xs cursor-pointer hover:opacity-80 transition-opacity"
+                  title="Nhấn để liên kết tài khoản Gmail"
+                >
+                  <span className="text-slate-500 dark:text-slate-400 flex items-center space-x-1.5">
+                    <Mail className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Tài khoản Gmail</span>
+                  </span>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="font-semibold text-slate-800 dark:text-slate-100 font-mono text-[11px] truncate max-w-[140px]">
+                      {currentUser.email || 'Chưa thiết lập'}
+                    </span>
+                    {currentUser.email ? (
+                      <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center space-x-0.5">
+                        <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        <span>Đã liên kết</span>
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                        Liên kết ngay
                       </span>
                     )}
                   </div>
@@ -849,30 +974,248 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               </button>
             </div>
           ) : activeSubView === 'change_password' ? (
-            /* Sub-view: Change Password */
+            /* Sub-view: Change Password With OTP */
             <div className="p-5 flex flex-col space-y-4 text-xs">
+              {!currentUser.email && !currentUser.phone_number ? (
+                /* Blocked: No Phone & No Email linked */
+                <div className="space-y-4 animate-in fade-in">
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-slate-700 dark:text-slate-200 space-y-2">
+                    <div className="flex items-center space-x-2 font-bold text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                      <span className="text-sm">Bắt buộc liên kết Gmail hoặc Số điện thoại</span>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                      Để bảo vệ tài khoản của bạn khỏi việc bị chiếm đoạt trái phép, bạn <strong>bắt buộc phải liên kết Gmail hoặc Số điện thoại</strong> trước khi được phép đổi mật khẩu.
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Hệ thống sẽ gửi mã xác thực OTP dùng một lần đến thông tin liên hệ này để xác nhận chính chủ.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setErrorMsg(null);
+                      setSuccessMsg(null);
+                      setActiveSubView('link_contact');
+                    }}
+                    className="w-full py-3 rounded-xl bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold text-xs flex items-center justify-center space-x-2 shadow-md shadow-blue-500/20 cursor-pointer"
+                  >
+                    <Mail className="w-4 h-4" />
+                    <span>Liên kết Gmail hoặc Số điện thoại ngay</span>
+                  </button>
+                </div>
+              ) : (
+                /* Eligible: Has Phone or Email */
+                <div className="space-y-3.5 animate-in fade-in">
+                  {/* Select Target Type if user has both */}
+                  <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-slate-700 dark:text-slate-200 space-y-2">
+                    <div className="flex items-center space-x-2 font-bold text-[#2481cc]">
+                      <KeyRound className="w-4 h-4" />
+                      <span>Xác thực OTP đổi mật khẩu</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Chọn kênh nhận mã OTP 6 số để chứng minh bạn là chủ sở hữu tài khoản:
+                    </p>
+
+                    <div className="space-y-1.5 pt-1">
+                      {currentUser.email && (
+                        <label className="flex items-center space-x-2.5 p-2 rounded-xl bg-white dark:bg-[#202b36] border border-slate-200/60 dark:border-slate-700/60 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="target_type"
+                            checked={pwdTargetType === 'email'}
+                            onChange={() => setPwdTargetType('email')}
+                            className="text-[#2481cc] focus:ring-[#2481cc]"
+                          />
+                          <Mail className="w-4 h-4 text-blue-500" />
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-slate-800 dark:text-slate-100">Gmail cá nhân</span>
+                            <span className="text-[10px] text-slate-400 font-mono">{currentUser.email}</span>
+                          </div>
+                        </label>
+                      )}
+
+                      {currentUser.phone_number && (
+                        <label className="flex items-center space-x-2.5 p-2 rounded-xl bg-white dark:bg-[#202b36] border border-slate-200/60 dark:border-slate-700/60 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="target_type"
+                            checked={pwdTargetType === 'phone'}
+                            onChange={() => setPwdTargetType('phone')}
+                            className="text-[#2481cc] focus:ring-[#2481cc]"
+                          />
+                          <Phone className="w-4 h-4 text-emerald-500" />
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-slate-800 dark:text-slate-100">Số điện thoại</span>
+                            <span className="text-[10px] text-slate-400 font-mono">{currentUser.phone_number}</span>
+                          </div>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Send OTP button */}
+                  <div>
+                    <button
+                      type="button"
+                      disabled={isSaving || pwdOtpCountdown > 0}
+                      onClick={handleRequestPasswordOtp}
+                      className="w-full py-2.5 rounded-xl bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 shadow-sm cursor-pointer flex items-center justify-center space-x-1.5"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isSaving ? 'animate-spin' : ''}`} />
+                      <span>
+                        {isSaving
+                          ? 'Đang gửi mã...'
+                          : pwdOtpCountdown > 0
+                          ? `Gửi lại mã OTP sau (${pwdOtpCountdown}s)`
+                          : `Gửi mã OTP đến ${pwdTargetType === 'email' ? 'Gmail' : 'Số điện thoại'}`}
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* OTP Notification Alert */}
+                  {pwdOtpAlert && (
+                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-teal-500/10 border border-blue-500/30 text-slate-800 dark:text-slate-100 shadow-sm animate-in fade-in slide-in-from-top-2">
+                      <div className="flex items-center justify-between mb-1 text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                        <span className="flex items-center space-x-1.5">
+                          <Smartphone className="w-3.5 h-3.5" />
+                          <span>MÃ OTP MÁY CHỦ CHO {pwdOtpAlert.target}</span>
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        Mã OTP xác thực đổi mật khẩu là: <strong className="text-blue-600 dark:text-blue-400 font-mono text-sm tracking-widest">{pwdOtpAlert.code}</strong> (hiệu lực 5 phút).
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setPwdOtpCode(pwdOtpAlert.code)}
+                        className="mt-2 px-3 py-1 rounded-lg bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold text-[11px] flex items-center space-x-1 transition-colors shadow-sm cursor-pointer"
+                      >
+                        <Check className="w-3 h-3 stroke-[3]" />
+                        <span>Tự động điền mã {pwdOtpAlert.code}</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* OTP Input */}
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                      Nhập mã OTP xác thực (6 số):
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={pwdOtpCode}
+                      onChange={(e) => setPwdOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="••••••"
+                      className="w-full h-11 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-center text-lg tracking-[0.6em] font-mono focus:outline-none focus:ring-2 focus:ring-[#2481cc] border border-transparent dark:border-slate-700/60"
+                    />
+                  </div>
+
+                  {/* New Password Inputs */}
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                      Mật khẩu mới:
+                    </label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Tối thiểu 6 ký tự..."
+                      className="w-full h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-[#2481cc] border border-transparent dark:border-slate-700/60"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                      Xác nhận mật khẩu mới:
+                    </label>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Nhập lại mật khẩu mới..."
+                      className="w-full h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-[#2481cc] border border-transparent dark:border-slate-700/60"
+                    />
+                  </div>
+
+                  {errorMsg && (
+                    <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-xs">
+                      {errorMsg}
+                    </div>
+                  )}
+
+                  {successMsg && (
+                    <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center space-x-1.5">
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{successMsg}</span>
+                    </div>
+                  )}
+
+                  <button
+                    disabled={isSaving || pwdOtpCode.length !== 6 || !newPassword || !confirmPassword}
+                    onClick={handleChangePasswordWithOtp}
+                    className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-violet-500/20 cursor-pointer"
+                  >
+                    {isSaving ? 'Đang cập nhật...' : 'Xác Nhận & Đổi Mật Khẩu'}
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : activeSubView === 'link_contact' ? (
+            /* Sub-view: Link Gmail / Phone */
+            <div className="p-5 flex flex-col space-y-4 text-xs">
+              <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/20 text-slate-700 dark:text-slate-200 space-y-1">
+                <div className="flex items-center space-x-2 font-bold text-[#2481cc]">
+                  <Shield className="w-4 h-4" />
+                  <span>Liên kết bảo mật tài khoản</span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Liên kết Gmail hoặc Số điện thoại để dùng cho việc khôi phục và đổi mật khẩu an toàn qua mã xác minh OTP.
+                </p>
+              </div>
+
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-                  Mật khẩu mới:
+                <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-2">
+                  Chọn loại liên kết:
                 </label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Tối thiểu 6 ký tự (Hoa, thường, số, ký tự đặc biệt)..."
-                  className="w-full h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-[#2481cc] border border-transparent dark:border-slate-700/60"
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setContactType('email')}
+                    className={`py-2 px-3 rounded-xl border font-semibold flex items-center justify-center space-x-1.5 transition-colors ${
+                      contactType === 'email'
+                        ? 'border-[#2481cc] bg-[#2481cc]/10 text-[#2481cc]'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    <Mail className="w-4 h-4" />
+                    <span>Gmail cá nhân</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setContactType('phone')}
+                    className={`py-2 px-3 rounded-xl border font-semibold flex items-center justify-center space-x-1.5 transition-colors ${
+                      contactType === 'phone'
+                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    <Phone className="w-4 h-4" />
+                    <span>Số điện thoại</span>
+                  </button>
+                </div>
               </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
-                  Xác nhận mật khẩu mới:
+                  {contactType === 'email' ? 'Địa chỉ Gmail của bạn:' : 'Số điện thoại của bạn:'}
                 </label>
                 <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Nhập lại mật khẩu mới..."
+                  type={contactType === 'email' ? 'email' : 'tel'}
+                  value={contactInput}
+                  onChange={(e) => setContactInput(e.target.value)}
+                  placeholder={contactType === 'email' ? 'VD: yourname@gmail.com' : 'VD: 0912345678'}
                   className="w-full h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-[#2481cc] border border-transparent dark:border-slate-700/60"
                 />
               </div>
@@ -891,11 +1234,11 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               )}
 
               <button
-                disabled={isSaving}
-                onClick={handleChangePassword}
-                className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-violet-500/20"
+                disabled={isSaving || !contactInput.trim()}
+                onClick={handleLinkContact}
+                className="w-full py-2.5 rounded-xl bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold text-xs transition-all active:scale-95 disabled:opacity-50 shadow-md shadow-blue-500/20 cursor-pointer"
               >
-                {isSaving ? 'Đang cập nhật...' : 'Cập Nhật Mật Khẩu'}
+                {isSaving ? 'Đang liên kết...' : 'Lưu & Kích Hoạt Liên Kết'}
               </button>
             </div>
           ) : activeSubView === 'pin_code' ? (

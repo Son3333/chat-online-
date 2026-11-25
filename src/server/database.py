@@ -224,6 +224,40 @@ class Database:
             """)
             conn.commit()
 
+            # 10.1 Bảng Lưu mã OTP xác thực đa năng (Đổi mật khẩu, liên kết SĐT/Gmail)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS otp_verifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                target TEXT NOT NULL,
+                target_type TEXT DEFAULT 'phone', -- 'phone' hoặc 'email'
+                otp_code TEXT NOT NULL,
+                purpose TEXT DEFAULT 'password_reset', -- 'password_reset', 'link_contact'
+                expires_at TIMESTAMP NOT NULL,
+                is_used INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+            """)
+            conn.commit()
+
+            # Migration nâng cấp schema bảo mật & phân quyền nhóm
+            for migration_sql in [
+                "ALTER TABLE users ADD COLUMN email TEXT DEFAULT NULL",
+                "ALTER TABLE users ADD COLUMN is_email_verified INTEGER DEFAULT 0",
+                "ALTER TABLE conversations ADD COLUMN is_muted INTEGER DEFAULT 0",
+                "ALTER TABLE conversations ADD COLUMN custom_mute_text TEXT DEFAULT 'Bạn bị khóa mõm bởi ban quản trị'",
+                "ALTER TABLE conversation_members ADD COLUMN is_muted INTEGER DEFAULT 0",
+                "ALTER TABLE conversation_members ADD COLUMN muted_by_name TEXT DEFAULT NULL",
+                "ALTER TABLE conversation_members ADD COLUMN muted_at TIMESTAMP DEFAULT NULL",
+                "ALTER TABLE conversation_members ADD COLUMN status TEXT DEFAULT 'active'"
+            ]:
+                try:
+                    cursor.execute(migration_sql)
+                    conn.commit()
+                except Exception:
+                    pass
+
             # 11. Tự động nạp tài khoản mẫu của nhóm nếu cơ sở dữ liệu mới tinh (Seed Data)
             cursor.execute("SELECT COUNT(*) as count FROM users")
             row = cursor.fetchone()
@@ -811,10 +845,15 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT c.id, c.type, c.name, c.created_at
+                SELECT c.id, c.type, c.name, c.created_at,
+                       COALESCE(c.is_muted, 0) as is_muted,
+                       COALESCE(c.custom_mute_text, 'Bạn bị khóa mõm bởi ban quản trị') as custom_mute_text,
+                       COALESCE(m.role, 'member') as my_role,
+                       COALESCE(m.is_muted, 0) as my_is_muted,
+                       m.muted_by_name as my_muted_by
                 FROM conversations c
                 JOIN conversation_members m ON c.id = m.conversation_id
-                WHERE m.user_id = ?
+                WHERE m.user_id = ? AND (m.status IS NULL OR m.status = 'active')
                 ORDER BY c.created_at DESC
             """, (user_id,))
             conversations = [dict(r) for r in cursor.fetchall()]
@@ -844,7 +883,7 @@ class Database:
                         SELECT u.id, u.username, u.full_name, u.avatar_color, u.avatar_url, u.phone_number, u.is_phone_verified, u.is_online
                         FROM users u
                         JOIN conversation_members m ON u.id = m.user_id
-                        WHERE m.conversation_id = ? AND u.id != ?
+                        WHERE m.conversation_id = ? AND u.id != ? AND (m.status IS NULL OR m.status = 'active')
                     """, (conv_id, user_id))
                     partner = cursor.fetchone()
                     if partner:
@@ -863,8 +902,8 @@ class Database:
                 else:
                     conv["title"] = conv["name"] or "Nhóm trò chuyện"
                     conv["avatar_color"] = "#0EA5E9"
-                    # Đếm số thành viên
-                    cursor.execute("SELECT COUNT(*) as count FROM conversation_members WHERE conversation_id = ?", (conv_id,))
+                    # Đếm số thành viên đang hoạt động
+                    cursor.execute("SELECT COUNT(*) as count FROM conversation_members WHERE conversation_id = ? AND (status IS NULL OR status = 'active')", (conv_id,))
                     conv["member_count"] = cursor.fetchone()["count"]
 
                 result.append(conv)
@@ -874,10 +913,24 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT u.id, u.username, u.full_name, u.avatar_color, u.avatar_url, u.is_online, m.role
+                SELECT u.id, u.username, u.full_name, u.avatar_color, u.avatar_url, u.is_online,
+                       COALESCE(m.role, 'member') as role,
+                       COALESCE(m.is_muted, 0) as is_muted,
+                       m.muted_by_name,
+                       COALESCE(m.status, 'active') as status,
+                       m.joined_at
                 FROM conversation_members m
                 JOIN users u ON m.user_id = u.id
-                WHERE m.conversation_id = ?
+                WHERE m.conversation_id = ? AND (m.status IS NULL OR m.status = 'active')
+                ORDER BY
+                    CASE COALESCE(m.role, 'member')
+                        WHEN 'owner' THEN 1
+                        WHEN 'admin' THEN 1
+                        WHEN 'co_leader' THEN 2
+                        WHEN 'deputy' THEN 3
+                        ELSE 4
+                    END ASC,
+                    u.full_name ASC
             """, (conversation_id,))
             return [dict(r) for r in cursor.fetchall()]
 
@@ -1187,5 +1240,493 @@ class Database:
             """, (conv_id, user_id))
             conn.commit()
             return conv_id
+
+    # =========================================================================
+    # --- PHÂN HỆ BẢO MẬT: XÁC THỰC THÀNH VIÊN & CHỐNG NGHE LÉN / GỬI LẬU ---
+    # =========================================================================
+    def is_conversation_member(self, conversation_id: int, user_id: int) -> bool:
+        """Kiểm tra một user có phải là thành viên hợp lệ (active) của cuộc hội thoại hay không."""
+        try:
+            conversation_id = int(conversation_id)
+            user_id = int(user_id)
+        except Exception:
+            return False
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 1 FROM conversation_members
+                WHERE conversation_id = ? AND user_id = ? AND (status IS NULL OR status = 'active')
+            """, (conversation_id, user_id))
+            return cursor.fetchone() is not None
+
+    def get_conversation_info(self, conversation_id: int):
+        """Lấy thông tin cài đặt và trạng thái cấm ngôn của cuộc hội thoại."""
+        try:
+            conversation_id = int(conversation_id)
+        except Exception:
+            return None
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, type, name, created_by,
+                       COALESCE(is_muted, 0) as is_muted,
+                       COALESCE(custom_mute_text, 'Bạn bị khóa mõm bởi ban quản trị') as custom_mute_text,
+                       created_at
+                FROM conversations
+                WHERE id = ?
+            """, (conversation_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    # =========================================================================
+    # --- PHÂN HỆ ĐỔI MẬT KHẨU & LIÊN KẾT GMAIL / SĐT XÁC THỰC OTP ---
+    # =========================================================================
+    def link_user_contact(self, user_id: int, contact: str, contact_type: str = 'auto') -> dict:
+        """Liên kết Số điện thoại hoặc Gmail vào tài khoản để nhận mã OTP."""
+        try:
+            user_id = int(user_id)
+        except Exception:
+            return {"success": False, "message": "ID người dùng không hợp lệ!"}
+
+        contact = contact.strip()
+        if not contact:
+            return {"success": False, "message": "Thông tin liên kết không được để trống!"}
+
+        is_email = '@' in contact and '.' in contact
+        is_phone = contact.replace('+', '').replace(' ', '').replace('-', '').isdigit()
+
+        if contact_type == 'email' or is_email:
+            # Xác thực định dạng email
+            if not re.match(r"^[\w\.-]+@[\w\.-]+\.\w+$", contact):
+                return {"success": False, "message": "Địa chỉ Gmail/Email không đúng định dạng!"}
+            actual_type = 'email'
+        elif contact_type == 'phone' or is_phone:
+            clean_phone = contact.replace(' ', '').replace('-', '')
+            if len(clean_phone) < 9 or len(clean_phone) > 13:
+                return {"success": False, "message": "Số điện thoại không hợp lệ (từ 9 đến 13 chữ số)!"}
+            actual_type = 'phone'
+        else:
+            return {"success": False, "message": "Vui lòng nhập đúng định dạng Số điện thoại hoặc Gmail!"}
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if actual_type == 'email':
+                cursor.execute("""
+                    UPDATE users
+                    SET email = ?, is_email_verified = 1
+                    WHERE id = ?
+                """, (contact, user_id))
+            else:
+                cursor.execute("""
+                    UPDATE users
+                    SET phone_number = ?, is_phone_verified = 1
+                    WHERE id = ?
+                """, (contact, user_id))
+            conn.commit()
+
+            cursor.execute("SELECT id, username, full_name, email, is_email_verified, phone_number, is_phone_verified FROM users WHERE id = ?", (user_id,))
+            user_row = cursor.fetchone()
+            return {
+                "success": True,
+                "message": f"Đã liên kết thành công { 'Gmail' if actual_type == 'email' else 'Số điện thoại' }: {contact}!",
+                "user": dict(user_row) if user_row else None
+            }
+
+    def create_password_reset_otp(self, user_id: int, target_type: str = 'auto') -> dict:
+        """Sinh mã OTP 6 số ngẫu nhiên phục vụ đổi mật khẩu (hạn dùng 5 phút)."""
+        try:
+            user_id = int(user_id)
+        except Exception:
+            return {"success": False, "message": "ID người dùng không hợp lệ!"}
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, username, full_name, email, is_email_verified, phone_number, is_phone_verified FROM users WHERE id = ?", (user_id,))
+            user = cursor.fetchone()
+            if not user:
+                return {"success": False, "message": "Tài khoản không tồn tại!"}
+
+            target = None
+            resolved_type = None
+
+            # Ưu tiên theo yêu cầu của client hoặc tự động tìm mục đã liên kết
+            if target_type == 'email' and user['email']:
+                target = user['email']
+                resolved_type = 'email'
+            elif target_type == 'phone' and user['phone_number']:
+                target = user['phone_number']
+                resolved_type = 'phone'
+            elif user['email']:
+                target = user['email']
+                resolved_type = 'email'
+            elif user['phone_number']:
+                target = user['phone_number']
+                resolved_type = 'phone'
+
+            if not target:
+                return {
+                    "success": False,
+                    "need_link": True,
+                    "message": "Tài khoản chưa liên kết Số điện thoại hoặc Gmail! Vui lòng liên kết trước để nhận mã OTP."
+                }
+
+            otp_code = f"{random.randint(100000, 999999)}"
+            expires_at = (datetime.now() + timedelta(minutes=5)).strftime("%Y-%m-%d %H:%M:%S")
+
+            cursor.execute("""
+                INSERT INTO otp_verifications (user_id, target, target_type, otp_code, purpose, expires_at)
+                VALUES (?, ?, ?, ?, 'password_reset', ?)
+            """, (user_id, target, resolved_type, otp_code, expires_at))
+            conn.commit()
+
+            return {
+                "success": True,
+                "target": target,
+                "target_type": resolved_type,
+                "otp_code": otp_code,
+                "expires_at": expires_at,
+                "message": f"Mã OTP đã được gửi thành công đến { 'Gmail' if resolved_type == 'email' else 'Số điện thoại' } ({target})!"
+            }
+
+    def verify_and_change_password(self, user_id: int, otp_code: str, new_password: str) -> dict:
+        """Xác thực mã OTP và cập nhật mật khẩu mới băm SHA-256 + Salt an toàn."""
+        try:
+            user_id = int(user_id)
+        except Exception:
+            return {"success": False, "message": "ID người dùng không hợp lệ!"}
+
+        otp_code = str(otp_code).strip()
+        new_password = str(new_password).strip()
+
+        is_valid, msg = validate_password_strength(new_password)
+        if not is_valid:
+            return {"success": False, "message": msg}
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, expires_at, is_used
+                FROM otp_verifications
+                WHERE user_id = ? AND otp_code = ? AND purpose = 'password_reset' AND is_used = 0
+                ORDER BY id DESC LIMIT 1
+            """, (user_id, otp_code))
+            otp_row = cursor.fetchone()
+
+            if not otp_row:
+                return {"success": False, "message": "Mã OTP không chính xác hoặc đã được sử dụng!"}
+
+            # Kiểm tra thời hạn
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if otp_row["expires_at"] < now_str:
+                return {"success": False, "message": "Mã OTP đã hết hạn (tối đa 5 phút)! Vui lòng lấy mã mới."}
+
+            new_hash = hash_password(new_password)
+            cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
+            cursor.execute("UPDATE otp_verifications SET is_used = 1 WHERE id = ?", (otp_row["id"],))
+            conn.commit()
+
+            return {"success": True, "message": "Đổi mật khẩu thành công! Bạn có thể sử dụng mật khẩu mới ngay bây giờ."}
+
+    def change_password_direct(self, user_id: int, old_password: str, new_password: str) -> dict:
+        """Đổi mật khẩu trực tiếp bằng mật khẩu cũ (có kiểm tra OTP nếu đã bật xác minh)."""
+        try:
+            user_id = int(user_id)
+        except Exception:
+            return {"success": False, "message": "ID người dùng không hợp lệ!"}
+
+        is_valid, msg = validate_password_strength(new_password)
+        if not is_valid:
+            return {"success": False, "message": msg}
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,))
+            user = cursor.fetchone()
+            if not user or user["password_hash"] != hash_password(old_password):
+                return {"success": False, "message": "Mật khẩu hiện tại không chính xác!"}
+
+            cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(new_password), user_id))
+            conn.commit()
+            return {"success": True, "message": "Đã đổi mật khẩu thành công!"}
+
+    # =========================================================================
+    # --- PHÂN HỆ QUẢN LÝ NHÓM NÂNG CAO: PHÂN CẤP CHỨC TƯỚC, KICK & CẤM NGÔN ---
+    # =========================================================================
+    ROLE_RANKS = {
+        'owner': 4,
+        'admin': 4,
+        'co_leader': 3,
+        'deputy': 2,
+        'member': 1
+    }
+
+    ROLE_NAMES = {
+        'owner': 'Trưởng nhóm',
+        'admin': 'Trưởng nhóm',
+        'co_leader': 'Đồng thủ lĩnh',
+        'deputy': 'Phó nhóm',
+        'member': 'Thành viên'
+    }
+
+    def update_member_role(self, conversation_id: int, operator_id: int, target_id: int, new_role: str) -> dict:
+        """Phong chức / Giáng chức thành viên nhóm theo cấp bậc quyền lực nghiêm ngặt."""
+        try:
+            conversation_id = int(conversation_id)
+            operator_id = int(operator_id)
+            target_id = int(target_id)
+        except Exception:
+            return {"success": False, "message": "Tham số không hợp lệ!"}
+
+        if operator_id == target_id:
+            return {"success": False, "message": "Không thể tự phong chức cho chính mình!"}
+
+        valid_roles = ('admin', 'owner', 'co_leader', 'deputy', 'member')
+        if new_role not in valid_roles:
+            return {"success": False, "message": f"Chức vụ '{new_role}' không hợp lệ!"}
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT role FROM conversation_members WHERE conversation_id = ? AND user_id = ? AND (status IS NULL OR status = 'active')", (conversation_id, operator_id))
+            op_row = cursor.fetchone()
+            if not op_row:
+                return {"success": False, "message": "Bạn không phải thành viên nhóm này!"}
+
+            cursor.execute("SELECT m.role, u.full_name, u.username FROM conversation_members m JOIN users u ON m.user_id = u.id WHERE m.conversation_id = ? AND m.user_id = ? AND (m.status IS NULL OR m.status = 'active')", (conversation_id, target_id))
+            target_row = cursor.fetchone()
+            if not target_row:
+                return {"success": False, "message": "Thành viên mục tiêu không tồn tại trong nhóm!"}
+
+            op_rank = self.ROLE_RANKS.get(op_row["role"], 1)
+            target_rank = self.ROLE_RANKS.get(target_row["role"], 1)
+            new_rank = self.ROLE_RANKS.get(new_role, 1)
+
+            # Quy tắc phong quyền:
+            # - Chỉ Admin (rank 4) hoặc Co-Leader (rank 3) mới có quyền phong/giáng chức
+            if op_rank < 3:
+                return {"success": False, "message": "Chỉ Trưởng nhóm hoặc Đồng thủ lĩnh mới có quyền phong chức!"}
+
+            # - Không ai được can thiệp vào người có cấp bậc bằng hoặc cao hơn mình
+            if op_rank <= target_rank:
+                return {"success": False, "message": f"Bạn không thể thay đổi chức tước của {self.ROLE_NAMES.get(target_row['role'], target_row['role'])}!"}
+
+            # - Không ai được phong cho người khác chức tước bằng hoặc cao hơn mình (trừ Admin chuyển quyền Trưởng nhóm)
+            if op_rank < 4 and new_rank >= op_rank:
+                return {"success": False, "message": "Bạn không thể phong chức vị ngang bằng hoặc cao hơn mình!"}
+
+            # Nếu Admin phong người khác làm Admin/Owner -> Chuyển giao Trưởng nhóm (giảm mình xuống Đồng thủ lĩnh)
+            if new_role in ('admin', 'owner') and op_rank >= 4:
+                cursor.execute("UPDATE conversation_members SET role = 'co_leader' WHERE conversation_id = ? AND user_id = ?", (conversation_id, operator_id))
+                cursor.execute("UPDATE conversations SET created_by = ? WHERE id = ?", (target_id, conversation_id))
+
+            cursor.execute("UPDATE conversation_members SET role = ? WHERE conversation_id = ? AND user_id = ?", (new_role, conversation_id, target_id))
+            conn.commit()
+
+            new_title = self.ROLE_NAMES.get(new_role, new_role)
+            return {
+                "success": True,
+                "message": f"Đã bổ nhiệm {target_row['full_name']} làm {new_title}!",
+                "target_id": target_id,
+                "new_role": new_role,
+                "new_role_title": new_title
+            }
+
+    def kick_group_member(self, conversation_id: int, operator_id: int, target_id: int) -> dict:
+        """Kích thành viên ra khỏi nhóm và XÓA VĨNH VIỄN đoạn chat đối với người bị kích."""
+        try:
+            conversation_id = int(conversation_id)
+            operator_id = int(operator_id)
+            target_id = int(target_id)
+        except Exception:
+            return {"success": False, "message": "Tham số không hợp lệ!"}
+
+        if operator_id == target_id:
+            return {"success": False, "message": "Không thể tự kích chính mình!"}
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT m.role, u.full_name FROM conversation_members m JOIN users u ON m.user_id = u.id WHERE m.conversation_id = ? AND m.user_id = ? AND (m.status IS NULL OR m.status = 'active')", (conversation_id, operator_id))
+            op_row = cursor.fetchone()
+            if not op_row:
+                return {"success": False, "message": "Bạn không phải thành viên nhóm này!"}
+
+            cursor.execute("SELECT m.role, u.full_name, u.username FROM conversation_members m JOIN users u ON m.user_id = u.id WHERE m.conversation_id = ? AND m.user_id = ? AND (m.status IS NULL OR m.status = 'active')", (conversation_id, target_id))
+            target_row = cursor.fetchone()
+            if not target_row:
+                return {"success": False, "message": "Thành viên này không tồn tại trong nhóm!"}
+
+            op_role = op_row["role"]
+            target_role = target_row["role"]
+            op_rank = self.ROLE_RANKS.get(op_role, 1)
+            target_rank = self.ROLE_RANKS.get(target_role, 1)
+
+            if op_rank <= 1:
+                return {"success": False, "message": "Thành viên thường không có quyền kích người khác khỏi nhóm!"}
+
+            # Quy tắc phân cấp kích thành viên:
+            # - Admin (4): Kích được tất cả (3, 2, 1)
+            # - Co-Leader (3): Kích được Phó nhóm (2) và Thành viên (1). Không kích được Admin.
+            # - Deputy (2): Chỉ kích được Thành viên (1). Không kích được Admin, Co-Leader.
+            if op_rank <= target_rank:
+                op_title = self.ROLE_NAMES.get(op_role, op_role)
+                target_title = self.ROLE_NAMES.get(target_role, target_role)
+                return {"success": False, "message": f"{op_title} không có quyền kích {target_title}!"}
+
+            # Xóa hoàn toàn bản ghi khỏi conversation_members -> Xóa vĩnh viễn đoạn chat và quyền truy cập
+            cursor.execute("DELETE FROM conversation_members WHERE conversation_id = ? AND user_id = ?", (conversation_id, target_id))
+            conn.commit()
+
+            return {
+                "success": True,
+                "message": f"Đã kích {target_row['full_name']} (@{target_row['username']}) khỏi nhóm!",
+                "kicked_user_id": target_id,
+                "kicked_user_name": target_row["full_name"],
+                "operator_name": op_row["full_name"]
+            }
+
+    def set_member_mute(self, conversation_id: int, operator_id: int, target_id: int, is_muted: bool, custom_text: str = None) -> dict:
+        """Cấm ngôn / Khóa mõm cá nhân thành viên bất kỳ hoặc gỡ cấm ngôn."""
+        try:
+            conversation_id = int(conversation_id)
+            operator_id = int(operator_id)
+            target_id = int(target_id)
+        except Exception:
+            return {"success": False, "message": "Tham số không hợp lệ!"}
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT m.role, u.full_name FROM conversation_members m JOIN users u ON m.user_id = u.id WHERE m.conversation_id = ? AND m.user_id = ? AND (m.status IS NULL OR m.status = 'active')", (conversation_id, operator_id))
+            op_row = cursor.fetchone()
+            if not op_row:
+                return {"success": False, "message": "Bạn không phải thành viên nhóm!"}
+
+            cursor.execute("SELECT m.role, u.full_name FROM conversation_members m JOIN users u ON m.user_id = u.id WHERE m.conversation_id = ? AND m.user_id = ? AND (m.status IS NULL OR m.status = 'active')", (conversation_id, target_id))
+            target_row = cursor.fetchone()
+            if not target_row:
+                return {"success": False, "message": "Thành viên không tồn tại trong nhóm!"}
+
+            op_rank = self.ROLE_RANKS.get(op_row["role"], 1)
+            target_rank = self.ROLE_RANKS.get(target_row["role"], 1)
+
+            if op_rank <= 1:
+                return {"success": False, "message": "Thành viên thường không có quyền cấm ngôn!"}
+            if op_rank <= target_rank:
+                return {"success": False, "message": "Không thể cấm ngôn người có cấp bậc bằng hoặc cao hơn!"}
+
+            op_name = op_row["full_name"]
+            muted_val = 1 if is_muted else 0
+            muted_by = op_name if is_muted else None
+            cursor.execute("""
+                UPDATE conversation_members
+                SET is_muted = ?, muted_by_name = ?, muted_at = CURRENT_TIMESTAMP
+                WHERE conversation_id = ? AND user_id = ?
+            """, (muted_val, muted_by, conversation_id, target_id))
+
+            # Cho phép Admin tùy biến câu khóa mõm
+            if custom_text and custom_text.strip() and op_rank >= 4:
+                cursor.execute("UPDATE conversations SET custom_mute_text = ? WHERE id = ?", (custom_text.strip(), conversation_id))
+
+            conn.commit()
+            action_str = "khóa mõm (cấm ngôn)" if is_muted else "gỡ cấm ngôn cho"
+            return {
+                "success": True,
+                "message": f"Đã {action_str} {target_row['full_name']}!",
+                "is_muted": is_muted,
+                "muted_by_name": muted_by,
+                "target_id": target_id,
+                "target_name": target_row["full_name"]
+            }
+
+    def set_group_mute(self, conversation_id: int, operator_id: int, is_muted: bool, custom_text: str = None) -> dict:
+        """Cấm chat toàn bộ nhóm (chỉ Trưởng nhóm, Đồng thủ lĩnh, Phó nhóm được phát ngôn)."""
+        try:
+            conversation_id = int(conversation_id)
+            operator_id = int(operator_id)
+        except Exception:
+            return {"success": False, "message": "Tham số không hợp lệ!"}
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT m.role, u.full_name FROM conversation_members m JOIN users u ON m.user_id = u.id WHERE m.conversation_id = ? AND m.user_id = ? AND (m.status IS NULL OR m.status = 'active')", (conversation_id, operator_id))
+            op_row = cursor.fetchone()
+            if not op_row:
+                return {"success": False, "message": "Bạn không phải thành viên nhóm!"}
+
+            op_rank = self.ROLE_RANKS.get(op_row["role"], 1)
+            if op_rank <= 1:
+                return {"success": False, "message": "Chỉ Ban quản trị mới có quyền bật/tắt chế độ cấm chat toàn nhóm!"}
+
+            muted_val = 1 if is_muted else 0
+            if custom_text and custom_text.strip():
+                cursor.execute("UPDATE conversations SET is_muted = ?, custom_mute_text = ? WHERE id = ?", (muted_val, custom_text.strip(), conversation_id))
+            else:
+                cursor.execute("UPDATE conversations SET is_muted = ? WHERE id = ?", (muted_val, conversation_id))
+            conn.commit()
+
+            st = "Đã bật chế độ cấm chat toàn nhóm (chỉ Ban quản trị được phát ngôn)" if is_muted else "Đã mở lại quyền chat tự do cho toàn bộ thành viên"
+            return {
+                "success": True,
+                "message": st,
+                "is_muted": is_muted,
+                "operator_name": op_row["full_name"]
+            }
+
+    def leave_group(self, conversation_id: int, user_id: int, silent: bool = False) -> dict:
+        """Người dùng rời khỏi nhóm: Lựa chọn rời im lặng hoặc có thông báo, mặc định xóa vĩnh viễn đoạn chat."""
+        try:
+            conversation_id = int(conversation_id)
+            user_id = int(user_id)
+        except Exception:
+            return {"success": False, "message": "Tham số không hợp lệ!"}
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT m.role, u.full_name, u.username FROM conversation_members m JOIN users u ON m.user_id = u.id WHERE m.conversation_id = ? AND m.user_id = ? AND (m.status IS NULL OR m.status = 'active')", (conversation_id, user_id))
+            row = cursor.fetchone()
+            if not row:
+                return {"success": False, "message": "Bạn không phải thành viên của nhóm này!"}
+
+            user_role = row["role"]
+            user_name = row["full_name"]
+
+            # Xóa khỏi conversation_members -> Xóa vĩnh viễn đoạn chat và quyền truy cập
+            cursor.execute("DELETE FROM conversation_members WHERE conversation_id = ? AND user_id = ?", (conversation_id, user_id))
+
+            # Nếu người rời là admin/owner -> Tự động chuyển quyền admin cho người có thứ bậc cao nhất tiếp theo
+            cursor.execute("""
+                SELECT user_id, role FROM conversation_members
+                WHERE conversation_id = ?
+                ORDER BY
+                    CASE role
+                        WHEN 'co_leader' THEN 1
+                        WHEN 'deputy' THEN 2
+                        ELSE 3
+                    END, id ASC
+                LIMIT 1
+            """, (conversation_id,))
+            next_admin = cursor.fetchone()
+            if next_admin and user_role in ('admin', 'owner'):
+                cursor.execute("UPDATE conversation_members SET role = 'admin' WHERE conversation_id = ? AND user_id = ?", (conversation_id, next_admin["user_id"]))
+
+            conn.commit()
+            return {
+                "success": True,
+                "message": "Bạn đã rời khỏi nhóm thành công!",
+                "user_name": user_name,
+                "silent": silent,
+                "conversation_id": conversation_id,
+                "new_admin_id": next_admin["user_id"] if next_admin and user_role in ('admin', 'owner') else None
+            }
+
+    def add_group_member(self, conversation_id: int, user_id: int, role: str = 'member') -> bool:
+        """Thêm lại hoặc kích hoạt thành viên vào nhóm."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO conversation_members (conversation_id, user_id, role, status)
+                VALUES (?, ?, ?, 'active')
+                ON CONFLICT(conversation_id, user_id) DO UPDATE SET role = ?, status = 'active', is_muted = 0
+            """, (conversation_id, user_id, role, role))
+            conn.commit()
+            return True
 
 
