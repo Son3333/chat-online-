@@ -136,6 +136,10 @@ export const ChatArea: React.FC = () => {
               backgroundSize: 'cover',
               backgroundPosition: 'center',
             }
+          : themePreset && themePreset.id !== 'default'
+          ? {
+              background: themePreset.preview,
+            }
           : undefined
       }
     >

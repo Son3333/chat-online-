@@ -643,7 +643,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         case 'group_info_updated': {
           const updConv = event.conversation;
           const updId = event.conversation_id;
-          if (activeConv && String(activeConv.id) === String(updId)) {
+          if (String(activeConvIdRef.current) === String(updId)) {
             setActiveConv((prev) =>
               prev
                 ? {
@@ -663,7 +663,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const targetUid = event.target_user_id;
           const newNick = event.nickname;
           const allNicks = event.all_nicknames;
-          if (activeConv && String(activeConv.id) === String(nConvId)) {
+          if (String(activeConvIdRef.current) === String(nConvId)) {
             setActiveConv((prev) => {
               if (!prev) return null;
               const updatedNicks = allNicks || { ...(prev.nicknames || {}), [targetUid]: newNick };
@@ -685,7 +685,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         case 'conversation_theme_updated': {
           const tConvId = event.conversation_id;
           const newTheme = event.theme;
-          if (activeConv && String(activeConv.id) === String(tConvId)) {
+          if (String(activeConvIdRef.current) === String(tConvId)) {
             setActiveConv((prev) => (prev ? { ...prev, theme: newTheme } : null));
           }
           refreshConversations();

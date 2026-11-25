@@ -611,7 +611,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
                     className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm text-white shadow-sm overflow-hidden"
                     style={{ backgroundColor: conv.avatar_color || (isGroup ? '#06b6d4' : '#2563eb') }}
                   >
-                    {conv.avatar_url && !isGroup ? (
+                    {conv.avatar_url ? (
                       <img src={conv.avatar_url} alt="" className="w-full h-full object-cover" />
                     ) : isGroup ? (
                       <Users className="w-5 h-5" />

@@ -25,6 +25,7 @@ import { Edit3, Sparkles } from 'lucide-react';
 export const ChatHeader: React.FC = () => {
   const {
     activeConv,
+    setActiveConv,
     messages,
     typingUser,
     startCall,
@@ -105,9 +106,16 @@ export const ChatHeader: React.FC = () => {
 
   const handleSaveNickname = async () => {
     if (!currentUser || !partnerId) return;
-    const res = await apiService.setConversationNickname(activeConv.id, currentUser.id, partnerId, nicknameInput.trim());
+    const nick = nicknameInput.trim();
+    const res = await apiService.setConversationNickname(activeConv.id, currentUser.id, partnerId, nick);
     if (res && res.success) {
       setShowNicknamePrompt(false);
+      const newTitle = nick || activeConv.original_title || activeConv.title;
+      setActiveConv({
+        ...activeConv,
+        title: newTitle,
+        nicknames: { ...(activeConv.nicknames || {}), [partnerId]: nick }
+      });
       await refreshConversations();
     } else {
       alert(res?.message || 'Không thể đặt biệt danh!');
@@ -131,7 +139,7 @@ export const ChatHeader: React.FC = () => {
             className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-sm overflow-hidden"
             style={{ backgroundColor: activeConv.avatar_color || (isGroup ? '#06b6d4' : '#2481cc') }}
           >
-            {activeConv.avatar_url && !isGroup ? (
+            {activeConv.avatar_url ? (
               <img src={activeConv.avatar_url} alt="" className="w-full h-full object-cover" />
             ) : isGroup ? (
               <Users className="w-5 h-5" />

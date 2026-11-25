@@ -153,7 +153,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
         alert(res?.error || 'Không thể đổi tên nhóm!');
       }
     } catch (e: any) {
-      alert(e.message || 'Lỗi khi kết nối máy chủ!');
+      alert(e.message || 'Không thể cập nhật tên nhóm lúc này!');
     } finally {
       setIsProcessing(false);
     }
@@ -206,6 +206,10 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
             Number(m.user_id || m.id) === targetId ? { ...m, nickname: memberNicknameInput.trim() } : m
           )
         );
+        setActiveConv({
+          ...activeConv,
+          nicknames: { ...(activeConv.nicknames || {}), [targetId]: memberNicknameInput.trim() }
+        });
         setNicknameModalMember(null);
         setMemberNicknameInput('');
         refreshConversations();
@@ -213,7 +217,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
         alert(res?.error || 'Không thể đặt biệt danh!');
       }
     } catch (err: any) {
-      alert(err.message || 'Lỗi kết nối máy chủ!');
+      alert(err.message || 'Không thể hoàn tất thao tác. Vui lòng kiểm tra lại kết nối mạng!');
     } finally {
       setIsProcessing(false);
     }
@@ -317,7 +321,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
         alert(res.error || 'Không thể kích thành viên này!');
       }
     } catch (e: any) {
-      alert(e.message || 'Lỗi kết nối máy chủ!');
+      alert(e.message || 'Không thể hoàn tất thao tác. Vui lòng kiểm tra lại kết nối mạng!');
     } finally {
       setIsProcessing(false);
     }
@@ -345,7 +349,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
         alert(res.error || 'Lỗi thao tác cấm ngôn!');
       }
     } catch (e: any) {
-      alert(e.message || 'Lỗi kết nối máy chủ!');
+      alert(e.message || 'Không thể hoàn tất thao tác. Vui lòng kiểm tra lại kết nối mạng!');
     } finally {
       setIsProcessing(false);
     }
@@ -364,7 +368,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
         alert(res.error || 'Không thể thay đổi quyền hạn thành viên!');
       }
     } catch (e: any) {
-      alert(e.message || 'Lỗi kết nối máy chủ!');
+      alert(e.message || 'Không thể hoàn tất thao tác. Vui lòng kiểm tra lại kết nối mạng!');
     } finally {
       setIsProcessing(false);
     }
@@ -388,7 +392,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
         alert(res.error || 'Lỗi cài đặt cấm chat nhóm!');
       }
     } catch (e: any) {
-      alert(e.message || 'Lỗi kết nối máy chủ!');
+      alert(e.message || 'Không thể hoàn tất thao tác. Vui lòng kiểm tra lại kết nối mạng!');
     } finally {
       setIsProcessing(false);
     }
@@ -409,7 +413,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
         alert(res.error || 'Lỗi khi rời khỏi nhóm!');
       }
     } catch (e: any) {
-      alert(e.message || 'Lỗi kết nối máy chủ!');
+      alert(e.message || 'Không thể hoàn tất thao tác. Vui lòng kiểm tra lại kết nối mạng!');
     } finally {
       setIsProcessing(false);
     }

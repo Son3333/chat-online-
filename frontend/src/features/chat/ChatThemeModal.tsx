@@ -19,7 +19,7 @@ export const PRESET_THEMES = [
 ];
 
 export const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ isOpen, onClose }) => {
-  const { activeConv, currentUser, refreshConversations } = useChat();
+  const { activeConv, currentUser, refreshConversations, setActiveConv } = useChat();
   const [selectedTheme, setSelectedTheme] = useState<string>(activeConv?.theme || 'default');
   const [customBgUrl, setCustomBgUrl] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
@@ -54,13 +54,14 @@ export const ChatThemeModal: React.FC<ChatThemeModalProps> = ({ isOpen, onClose 
       const themeValue = selectedTheme === 'custom' ? customBgUrl : selectedTheme;
       const res = await apiService.updateConversationTheme(activeConv.id, currentUser.id, themeValue);
       if (res && res.success) {
+        setActiveConv({ ...activeConv, theme: themeValue });
         await refreshConversations();
         onClose();
       } else {
         alert(res?.error || 'Không thể đổi chủ đề cuộc trò chuyện!');
       }
     } catch (e: any) {
-      alert(e.message || 'Lỗi kết nối máy chủ!');
+      alert(e.message || 'Không thể đổi giao diện lúc này. Vui lòng thử lại sau!');
     } finally {
       setIsSaving(false);
     }
