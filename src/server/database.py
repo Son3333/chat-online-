@@ -461,13 +461,20 @@ class Database:
             """, (user_id, clean_phone, otp_code, expires_at))
             conn.commit()
 
+        # Gửi OTP qua dịch vụ SMS Gateway / Email
+        try:
+            from .otp_service import otp_service
+            otp_service.send_otp(clean_phone, otp_code, "phone")
+        except Exception as e:
+            print(f"[OTP Service] Không thể gửi SMS: {e}")
+
         print(f"[OTP] Generated OTP for user {user_id} ({clean_phone}): {otp_code} (expires at {expires_at})")
         return {
             "success": True,
             "otp_code": otp_code,
             "phone_number": clean_phone,
             "expires_in": 300,
-            "message": f"Mã OTP đã được tạo thành công cho {clean_phone}."
+            "message": f"Mã xác thực OTP đã được gửi đến số điện thoại {clean_phone}."
         }
 
     def verify_phone_otp(self, user_id, phone_number, otp_code):
@@ -910,6 +917,10 @@ class Database:
             return result
 
     def get_conversation_members(self, conversation_id):
+        try:
+            conversation_id = int(conversation_id)
+        except Exception:
+            pass
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -1378,6 +1389,13 @@ class Database:
                 VALUES (?, ?, ?, ?, 'password_reset', ?)
             """, (user_id, target, resolved_type, otp_code, expires_at))
             conn.commit()
+
+            # Gửi mã OTP qua cổng SMS Gateway hoặc Email thực tế
+            try:
+                from .otp_service import otp_service
+                otp_service.send_otp(target, otp_code, resolved_type)
+            except Exception as e:
+                print(f"[OTP Service] Không thể gửi OTP: {e}")
 
             return {
                 "success": True,

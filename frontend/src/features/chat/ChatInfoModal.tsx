@@ -115,6 +115,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
 
   // Group members state
   const [members, setMembers] = useState<ConversationMember[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
   const [selectedMember, setSelectedMember] = useState<ConversationMember | null>(null);
 
   // Modals & Popups
@@ -130,6 +131,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
   // Fetch members when group modal opens
   const fetchMembers = async () => {
     if (!activeConv || !isGroup) return;
+    setLoadingMembers(true);
     try {
       const res = await apiService.getConversationMembers(activeConv.id);
       if (res && res.members) {
@@ -137,6 +139,8 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
       }
     } catch (e) {
       console.warn('Error fetching group members:', e);
+    } finally {
+      setLoadingMembers(false);
     }
   };
 
@@ -361,7 +365,9 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
           )}
           <span className="text-xs mt-1">
             {isGroup ? (
-              <span className="text-slate-400 font-medium">Nhóm trò chuyện • {members.length} thành viên</span>
+              <span className="text-slate-400 font-medium">
+                Nhóm trò chuyện • {members.length > 0 ? members.length : (activeConv.member_count || 0)} thành viên
+              </span>
             ) : activeConv.is_online ? (
               <span className="text-emerald-500 font-medium flex items-center space-x-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -411,7 +417,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
               }`}
             >
               <Users className="w-3.5 h-3.5" />
-              <span>Thành viên ({members.length})</span>
+              <span>Thành viên ({members.length > 0 ? members.length : (activeConv.member_count || 0)})</span>
             </button>
           )}
           <button
@@ -493,7 +499,17 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
 
               {/* Members List */}
               <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                {members.map((m) => {
+                {loadingMembers ? (
+                  <div className="py-8 flex flex-col items-center justify-center text-slate-400 text-xs">
+                    <div className="w-5 h-5 rounded-full border-2 border-[#2481cc] border-t-transparent animate-spin mb-2" />
+                    <span>Đang tải danh sách thành viên...</span>
+                  </div>
+                ) : members.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 text-xs">
+                    Chưa có danh sách thành viên
+                  </div>
+                ) : (
+                  members.map((m) => {
                   const mId = Number(m.user_id || m.id);
                   const isMe = mId === currentUser.id;
                   const memberRole = m.role || 'member';
@@ -646,7 +662,8 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
                       )}
                     </div>
                   );
-                })}
+                })
+              )}
               </div>
 
               {/* Leave Group Button */}

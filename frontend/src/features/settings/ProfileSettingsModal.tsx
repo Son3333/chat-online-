@@ -78,9 +78,8 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   // Phone verification state
   const [phoneNumber, setPhoneNumber] = useState(currentUser?.phone_number || '');
   const [otpCode, setOtpCode] = useState('');
-  const [sentOtp, setSentOtp] = useState<string | null>(null);
+  const [sentOtp, setSentOtp] = useState<boolean>(false);
   const [otpCountdown, setOtpCountdown] = useState<number>(0);
-  const [smsAlert, setSmsAlert] = useState<{ code: string; time: string; target?: string } | null>(null);
 
   // Change password with OTP state
   const [pwdTargetType, setPwdTargetType] = useState<'email' | 'phone'>(
@@ -88,7 +87,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   );
   const [pwdOtpCode, setPwdOtpCode] = useState('');
   const [pwdOtpCountdown, setPwdOtpCountdown] = useState(0);
-  const [pwdOtpAlert, setPwdOtpAlert] = useState<{ code: string; target: string } | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -221,35 +219,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     setErrorMsg(null);
     try {
       const res = await apiService.requestPhoneOtp(currentUser.id, cleanPhone);
-      if (res && res.success && res.otp_code) {
-        setSentOtp(res.otp_code);
-        setSmsAlert({
-          code: res.otp_code,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        });
+      if (res && res.success) {
+        setSentOtp(true);
         setOtpCountdown(60);
-        setSuccessMsg(`Mã OTP bảo mật đã được tạo bởi máy chủ cho ${cleanPhone}`);
-
-        // Phát thông báo Toast Notification của hệ thống Windows
-        try {
-          if ('Notification' in window) {
-            if (Notification.permission === 'granted') {
-              new Notification('Vibe Messenger - Mã xác thực OTP', {
-                body: `Mã OTP xác thực số điện thoại ${cleanPhone} của bạn là: ${res.otp_code}. Có hiệu lực trong 5 phút.`,
-              });
-            } else if (Notification.permission !== 'denied') {
-              Notification.requestPermission().then((perm) => {
-                if (perm === 'granted') {
-                  new Notification('Vibe Messenger - Mã xác thực OTP', {
-                    body: `Mã OTP xác thực số điện thoại ${cleanPhone} của bạn là: ${res.otp_code}. Có hiệu lực trong 5 phút.`,
-                  });
-                }
-              });
-            }
-          }
-        } catch (notifErr) {
-          console.warn('Notification error:', notifErr);
-        }
+        setSuccessMsg(res.message || `Mã xác thực OTP đã được gửi đến số điện thoại ${cleanPhone} qua SMS.`);
       } else {
         setErrorMsg(res.error || 'Không thể tạo mã OTP từ máy chủ!');
       }
@@ -276,11 +249,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         localStorage.setItem('vibe_user', JSON.stringify(res.user));
         setSuccessMsg('🎉 Số điện thoại đã được xác minh thành công trên hệ thống!');
         setOtpCode('');
-        setSentOtp(null);
+        setSentOtp(false);
         await refreshConversations();
         setTimeout(() => {
           setSuccessMsg(null);
-          setSmsAlert(null);
           setActiveSubView('main');
         }, 1200);
       } else {
@@ -367,10 +339,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       const res = await apiService.requestPasswordOtp(currentUser.id, pwdTargetType);
       if (res && res.success) {
         setPwdOtpCountdown(60);
-        if (res.otp_code) {
-          setPwdOtpAlert({ code: res.otp_code, target: res.target || (pwdTargetType === 'email' ? currentUser.email || '' : currentUser.phone_number || '') });
-        }
-        setSuccessMsg(`Mã OTP đã được gửi đến ${res.target || pwdTargetType}!`);
+        setSuccessMsg(res.message || `Mã xác thực OTP đã được gửi đến ${pwdTargetType === 'email' ? 'Gmail' : 'Số điện thoại'}!`);
       } else {
         setErrorMsg(res.error || 'Không thể tạo mã OTP. Vui lòng thử lại!');
       }
@@ -407,7 +376,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         setNewPassword('');
         setConfirmPassword('');
         setPwdOtpCode('');
-        setPwdOtpAlert(null);
         setTimeout(() => {
           setSuccessMsg(null);
           setActiveSubView('main');
@@ -1074,25 +1042,21 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   </div>
 
                   {/* OTP Notification Alert */}
-                  {pwdOtpAlert && (
-                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-teal-500/10 border border-blue-500/30 text-slate-800 dark:text-slate-100 shadow-sm animate-in fade-in slide-in-from-top-2">
-                      <div className="flex items-center justify-between mb-1 text-[11px] font-bold text-blue-600 dark:text-blue-400">
+                  {pwdOtpCountdown > 0 && (
+                    <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/25 text-slate-700 dark:text-slate-200 space-y-1.5 animate-in fade-in slide-in-from-top-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-[#2481cc]">
                         <span className="flex items-center space-x-1.5">
-                          <Smartphone className="w-3.5 h-3.5" />
-                          <span>MÃ OTP MÁY CHỦ CHO {pwdOtpAlert.target}</span>
+                          <Shield className="w-3.5 h-3.5" />
+                          <span>ĐÃ GỬI MÃ XÁC THỰC OTP</span>
                         </span>
+                        <span className="text-[10px] text-slate-400 font-normal">Hiệu lực 5 phút</span>
                       </div>
                       <p className="text-xs text-slate-600 dark:text-slate-300">
-                        Mã OTP xác thực đổi mật khẩu là: <strong className="text-blue-600 dark:text-blue-400 font-mono text-sm tracking-widest">{pwdOtpAlert.code}</strong> (hiệu lực 5 phút).
+                        Mã xác thực 6 chữ số đã được gửi qua {pwdTargetType === 'email' ? 'hộp thư Gmail' : 'tin nhắn SMS số điện thoại'} của bạn ({pwdTargetType === 'email' ? currentUser.email : currentUser.phone_number}).
                       </p>
-                      <button
-                        type="button"
-                        onClick={() => setPwdOtpCode(pwdOtpAlert.code)}
-                        className="mt-2 px-3 py-1 rounded-lg bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold text-[11px] flex items-center space-x-1 transition-colors shadow-sm cursor-pointer"
-                      >
-                        <Check className="w-3 h-3 stroke-[3]" />
-                        <span>Tự động điền mã {pwdOtpAlert.code}</span>
-                      </button>
+                      <p className="text-[11px] text-slate-400 italic">
+                        Vui lòng kiểm tra thiết bị của bạn và nhập mã xác thực vào ô bên dưới.
+                      </p>
                     </div>
                   )}
 
@@ -1358,26 +1322,21 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
               </div>
 
               {/* Server OTP Notification Alert */}
-              {smsAlert && (
-                <div className="p-3.5 rounded-2xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-teal-500/10 border border-blue-500/30 text-slate-800 dark:text-slate-100 shadow-sm animate-in fade-in slide-in-from-top-2">
-                  <div className="flex items-center justify-between mb-1.5 text-[11px] font-bold text-blue-600 dark:text-blue-400">
+              {otpCountdown > 0 && (
+                <div className="p-3.5 rounded-2xl bg-teal-500/10 border border-teal-500/25 text-slate-700 dark:text-slate-200 space-y-1.5 animate-in fade-in slide-in-from-top-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-teal-600 dark:text-teal-400">
                     <span className="flex items-center space-x-1.5">
                       <Smartphone className="w-3.5 h-3.5" />
-                      <span>MÃ XÁC THỰC MÁY CHỦ (SERVER OTP)</span>
+                      <span>ĐÃ GỬI MÃ XÁC THỰC QUA TIN NHẮN SMS</span>
                     </span>
-                    <span className="text-[10px] text-slate-400 font-normal">{smsAlert.time}</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Hiệu lực 5 phút</span>
                   </div>
                   <p className="text-xs text-slate-600 dark:text-slate-300">
-                    Mã xác thực từ máy chủ cho số điện thoại của bạn là: <strong className="text-blue-600 dark:text-blue-400 font-mono text-sm tracking-widest">{smsAlert.code}</strong>. Mã đã được lưu trữ trong CSDL và có hiệu lực 5 phút.
+                    Mã xác thực OTP gồm 6 chữ số đã được gửi qua tin nhắn SMS tới số: <strong className="text-teal-600 dark:text-teal-400 font-mono text-sm">{phoneNumber}</strong>.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setOtpCode(smsAlert.code)}
-                    className="mt-2.5 px-3 py-1 rounded-lg bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold text-[11px] flex items-center space-x-1 transition-colors shadow-sm cursor-pointer"
-                  >
-                    <Check className="w-3 h-3 stroke-[3]" />
-                    <span>Tự động điền mã {smsAlert.code}</span>
-                  </button>
+                  <p className="text-[11px] text-slate-400 italic">
+                    Vui lòng mở ứng dụng Tin nhắn trên điện thoại của bạn và nhập mã vào ô bên dưới.
+                  </p>
                 </div>
               )}
 

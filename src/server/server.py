@@ -473,10 +473,13 @@ class ChatServer:
 
         # 2.3 Yêu cầu tạo mã OTP xác minh số điện thoại
         elif action == "request_phone_otp":
-            user_id = packet.get("user_id")
+            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
             phone_number = packet.get("phone_number")
             res = self.db.create_phone_otp(user_id, phone_number)
-            return {"action": "request_phone_otp_response", **res}
+            client_res = dict(res)
+            # Bảo mật: Không gửi mã OTP về client để hiển thị trên UI
+            client_res.pop("otp_code", None)
+            return {"action": "request_phone_otp_response", **client_res}
 
         # 2.4 Xác minh mã OTP số điện thoại
         elif action == "verify_phone_otp":
@@ -1286,7 +1289,10 @@ class ChatServer:
             user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
             target_type = packet.get("target_type", "auto")
             res = self.db.create_password_reset_otp(user_id, target_type)
-            return {"action": "request_password_otp_response", **res}
+            client_res = dict(res)
+            # Bảo mật: Không gửi mã OTP về client để hiển thị trên UI
+            client_res.pop("otp_code", None)
+            return {"action": "request_password_otp_response", **client_res}
 
         elif action == "change_password_with_otp":
             user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
@@ -1435,6 +1441,13 @@ class ChatServer:
                     })
                 self.broadcast_to_users(remaining_ids, {"type": "refresh_conversations"})
             return {"action": "leave_group_response", **res}
+
+        elif action == "get_conversation_members":
+            conv_id = packet.get("conversation_id")
+            if not conv_id:
+                return {"action": "get_conversation_members_response", "success": False, "error": "Thiếu conversation_id"}
+            members = self.db.get_conversation_members(conv_id)
+            return {"action": "get_conversation_members_response", "success": True, "members": members}
 
 if __name__ == "__main__":
     server = ChatServer()
