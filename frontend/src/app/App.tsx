@@ -12,7 +12,7 @@ import { useChat } from '../context/ChatContext';
 import { apiService } from '../services/api';
 
 export const App: React.FC = () => {
-  const { currentUser, isLocked, setIsLocked, refreshConversations } = useChat();
+  const { currentUser, isLocked, setIsLocked, refreshConversations, isSidebarCollapsed, activeConv } = useChat();
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -52,13 +52,29 @@ export const App: React.FC = () => {
         onOpenUpdateModal={() => setShowUpdateModal(true)}
       />
 
-      {/* 2. Main Workspace Layout */}
+      {/* 2. Main Workspace Layout: Smart Responsive like Zalo & Telegram */}
       <div className="flex-1 flex overflow-hidden relative">
-        <Sidebar
-          onOpenCreateGroup={() => setShowCreateGroup(true)}
-          onOpenContacts={() => setShowContacts(true)}
-        />
-        <ChatArea />
+        <div
+          className={`h-full flex-shrink-0 transition-all duration-150 ${
+            isSidebarCollapsed && activeConv
+              ? 'hidden md:block md:w-[320px]'
+              : 'w-full md:w-[320px] block'
+          }`}
+        >
+          <Sidebar
+            onOpenCreateGroup={() => setShowCreateGroup(true)}
+            onOpenContacts={() => setShowContacts(true)}
+          />
+        </div>
+        <div
+          className={`h-full flex-1 overflow-hidden transition-all duration-150 ${
+            !isSidebarCollapsed && !activeConv
+              ? 'hidden md:flex'
+              : 'flex'
+          }`}
+        >
+          <ChatArea />
+        </div>
       </div>
 
       {/* 3. Modals and Overlays */}

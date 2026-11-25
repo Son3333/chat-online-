@@ -20,6 +20,8 @@ interface ChatContextType {
   typingUser: string | null;
   repositioningImage: string | null;
   setRepositioningImage: (img: string | null) => void;
+  isSidebarCollapsed: boolean;
+  setIsSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   incomingCall: IncomingCallState | null;
   activeCall: ActiveCallState | null;
   loadingMessages: boolean;
@@ -126,6 +128,22 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [repositioningImage, setRepositioningImage] = useState<string | null>(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    return typeof window !== 'undefined' ? window.innerWidth < 850 : false;
+  });
+
+  // Responsive layout: auto adapt when window is resized
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 850) {
+        setIsSidebarCollapsed(true);
+      } else {
+        setIsSidebarCollapsed(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [incomingCall, setIncomingCall] = useState<IncomingCallState | null>(null);
   const [activeCall, setActiveCall] = useState<ActiveCallState | null>(null);
   const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
@@ -182,6 +200,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const selectConversation = async (conv: Conversation) => {
     activeConvIdRef.current = conv.id;
     setActiveConv(conv);
+    if (typeof window !== 'undefined' && window.innerWidth < 850) {
+      setIsSidebarCollapsed(true);
+    }
     setLoadingMessages(true);
     setMessages([]);
     setReplyTo(null);
@@ -231,6 +252,9 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const openSavedMessages = async () => {
     if (!currentUser) return;
+    if (typeof window !== 'undefined' && window.innerWidth < 850) {
+      setIsSidebarCollapsed(true);
+    }
     const res = await apiService.getSavedConversation(currentUser.id);
     if (res && res.conversation_id) {
       const savedConv: Conversation = {
@@ -834,6 +858,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         typingUser,
         repositioningImage,
         setRepositioningImage,
+        isSidebarCollapsed,
+        setIsSidebarCollapsed,
         incomingCall,
         activeCall,
         pinnedMessage,

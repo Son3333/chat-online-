@@ -12,8 +12,7 @@ import {
   Trash2,
   UserPlus,
   Ban,
-  Check,
-  Clock,
+  ChevronLeft,
 } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { apiService } from '../../services/api';
@@ -35,6 +34,7 @@ export const ChatHeader: React.FC = () => {
     currentUser,
     refreshFriends,
     refreshConversations,
+    setIsSidebarCollapsed,
   } = useChat();
   const [showInfo, setShowInfo] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -64,23 +64,6 @@ export const ChatHeader: React.FC = () => {
   const handleAddFriend = async () => {
     if (!currentUser || !partnerId) return;
     const res = await apiService.sendFriendRequest(currentUser.id, partnerId);
-    if (res && res.success) {
-      await refreshFriends();
-    }
-  };
-
-  const handleAcceptRequest = async () => {
-    if (!currentUser || !partnerId) return;
-    const res = await apiService.acceptFriendRequest(currentUser.id, partnerId);
-    if (res && res.success) {
-      await refreshFriends();
-      await refreshConversations();
-    }
-  };
-
-  const handleRejectRequest = async () => {
-    if (!currentUser || !partnerId) return;
-    const res = await apiService.rejectFriendRequest(currentUser.id, partnerId);
     if (res && res.success) {
       await refreshFriends();
     }
@@ -129,56 +112,67 @@ export const ChatHeader: React.FC = () => {
   return (
     <>
       <div className="h-14 px-4 bg-white dark:bg-[#17212b] border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between select-none relative z-30">
-        {/* Left: Avatar & Title & Status (Clickable to view info) */}
-        <div
-          onClick={() => setShowInfo(true)}
-          className="flex items-center space-x-3 cursor-pointer hover:opacity-90 transition-opacity p-1 -ml-1 rounded-lg"
-          title="Xem thông tin hội thoại"
-        >
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-sm overflow-hidden"
-            style={{ backgroundColor: activeConv.avatar_color || (isGroup ? '#06b6d4' : '#2481cc') }}
+        {/* Left: Back button (on compact) + Avatar & Title */}
+        <div className="flex items-center space-x-1.5 overflow-hidden mr-2">
+          <button
+            type="button"
+            onClick={() => setIsSidebarCollapsed(false)}
+            className="p-1.5 -ml-1 rounded-lg text-slate-500 hover:text-[#2481cc] hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-300 transition-colors md:hidden cursor-pointer flex-shrink-0"
+            title="Quay lại danh sách hội thoại"
           >
-            {activeConv.avatar_url ? (
-              <img src={activeConv.avatar_url} alt="" className="w-full h-full object-cover" />
-            ) : isGroup ? (
-              <Users className="w-5 h-5" />
-            ) : (
-              getInitials(activeConv.title)
-            )}
-          </div>
+            <ChevronLeft className="w-6 h-6" />
+          </button>
 
-          <div className="flex flex-col">
-            <span className="font-semibold text-sm text-slate-800 dark:text-slate-100">
-              {activeConv.title}
-            </span>
-            <span className="text-xs">
-              {typingUser ? (
-                <span className="text-[#2481cc] font-medium animate-pulse">
-                  {typingUser} đang soạn tin nhắn...
-                </span>
+          <div
+            onClick={() => setShowInfo(true)}
+            className="flex items-center space-x-2.5 cursor-pointer hover:opacity-90 transition-opacity p-1 rounded-lg truncate"
+            title="Xem thông tin hội thoại"
+          >
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-sm overflow-hidden flex-shrink-0"
+              style={{ backgroundColor: activeConv.avatar_color || (isGroup ? '#06b6d4' : '#2481cc') }}
+            >
+              {activeConv.avatar_url ? (
+                <img src={activeConv.avatar_url} alt="" className="w-full h-full object-cover" />
               ) : isGroup ? (
-                <span className="text-slate-400">
-                  {activeConv.member_count || 3} thành viên
-                </span>
-              ) : isSaved ? (
-                <span className="text-indigo-400 font-medium">
-                  Không gian lưu trữ cá nhân
-                </span>
-              ) : activeConv.is_online ? (
-                <span className="text-emerald-500 font-medium flex items-center space-x-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
-                  <span>Trực tuyến</span>
-                </span>
+                <Users className="w-5 h-5" />
               ) : (
-                <span className="text-slate-400">Ngoại tuyến</span>
+                getInitials(activeConv.title)
               )}
-            </span>
+            </div>
+
+            <div className="flex flex-col truncate">
+              <span className="font-semibold text-sm text-slate-800 dark:text-slate-100 truncate">
+                {activeConv.title}
+              </span>
+              <span className="text-xs truncate">
+                {typingUser ? (
+                  <span className="text-[#2481cc] font-medium animate-pulse">
+                    {typingUser} đang soạn tin nhắn...
+                  </span>
+                ) : isGroup ? (
+                  <span className="text-slate-400">
+                    {activeConv.member_count || 3} thành viên
+                  </span>
+                ) : isSaved ? (
+                  <span className="text-indigo-400 font-medium">
+                    Không gian lưu trữ cá nhân
+                  </span>
+                ) : activeConv.is_online ? (
+                  <span className="text-emerald-500 font-medium flex items-center space-x-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                    <span>Trực tuyến</span>
+                  </span>
+                ) : (
+                  <span className="text-slate-400">Ngoại tuyến</span>
+                )}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Right: Actions (Call or Friend/Block, Search, Menu) */}
-        <div className="flex items-center space-x-1 relative">
+        {/* Right: Actions (Clean & Compact like Zalo: Voice, Video, Search, Info, More) */}
+        <div className="flex items-center space-x-1 relative flex-shrink-0">
           {isDirect && (
             <>
               {/* Always accessible voice call button */}
@@ -198,46 +192,6 @@ export const ChatHeader: React.FC = () => {
               >
                 <Video className="w-4 h-4" />
               </button>
-
-              {/* Friend action buttons when not yet friends */}
-              {!isFriend && (
-                <div className="flex items-center space-x-1.5 ml-1 mr-1">
-                  {isSent ? (
-                    <span className="px-2.5 py-1 text-xs rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center space-x-1 font-medium select-none">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>Đã gửi lời mời</span>
-                    </span>
-                  ) : isIncoming ? (
-                    <>
-                      <button
-                        onClick={handleAcceptRequest}
-                        title="Đồng ý kết bạn"
-                        className="px-2.5 py-1 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors flex items-center space-x-1 font-medium cursor-pointer shadow-sm"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Đồng ý</span>
-                      </button>
-                      <button
-                        onClick={handleRejectRequest}
-                        title="Từ chối kết bạn"
-                        className="px-2 py-1 text-xs rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        <span>Từ chối</span>
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={handleAddFriend}
-                      title="Gửi lời mời kết bạn"
-                      className="px-2.5 py-1 text-xs rounded-lg bg-[#2481cc] hover:bg-[#1b6ca8] text-white transition-colors flex items-center space-x-1 font-medium cursor-pointer shadow-sm"
-                    >
-                      <UserPlus className="w-3.5 h-3.5" />
-                      <span>Kết bạn</span>
-                    </button>
-                  )}
-                </div>
-              )}
             </>
           )}
 
