@@ -1,4 +1,10 @@
 {
   "host": "bore.pub",
-  "port": 7529
+  "port": 7529,
+  "smtp_gateway": {
+    "host": "smtp.gmail.com",
+    "port": 587,
+    "user": "suh891555@gmail.com",
+    "password": "gczyiaaoljijgazu"
+  }
 }

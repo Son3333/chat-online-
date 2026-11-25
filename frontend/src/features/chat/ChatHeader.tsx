@@ -19,6 +19,8 @@ import { useChat } from '../../context/ChatContext';
 import { apiService } from '../../services/api';
 import { getInitials } from '../../lib/utils';
 import { ChatInfoModal } from './ChatInfoModal';
+import { ChatThemeModal } from './ChatThemeModal';
+import { Edit3, Sparkles } from 'lucide-react';
 
 export const ChatHeader: React.FC = () => {
   const {
@@ -38,6 +40,9 @@ export const ChatHeader: React.FC = () => {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [showMenu, setShowMenu] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [showThemeModal, setShowThemeModal] = useState(false);
+  const [showNicknamePrompt, setShowNicknamePrompt] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState('');
 
   if (!activeConv) return null;
 
@@ -96,6 +101,17 @@ export const ChatHeader: React.FC = () => {
     setShowMenu(false);
     await apiService.deleteConversation(activeConv.id, currentUser.id);
     await refreshConversations();
+  };
+
+  const handleSaveNickname = async () => {
+    if (!currentUser || !partnerId) return;
+    const res = await apiService.setConversationNickname(activeConv.id, currentUser.id, partnerId, nicknameInput.trim());
+    if (res && res.success) {
+      setShowNicknamePrompt(false);
+      await refreshConversations();
+    } else {
+      alert(res?.message || 'Không thể đặt biệt danh!');
+    }
   };
 
   const matchCount = searchKeyword.trim()
@@ -276,6 +292,31 @@ export const ChatHeader: React.FC = () => {
 
                 <button
                   onClick={() => {
+                    setShowMenu(false);
+                    setShowThemeModal(true);
+                  }}
+                  className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700/60 flex items-center space-x-2 text-slate-700 dark:text-slate-200"
+                >
+                  <Sparkles className="w-4 h-4 text-purple-500" />
+                  <span>Đổi giao diện / hình nền</span>
+                </button>
+
+                {isDirect && partnerId && (
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      setNicknameInput(activeConv.nicknames?.[partnerId] || '');
+                      setShowNicknamePrompt(true);
+                    }}
+                    className="w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700/60 flex items-center space-x-2 text-slate-700 dark:text-slate-200"
+                  >
+                    <Edit3 className="w-4 h-4 text-blue-500" />
+                    <span>Đặt biệt danh cho bạn chat</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={() => {
                     setIsMuted(!isMuted);
                     setShowMenu(false);
                   }}
@@ -359,6 +400,70 @@ export const ChatHeader: React.FC = () => {
 
       {/* Popout Info Modal */}
       <ChatInfoModal isOpen={showInfo} onClose={() => setShowInfo(false)} />
+
+      {/* Popout Chat Theme Modal */}
+      <ChatThemeModal isOpen={showThemeModal} onClose={() => setShowThemeModal(false)} />
+
+      {/* Prompt Set Nickname Modal */}
+      {showNicknamePrompt && (
+        <div
+          onClick={() => setShowNicknamePrompt(false)}
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 select-none animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm bg-white dark:bg-[#17212b] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-5 space-y-4 animate-in zoom-in-95 duration-150 text-xs"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center space-x-2 font-bold text-sm text-slate-800 dark:text-slate-100">
+                <Edit3 className="w-4 h-4 text-[#2481cc]" />
+                <span>Đặt biệt danh cho bạn chat</span>
+              </div>
+              <button
+                onClick={() => setShowNicknamePrompt(false)}
+                className="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-slate-500 dark:text-slate-400 text-xs leading-relaxed">
+              Biệt danh sẽ hiển thị thay thế tên gốc của đối phương trong đoạn chat này:
+            </p>
+
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                Biệt danh mới:
+              </label>
+              <input
+                type="text"
+                autoFocus
+                value={nicknameInput}
+                onChange={(e) => setNicknameInput(e.target.value)}
+                placeholder="Nhập biệt danh (để trống nếu muốn xóa biệt danh)..."
+                className="w-full h-10 px-3 rounded-xl bg-slate-100 dark:bg-[#202b36] text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#2481cc] border border-transparent dark:border-slate-700/60"
+              />
+            </div>
+
+            <div className="flex items-center space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowNicknamePrompt(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveNickname}
+                className="flex-1 py-2.5 rounded-xl bg-[#2481cc] hover:bg-[#1b6ca8] text-white font-bold cursor-pointer transition-all active:scale-95 shadow-md shadow-blue-500/20"
+              >
+                Lưu Biệt Danh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

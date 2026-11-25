@@ -247,6 +247,8 @@ class Database:
                 "ALTER TABLE users ADD COLUMN is_email_verified INTEGER DEFAULT 0",
                 "ALTER TABLE conversations ADD COLUMN is_muted INTEGER DEFAULT 0",
                 "ALTER TABLE conversations ADD COLUMN custom_mute_text TEXT DEFAULT 'Bạn bị khóa mõm bởi ban quản trị'",
+                "ALTER TABLE conversations ADD COLUMN avatar_url TEXT DEFAULT NULL",
+                "ALTER TABLE conversations ADD COLUMN theme TEXT DEFAULT NULL",
                 "ALTER TABLE conversation_members ADD COLUMN is_muted INTEGER DEFAULT 0",
                 "ALTER TABLE conversation_members ADD COLUMN muted_by_name TEXT DEFAULT NULL",
                 "ALTER TABLE conversation_members ADD COLUMN muted_at TIMESTAMP DEFAULT NULL",
@@ -257,6 +259,22 @@ class Database:
                     conn.commit()
                 except Exception:
                     pass
+
+            # Bảng lưu biệt danh trong cuộc trò chuyện (Direct hoặc Group)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS conversation_nicknames (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                conversation_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                nickname TEXT NOT NULL,
+                set_by INTEGER,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(conversation_id, user_id),
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """)
+            conn.commit()
 
             # 11. Tự động nạp tài khoản mẫu của nhóm nếu cơ sở dữ liệu mới tinh (Seed Data)
             cursor.execute("SELECT COUNT(*) as count FROM users")
@@ -1046,7 +1064,7 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT c.id, c.type, c.name, c.created_at,
+                SELECT c.id, c.type, c.name, c.avatar_url, c.theme, c.created_at,
                        COALESCE(c.is_muted, 0) as is_muted,
                        COALESCE(c.custom_mute_text, 'Bạn bị khóa mõm bởi ban quản trị') as custom_mute_text,
                        COALESCE(m.role, 'member') as my_role,
@@ -1073,6 +1091,11 @@ class Database:
                 last_msg = cursor.fetchone()
                 conv["last_message"] = dict(last_msg) if last_msg else None
 
+                # Lấy danh sách biệt danh cho cuộc trò chuyện này
+                cursor.execute("SELECT user_id, nickname FROM conversation_nicknames WHERE conversation_id = ?", (conv_id,))
+                nicknames = {r["user_id"]: r["nickname"] for r in cursor.fetchall()}
+                conv["nicknames"] = nicknames
+
                 if conv["type"] == 'saved':
                     conv["title"] = "Cloud của tôi (Saved Messages)"
                     conv["avatar_color"] = "#8B5CF6"
@@ -1088,11 +1111,15 @@ class Database:
                     """, (conv_id, user_id))
                     partner = cursor.fetchone()
                     if partner:
-                        conv["title"] = partner["full_name"]
+                        partner_id = partner["id"]
+                        # Nếu có biệt danh thì hiển thị biệt danh cho direct chat
+                        partner_nickname = nicknames.get(partner_id)
+                        conv["title"] = partner_nickname if partner_nickname else partner["full_name"]
+                        conv["original_title"] = partner["full_name"]
                         conv["avatar_color"] = partner["avatar_color"]
                         conv["avatar_url"] = partner["avatar_url"]
                         conv["is_online"] = partner["is_online"]
-                        conv["partner_id"] = partner["id"]
+                        conv["partner_id"] = partner_id
                         conv["partner_username"] = partner["username"]
                         conv["phone_number"] = partner["phone_number"]
                         conv["is_phone_verified"] = partner["is_phone_verified"]
@@ -1123,9 +1150,11 @@ class Database:
                        COALESCE(m.is_muted, 0) as is_muted,
                        m.muted_by_name,
                        COALESCE(m.status, 'active') as status,
-                       m.joined_at
+                       m.joined_at,
+                       cn.nickname
                 FROM conversation_members m
                 JOIN users u ON m.user_id = u.id
+                LEFT JOIN conversation_nicknames cn ON cn.conversation_id = m.conversation_id AND cn.user_id = u.id
                 WHERE m.conversation_id = ? AND (m.status IS NULL OR m.status = 'active')
                 ORDER BY
                     CASE COALESCE(m.role, 'member')
@@ -1940,5 +1969,176 @@ class Database:
             """, (conversation_id, user_id, role, role))
             conn.commit()
             return True
+
+    # =========================================================================
+    # --- PHÂN HỆ: ĐỔI TÊN/AVATAR NHÓM, ĐẶT BIỆT DANH & CHỦ ĐỀ/THEME ĐOẠN CHAT ---
+    # =========================================================================
+    def update_group_info(self, conversation_id: int, user_id: int, title: str = None, avatar_url: str = None) -> dict:
+        """Đổi tên và/hoặc avatar của nhóm trò chuyện (Chỉ thành viên còn active mới được đổi)."""
+        try:
+            conversation_id = int(conversation_id)
+            user_id = int(user_id)
+        except Exception:
+            return {"success": False, "message": "ID không hợp lệ!"}
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            # Kiểm tra xem có phải là nhóm và user có là thành viên active không
+            cursor.execute("""
+                SELECT c.type, c.name, m.role, COALESCE(u.full_name, 'Thành viên') AS full_name
+                FROM conversations c
+                JOIN conversation_members m ON c.id = m.conversation_id
+                LEFT JOIN users u ON u.id = m.user_id
+                WHERE c.id = ? AND m.user_id = ? AND (m.status IS NULL OR m.status = 'active')
+            """, (conversation_id, user_id))
+            row = cursor.fetchone()
+            if not row:
+                return {"success": False, "message": "Bạn không có quyền chỉnh sửa thông tin nhóm này!"}
+
+            if row["type"] != 'group':
+                return {"success": False, "message": "Chỉ có thể đổi thông tin cho nhóm trò chuyện!"}
+
+            updates = []
+            params = []
+            if title is not None:
+                clean_title = str(title).strip()
+                if not clean_title:
+                    return {"success": False, "message": "Tên nhóm không được để trống!"}
+                updates.append("name = ?")
+                params.append(clean_title)
+
+            if avatar_url is not None:
+                updates.append("avatar_url = ?")
+                params.append(str(avatar_url).strip() if str(avatar_url).strip() else None)
+
+            if not updates:
+                return {"success": False, "message": "Không có thông tin nào thay đổi!"}
+
+            params.append(conversation_id)
+            cursor.execute(f"UPDATE conversations SET {', '.join(updates)} WHERE id = ?", params)
+            conn.commit()
+
+            # Lấy thông tin nhóm cập nhật
+            cursor.execute("SELECT id, type, name, avatar_url, theme FROM conversations WHERE id = ?", (conversation_id,))
+            updated_conv = dict(cursor.fetchone())
+
+            return {
+                "success": True,
+                "message": "Cập nhật thông tin nhóm thành công!",
+                "conversation": updated_conv,
+                "operator_name": row["full_name"],
+                "operator_id": user_id
+            }
+
+    def set_conversation_nickname(self, conversation_id: int, user_id: int, target_user_id: int, nickname: str) -> dict:
+        """Đặt biệt danh cho một thành viên trong cuộc trò chuyện (Direct hoặc Group)."""
+        try:
+            conversation_id = int(conversation_id)
+            user_id = int(user_id)
+            target_user_id = int(target_user_id)
+        except Exception:
+            return {"success": False, "message": "Tham số không hợp lệ!"}
+
+        clean_nickname = str(nickname or "").strip()
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            # Kiểm tra cả 2 người có thuộc cuộc trò chuyện không
+            cursor.execute("""
+                SELECT user_id FROM conversation_members
+                WHERE conversation_id = ? AND user_id IN (?, ?) AND (status IS NULL OR status = 'active')
+            """, (conversation_id, user_id, target_user_id))
+            members = [r["user_id"] for r in cursor.fetchall()]
+
+            if user_id not in members:
+                return {"success": False, "message": "Bạn không phải thành viên của cuộc trò chuyện này!"}
+            if target_user_id not in members:
+                return {"success": False, "message": "Người này không còn trong cuộc trò chuyện!"}
+
+            cursor.execute("SELECT full_name FROM users WHERE id = ?", (user_id,))
+            r1 = cursor.fetchone()
+            op_name = r1["full_name"] if r1 else "Thành viên"
+
+            cursor.execute("SELECT full_name FROM users WHERE id = ?", (target_user_id,))
+            r2 = cursor.fetchone()
+            target_name = r2["full_name"] if r2 else "Thành viên"
+
+            if clean_nickname:
+                # Thêm hoặc cập nhật biệt danh
+                cursor.execute("""
+                    INSERT INTO conversation_nicknames (conversation_id, user_id, nickname, set_by, updated_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(conversation_id, user_id) DO UPDATE SET
+                        nickname = excluded.nickname,
+                        set_by = excluded.set_by,
+                        updated_at = CURRENT_TIMESTAMP
+                """, (conversation_id, target_user_id, clean_nickname, user_id))
+                msg = f"Đã đặt biệt danh cho {target_name} là '{clean_nickname}'."
+            else:
+                # Xóa biệt danh (về lại tên gốc)
+                cursor.execute("DELETE FROM conversation_nicknames WHERE conversation_id = ? AND user_id = ?", (conversation_id, target_user_id))
+                msg = f"Đã xóa biệt danh của {target_name}."
+
+            conn.commit()
+
+            # Lấy toàn bộ danh sách biệt danh của cuộc trò chuyện này
+            cursor.execute("SELECT user_id, nickname FROM conversation_nicknames WHERE conversation_id = ?", (conversation_id,))
+            nicknames = {r["user_id"]: r["nickname"] for r in cursor.fetchall()}
+
+            return {
+                "success": True,
+                "message": msg,
+                "conversation_id": conversation_id,
+                "target_user_id": target_user_id,
+                "nickname": clean_nickname or None,
+                "operator_name": op_name,
+                "target_name": target_name,
+                "all_nicknames": nicknames
+            }
+
+    def get_conversation_nicknames(self, conversation_id: int) -> dict:
+        """Lấy từ điển biệt danh trong cuộc trò chuyện {user_id: nickname}."""
+        try:
+            conversation_id = int(conversation_id)
+        except Exception:
+            return {}
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT user_id, nickname FROM conversation_nicknames WHERE conversation_id = ?", (conversation_id,))
+            return {r["user_id"]: r["nickname"] for r in cursor.fetchall()}
+
+    def update_conversation_theme(self, conversation_id: int, user_id: int, theme: str) -> dict:
+        """Thay đổi chủ đề (màu sắc/hình nền) cho cuộc trò chuyện."""
+        try:
+            conversation_id = int(conversation_id)
+            user_id = int(user_id)
+        except Exception:
+            return {"success": False, "message": "ID không hợp lệ!"}
+
+        clean_theme = str(theme or "").strip()
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT m.role, COALESCE(u.full_name, 'Thành viên') AS full_name
+                FROM conversation_members m
+                LEFT JOIN users u ON u.id = m.user_id
+                WHERE m.conversation_id = ? AND m.user_id = ? AND (m.status IS NULL OR m.status = 'active')
+            """, (conversation_id, user_id))
+            row = cursor.fetchone()
+            if not row:
+                return {"success": False, "message": "Bạn không có quyền đổi chủ đề cuộc trò chuyện này!"}
+
+            cursor.execute("UPDATE conversations SET theme = ? WHERE id = ?", (clean_theme if clean_theme else None, conversation_id))
+            conn.commit()
+
+            return {
+                "success": True,
+                "message": "Đã đổi giao diện đoạn chat thành công!",
+                "conversation_id": conversation_id,
+                "theme": clean_theme,
+                "operator_name": row["full_name"],
+                "operator_id": user_id
+            }
 
 

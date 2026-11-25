@@ -27,9 +27,12 @@ export interface LastMessage {
 export interface Conversation {
   id: string | number;
   title: string;
+  original_title?: string;
   type: 'direct' | 'group' | 'saved';
   avatar_color?: string;
   avatar_url?: string;
+  theme?: string;
+  nicknames?: Record<number, string>;
   partner_id?: number | null;
   partner_username?: string;
   phone_number?: string;
@@ -53,6 +56,7 @@ export interface ConversationMember {
   user_id?: number;
   username: string;
   full_name: string;
+  nickname?: string;
   avatar_color?: string;
   avatar_url?: string;
   is_online?: number | boolean;

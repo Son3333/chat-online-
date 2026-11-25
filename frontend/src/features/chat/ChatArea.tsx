@@ -7,6 +7,7 @@ import { ChatHeader } from './ChatHeader';
 import { ChatBubble } from './ChatBubble';
 import { ChatComposer } from './ChatComposer';
 import { FilePreviewModal } from './FilePreviewModal';
+import { PRESET_THEMES } from './ChatThemeModal';
 
 export const ChatArea: React.FC = () => {
   const {
@@ -119,8 +120,25 @@ export const ChatArea: React.FC = () => {
     }
   };
 
+  // Custom theme or preset theme resolution
+  const themePreset = PRESET_THEMES.find((t) => t.id === activeConv.theme);
+  const isCustomBg = activeConv.theme && activeConv.theme.startsWith('data:image/');
+
   return (
-    <div className="flex-1 h-full flex flex-col bg-slate-50 dark:bg-[#0e1621] relative overflow-hidden">
+    <div
+      className={`flex-1 h-full flex flex-col relative overflow-hidden transition-all duration-300 ${
+        !isCustomBg && themePreset ? themePreset.bgClass : 'bg-slate-50 dark:bg-[#0e1621]'
+      }`}
+      style={
+        isCustomBg
+          ? {
+              backgroundImage: `url(${activeConv.theme})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }
+          : undefined
+      }
+    >
       {/* 1. Header */}
       <ChatHeader />
 

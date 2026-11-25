@@ -1509,6 +1509,70 @@ class ChatServer:
             members = self.db.get_conversation_members(conv_id)
             return {"action": "get_conversation_members_response", "success": True, "members": members}
 
+        # -------------------------------------------------------------------------
+        # --- CẬP NHẬT THÔNG TIN NHÓM (TÊN & AVATAR), BIỆT DANH & CHỦ ĐỀ CHAT ---
+        # -------------------------------------------------------------------------
+        elif action == "update_group_info":
+            conv_id = packet.get("conversation_id")
+            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
+            title = packet.get("title")
+            avatar_url = packet.get("avatar_url")
+            res = self.db.update_group_info(conv_id, user_id, title, avatar_url)
+            if res.get("success"):
+                members = self.db.get_conversation_members(conv_id)
+                member_ids = [m["id"] for m in members]
+                self.broadcast_to_users(member_ids, {
+                    "type": "group_info_updated",
+                    "conversation_id": conv_id,
+                    "conversation": res.get("conversation"),
+                    "operator_name": res.get("operator_name")
+                })
+                self.broadcast_to_users(member_ids, {"type": "refresh_conversations"})
+            return {"action": "update_group_info_response", **res}
+
+        elif action == "set_conversation_nickname":
+            conv_id = packet.get("conversation_id")
+            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
+            target_user_id = packet.get("target_user_id")
+            nickname = packet.get("nickname")
+            res = self.db.set_conversation_nickname(conv_id, user_id, target_user_id, nickname)
+            if res.get("success"):
+                members = self.db.get_conversation_members(conv_id)
+                member_ids = [m["id"] for m in members]
+                self.broadcast_to_users(member_ids, {
+                    "type": "nickname_updated",
+                    "conversation_id": conv_id,
+                    "target_user_id": target_user_id,
+                    "nickname": res.get("nickname"),
+                    "operator_name": res.get("operator_name"),
+                    "target_name": res.get("target_name"),
+                    "all_nicknames": res.get("all_nicknames")
+                })
+                self.broadcast_to_users(member_ids, {"type": "refresh_conversations"})
+            return {"action": "set_conversation_nickname_response", **res}
+
+        elif action == "get_conversation_nicknames":
+            conv_id = packet.get("conversation_id")
+            nicknames = self.db.get_conversation_nicknames(conv_id)
+            return {"action": "get_conversation_nicknames_response", "success": True, "nicknames": nicknames}
+
+        elif action == "update_conversation_theme":
+            conv_id = packet.get("conversation_id")
+            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
+            theme = packet.get("theme")
+            res = self.db.update_conversation_theme(conv_id, user_id, theme)
+            if res.get("success"):
+                members = self.db.get_conversation_members(conv_id)
+                member_ids = [m["id"] for m in members]
+                self.broadcast_to_users(member_ids, {
+                    "type": "conversation_theme_updated",
+                    "conversation_id": conv_id,
+                    "theme": res.get("theme"),
+                    "operator_name": res.get("operator_name")
+                })
+                self.broadcast_to_users(member_ids, {"type": "refresh_conversations"})
+            return {"action": "update_conversation_theme_response", **res}
+
 if __name__ == "__main__":
     server = ChatServer()
     server.start()

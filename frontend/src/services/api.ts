@@ -500,5 +500,37 @@ export const apiService = {
       conversation_id: convId,
     });
   },
+
+  // --- CẬP NHẬT TÊN/AVATAR NHÓM, BIỆT DANH & CHỦ ĐỀ ĐOẠN CHAT ---
+  async updateGroupInfo(convId: number | string, userId: number, params: { title?: string; avatar_url?: string }): Promise<any> {
+    return await this.sendRequest('update_group_info', {
+      conversation_id: convId,
+      user_id: userId,
+      ...params,
+    });
+  },
+
+  async setConversationNickname(convId: number | string, userId: number, targetUserId: number, nickname: string): Promise<any> {
+    return await this.sendRequest('set_conversation_nickname', {
+      conversation_id: convId,
+      user_id: userId,
+      target_user_id: targetUserId,
+      nickname,
+    });
+  },
+
+  async getConversationNicknames(convId: number | string): Promise<{ success: boolean; nicknames: Record<number, string> }> {
+    return await this.sendRequest('get_conversation_nicknames', {
+      conversation_id: convId,
+    });
+  },
+
+  async updateConversationTheme(convId: number | string, userId: number, theme: string): Promise<any> {
+    return await this.sendRequest('update_conversation_theme', {
+      conversation_id: convId,
+      user_id: userId,
+      theme,
+    });
+  },
 };
 

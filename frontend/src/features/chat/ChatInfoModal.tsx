@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Image as ImageIcon,
@@ -16,7 +16,11 @@ import {
   UserMinus,
   LogOut,
   MoreVertical,
-  AlertTriangle
+  AlertTriangle,
+  Camera,
+  Edit2,
+  Edit3,
+  Check
 } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { getInitials, formatTime } from '../../lib/utils';
@@ -127,6 +131,93 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [leaveSilent, setLeaveSilent] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Nickname & Group Info states
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [newGroupTitle, setNewGroupTitle] = useState('');
+  const [nicknameModalMember, setNicknameModalMember] = useState<ConversationMember | null>(null);
+  const [memberNicknameInput, setMemberNicknameInput] = useState('');
+  const groupAvatarInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle change group name
+  const handleSaveGroupName = async () => {
+    if (!newGroupTitle.trim() || !activeConv || !currentUser) return;
+    setIsProcessing(true);
+    try {
+      const res = await apiService.updateGroupInfo(activeConv.id, currentUser.id, { title: newGroupTitle.trim() });
+      if (res && res.success) {
+        setActiveConv({ ...activeConv, title: newGroupTitle.trim() });
+        setIsEditingTitle(false);
+        refreshConversations();
+      } else {
+        alert(res?.error || 'Không thể đổi tên nhóm!');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Lỗi khi kết nối máy chủ!');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Handle change group avatar
+  const handleGroupAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeConv || !currentUser) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Vui lòng chọn ảnh có dung lượng dưới 5MB!');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result as string;
+      setIsProcessing(true);
+      try {
+        const res = await apiService.updateGroupInfo(activeConv.id, currentUser.id, { avatar_url: base64 });
+        if (res && res.success) {
+          setActiveConv({ ...activeConv, avatar_url: base64 });
+          refreshConversations();
+        } else {
+          alert(res?.error || 'Không thể cập nhật ảnh đại diện nhóm!');
+        }
+      } catch (err: any) {
+        alert(err.message || 'Lỗi khi gửi ảnh đại diện!');
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Handle set nickname for member
+  const handleSaveMemberNickname = async () => {
+    if (!nicknameModalMember || !activeConv || !currentUser) return;
+    setIsProcessing(true);
+    const targetId = Number(nicknameModalMember.user_id || nicknameModalMember.id);
+    try {
+      const res = await apiService.setConversationNickname(
+        activeConv.id,
+        currentUser.id,
+        targetId,
+        memberNicknameInput.trim()
+      );
+      if (res && res.success) {
+        setMembers((prev) =>
+          prev.map((m) =>
+            Number(m.user_id || m.id) === targetId ? { ...m, nickname: memberNicknameInput.trim() } : m
+          )
+        );
+        setNicknameModalMember(null);
+        setMemberNicknameInput('');
+        refreshConversations();
+      } else {
+        alert(res?.error || 'Không thể đặt biệt danh!');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Lỗi kết nối máy chủ!');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   // Fetch members when group modal opens
   const fetchMembers = async () => {
@@ -345,19 +436,89 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
 
         {/* Profile Card */}
         <div className="p-5 flex flex-col items-center border-b border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-[#1c2733]/40">
-          <div
-            className="w-20 h-20 rounded-full flex items-center justify-center font-bold text-white text-2xl shadow-lg mb-3 overflow-hidden ring-4 ring-blue-500/10"
-            style={{ backgroundColor: activeConv.avatar_color || (isGroup ? '#06b6d4' : '#2481cc') }}
-          >
-            {activeConv.avatar_url ? (
-              <img src={activeConv.avatar_url} alt="" className="w-full h-full object-cover" />
-            ) : (
-              getInitials(activeConv.title)
+          <div className="relative group mb-3">
+            <div
+              className="w-20 h-20 rounded-full flex items-center justify-center font-bold text-white text-2xl shadow-lg overflow-hidden ring-4 ring-blue-500/10"
+              style={{ backgroundColor: activeConv.avatar_color || (isGroup ? '#06b6d4' : '#2481cc') }}
+            >
+              {activeConv.avatar_url ? (
+                <img src={activeConv.avatar_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                getInitials(activeConv.title)
+              )}
+            </div>
+            {isGroup && (
+              <>
+                <input
+                  type="file"
+                  ref={groupAvatarInputRef}
+                  onChange={handleGroupAvatarUpload}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => groupAvatarInputRef.current?.click()}
+                  className="absolute bottom-0 right-0 p-1.5 rounded-full bg-[#2481cc] text-white shadow-md hover:bg-blue-600 transition-transform active:scale-95 cursor-pointer"
+                  title="Đổi ảnh đại diện nhóm"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                </button>
+              </>
             )}
           </div>
-          <h4 className="font-bold text-lg text-slate-900 dark:text-slate-100 text-center">
-            {activeConv.title}
-          </h4>
+
+          {isGroup && isEditingTitle ? (
+            <div className="flex items-center space-x-1.5 my-1">
+              <input
+                type="text"
+                value={newGroupTitle}
+                onChange={(e) => setNewGroupTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveGroupName();
+                  if (e.key === 'Escape') setIsEditingTitle(false);
+                }}
+                className="px-2.5 py-1 text-sm rounded-xl bg-white dark:bg-[#202b36] border border-blue-500 text-slate-900 dark:text-slate-100 outline-none font-semibold text-center"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={handleSaveGroupName}
+                disabled={isProcessing}
+                className="p-1.5 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 cursor-pointer"
+                title="Lưu tên nhóm"
+              >
+                <Check className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsEditingTitle(false)}
+                className="p-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-200 hover:bg-slate-300 cursor-pointer"
+                title="Hủy"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center space-x-1.5 justify-center">
+              <h4 className="font-bold text-lg text-slate-900 dark:text-slate-100 text-center">
+                {activeConv.title}
+              </h4>
+              {isGroup && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewGroupTitle(activeConv.title || '');
+                    setIsEditingTitle(true);
+                  }}
+                  className="p-1 rounded-lg text-slate-400 hover:text-[#2481cc] hover:bg-blue-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="Đổi tên nhóm"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
           {activeConv.partner_username && (
             <span className="text-xs text-[#2481cc] font-medium mt-0.5">
               @{activeConv.partner_username}
@@ -533,7 +694,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
                         <div className="truncate">
                           <div className="flex items-center space-x-1.5">
                             <span className="font-semibold text-slate-800 dark:text-slate-100 truncate">
-                              {m.full_name} {isMe && '(Bạn)'}
+                              {m.nickname ? `${m.nickname} (${m.full_name})` : m.full_name} {isMe && '(Bạn)'}
                             </span>
                             {/* Role Badge */}
                             {memberRole === 'admin' ? (
@@ -569,97 +730,113 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
                         </div>
                       </div>
 
-                      {/* Action Menu Trigger (Only if operator has rank over this member) */}
-                      {!isMe && (canKick(m) || canMute(m) || canPromote(m)) && (
-                        <div className="relative">
-                          <button
-                            onClick={() => setSelectedMember(Number(selectedMember?.user_id || selectedMember?.id) === mId ? null : m)}
-                            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 cursor-pointer"
-                          >
-                            <MoreVertical className="w-4 h-4" />
-                          </button>
+                      {/* Action Menu Trigger */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedMember(Number(selectedMember?.user_id || selectedMember?.id) === mId ? null : m)}
+                          className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 cursor-pointer"
+                          title="Tùy chọn"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
 
-                          {/* Dropdown Menu */}
-                          {Number(selectedMember?.user_id || selectedMember?.id) === mId && (
-                            <div className="absolute right-0 top-8 z-20 w-44 bg-white dark:bg-[#1f2b38] rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700/80 p-1.5 divide-y divide-slate-100 dark:divide-slate-700/50 animate-in fade-in zoom-in-95">
-                              {/* Promotion Options */}
-                              {canPromote(m) && (
-                                <div className="py-1">
-                                  {myRole === 'admin' && memberRole !== 'co_leader' && (
-                                    <button
-                                      onClick={() => handleSetRole(mId, 'co_leader')}
-                                      className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
-                                    >
-                                      <Shield className="w-3.5 h-3.5" />
-                                      <span>Lên Đồng thủ lĩnh</span>
-                                    </button>
-                                  )}
-                                  {memberRole !== 'deputy' && (
-                                    <button
-                                      onClick={() => handleSetRole(mId, 'deputy')}
-                                      className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
-                                    >
-                                      <Shield className="w-3.5 h-3.5" />
-                                      <span>Lên Phó nhóm</span>
-                                    </button>
-                                  )}
-                                  {memberRole !== 'member' && (
-                                    <button
-                                      onClick={() => handleSetRole(mId, 'member')}
-                                      className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-lg flex items-center space-x-1.5 cursor-pointer"
-                                    >
-                                      <User className="w-3.5 h-3.5" />
-                                      <span>Về Thành viên</span>
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Mute / Unmute Option */}
-                              {canMute(m) && (
-                                <div className="py-1">
-                                  {m.is_muted ? (
-                                    <button
-                                      onClick={() => {
-                                        setMuteModalMember(m);
-                                        handleConfirmMute(false);
-                                      }}
-                                      className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
-                                    >
-                                      <Volume2 className="w-3.5 h-3.5" />
-                                      <span>Mở khóa mõm</span>
-                                    </button>
-                                  ) : (
-                                    <button
-                                      onClick={() => {
-                                        setMuteModalMember(m);
-                                        setCustomMuteText(`Bạn bị khóa mõm bởi ${currentUser.full_name}`);
-                                      }}
-                                      className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
-                                    >
-                                      <VolumeX className="w-3.5 h-3.5" />
-                                      <span>Khóa mõm cá nhân</span>
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Kick Option */}
-                              {canKick(m) && (
-                                <div className="pt-1">
-                                  <button
-                                    onClick={() => setKickModalMember(m)}
-                                    className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
-                                  >
-                                    <UserMinus className="w-3.5 h-3.5" />
-                                    <span>Kích khỏi nhóm</span>
-                                  </button>
-                                </div>
-                              )}
+                        {/* Dropdown Menu */}
+                        {Number(selectedMember?.user_id || selectedMember?.id) === mId && (
+                          <div className="absolute right-0 top-8 z-20 w-44 bg-white dark:bg-[#1f2b38] rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700/80 p-1.5 divide-y divide-slate-100 dark:divide-slate-700/50 animate-in fade-in zoom-in-95">
+                            {/* Nickname Option */}
+                            <div className="py-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNicknameModalMember(m);
+                                  setMemberNicknameInput(m.nickname || '');
+                                  setSelectedMember(null);
+                                }}
+                                className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>Đặt biệt danh</span>
+                              </button>
                             </div>
-                          )}
-                        </div>
-                      )}
+
+                            {/* Promotion Options */}
+                            {!isMe && canPromote(m) && (
+                              <div className="py-1">
+                                {myRole === 'admin' && memberRole !== 'co_leader' && (
+                                  <button
+                                    onClick={() => handleSetRole(mId, 'co_leader')}
+                                    className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+                                  >
+                                    <Shield className="w-3.5 h-3.5" />
+                                    <span>Lên Đồng thủ lĩnh</span>
+                                  </button>
+                                )}
+                                {memberRole !== 'deputy' && (
+                                  <button
+                                    onClick={() => handleSetRole(mId, 'deputy')}
+                                    className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+                                  >
+                                    <Shield className="w-3.5 h-3.5" />
+                                    <span>Lên Phó nhóm</span>
+                                  </button>
+                                )}
+                                {memberRole !== 'member' && (
+                                  <button
+                                    onClick={() => handleSetRole(mId, 'member')}
+                                    className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+                                  >
+                                    <User className="w-3.5 h-3.5" />
+                                    <span>Về Thành viên</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Mute / Unmute Option */}
+                            {!isMe && canMute(m) && (
+                              <div className="py-1">
+                                {m.is_muted ? (
+                                  <button
+                                    onClick={() => {
+                                      setMuteModalMember(m);
+                                      handleConfirmMute(false);
+                                    }}
+                                    className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+                                  >
+                                    <Volume2 className="w-3.5 h-3.5" />
+                                    <span>Mở khóa mõm</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setMuteModalMember(m);
+                                      setCustomMuteText(`Bạn bị khóa mõm bởi ${currentUser.full_name}`);
+                                    }}
+                                    className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+                                  >
+                                    <VolumeX className="w-3.5 h-3.5" />
+                                    <span>Khóa mõm cá nhân</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Kick Option */}
+                            {!isMe && canKick(m) && (
+                              <div className="pt-1">
+                                <button
+                                  onClick={() => setKickModalMember(m)}
+                                  className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
+                                >
+                                  <UserMinus className="w-3.5 h-3.5" />
+                                  <span>Kích khỏi nhóm</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })
@@ -951,6 +1128,50 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose })
                   className="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-md cursor-pointer"
                 >
                   {isProcessing ? 'Đang rời...' : 'Rời nhóm'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Nickname Modal */}
+        {nicknameModalMember && (
+          <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+            <div className="w-full max-w-xs bg-white dark:bg-[#1a232f] rounded-2xl p-5 shadow-2xl border border-blue-500/20 space-y-3 text-xs">
+              <div className="flex items-center space-x-2 text-blue-600 dark:text-blue-400 font-bold text-sm">
+                <Edit3 className="w-5 h-5 flex-shrink-0" />
+                <span>Đặt biệt danh</span>
+              </div>
+              <p className="text-slate-600 dark:text-slate-300">
+                Đặt biệt danh cho <strong>{nicknameModalMember.full_name}</strong> trong cuộc trò chuyện này:
+              </p>
+              <input
+                type="text"
+                value={memberNicknameInput}
+                onChange={(e) => setMemberNicknameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveMemberNickname();
+                }}
+                placeholder="Nhập biệt danh (để trống để xóa)..."
+                className="w-full h-10 px-3 rounded-xl bg-slate-100 dark:bg-[#242f3d] text-slate-800 dark:text-slate-100 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                autoFocus
+              />
+              <div className="flex space-x-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={() => setNicknameModalMember(null)}
+                  className="flex-1 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  onClick={handleSaveMemberNickname}
+                  className="flex-1 py-2 rounded-xl bg-[#2481cc] hover:bg-blue-600 text-white font-bold shadow-md cursor-pointer"
+                >
+                  {isProcessing ? 'Đang lưu...' : 'Lưu biệt danh'}
                 </button>
               </div>
             </div>

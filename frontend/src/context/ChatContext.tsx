@@ -624,7 +624,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 prev
                   ? {
                       ...prev,
-                      title: u.full_name || prev.title,
+                      title: prev.nicknames?.[u.id] || u.full_name || prev.title,
+                      original_title: u.full_name || prev.original_title,
                       avatar_color: u.avatar_color || prev.avatar_color,
                       avatar_url: u.avatar_url,
                       partner_username: u.username || prev.partner_username,
@@ -638,6 +639,58 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             refreshFriends();
           }
           break;
+
+        case 'group_info_updated': {
+          const updConv = event.conversation;
+          const updId = event.conversation_id;
+          if (activeConv && String(activeConv.id) === String(updId)) {
+            setActiveConv((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    title: updConv?.name || prev.title,
+                    avatar_url: updConv?.avatar_url !== undefined ? updConv.avatar_url : prev.avatar_url,
+                  }
+                : null
+            );
+          }
+          refreshConversations();
+          break;
+        }
+
+        case 'nickname_updated': {
+          const nConvId = event.conversation_id;
+          const targetUid = event.target_user_id;
+          const newNick = event.nickname;
+          const allNicks = event.all_nicknames;
+          if (activeConv && String(activeConv.id) === String(nConvId)) {
+            setActiveConv((prev) => {
+              if (!prev) return null;
+              const updatedNicks = allNicks || { ...(prev.nicknames || {}), [targetUid]: newNick };
+              let updatedTitle = prev.title;
+              if (prev.type === 'direct' && prev.partner_id === targetUid) {
+                updatedTitle = newNick || prev.original_title || prev.title;
+              }
+              return {
+                ...prev,
+                title: updatedTitle,
+                nicknames: updatedNicks,
+              };
+            });
+          }
+          refreshConversations();
+          break;
+        }
+
+        case 'conversation_theme_updated': {
+          const tConvId = event.conversation_id;
+          const newTheme = event.theme;
+          if (activeConv && String(activeConv.id) === String(tConvId)) {
+            setActiveConv((prev) => (prev ? { ...prev, theme: newTheme } : null));
+          }
+          refreshConversations();
+          break;
+        }
 
         case 'connection_status':
           if (event.connected) {

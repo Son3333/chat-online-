@@ -156,8 +156,17 @@ def start_wan_server():
             with open(info_file, "w", encoding="utf-8") as f:
                 f.write(f"DOMAIN={domain}\nPORT={port}\nFULL={domain}:{port}\n")
             cfg_file = os.path.join(PROJECT_DIR, "server_config.json")
+            existing_cfg = {}
+            if os.path.exists(cfg_file):
+                try:
+                    with open(cfg_file, "r", encoding="utf-8") as f:
+                        existing_cfg = json.load(f)
+                except Exception:
+                    pass
+            existing_cfg["host"] = domain
+            existing_cfg["port"] = port
             with open(cfg_file, "w", encoding="utf-8") as f:
-                json.dump({"host": domain, "port": port}, f, indent=2)
+                json.dump(existing_cfg, f, indent=2)
             safe_log(f"[+] Da cap nhat cau hinh server_config.json: {domain}:{port}")
         except Exception:
             pass
