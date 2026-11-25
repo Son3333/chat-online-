@@ -18,6 +18,8 @@ interface ChatContextType {
   theme: 'dark' | 'light';
   setTheme: (theme: 'dark' | 'light') => void;
   typingUser: string | null;
+  repositioningImage: string | null;
+  setRepositioningImage: (img: string | null) => void;
   incomingCall: IncomingCallState | null;
   activeCall: ActiveCallState | null;
   loadingMessages: boolean;
@@ -58,6 +60,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLocked, setIsLocked] = useState<boolean>(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [typingUser, setTypingUser] = useState<string | null>(null);
+  const [repositioningImage, setRepositioningImage] = useState<string | null>(null);
   const [incomingCall, setIncomingCall] = useState<IncomingCallState | null>(null);
   const [activeCall, setActiveCall] = useState<ActiveCallState | null>(null);
   const [pinnedMessage, setPinnedMessage] = useState<Message | null>(null);
@@ -742,6 +745,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         theme,
         setTheme,
         typingUser,
+        repositioningImage,
+        setRepositioningImage,
         incomingCall,
         activeCall,
         pinnedMessage,

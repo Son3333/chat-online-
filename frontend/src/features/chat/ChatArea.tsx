@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
-import { Pin, X, Download, MessageCircle, ShieldAlert, UserPlus, Ban, Check, Clock } from 'lucide-react';
+import { Pin, X, Download, MessageCircle, ShieldAlert, UserPlus, Ban, Check, Clock, Move } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
 import { apiService } from '../../services/api';
 import APP_LOGO from '../../assets/logo';
@@ -22,11 +22,109 @@ export const ChatArea: React.FC = () => {
     sentFriendRequestIds,
     refreshFriends,
     refreshConversations,
+    repositioningImage,
+    setRepositioningImage,
+    setActiveConv,
   } = useChat();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [previewImage, setPreviewImage] = useState<{ fileId: string; name: string; url?: string } | null>(null);
   const [previewFile, setPreviewFile] = useState<{ fileId: string | number; name: string; fileSize?: number; fileType?: string } | null>(null);
   const [logoError, setLogoError] = useState(false);
+
+  // Facebook-style Cover Drag Repositioning States
+  const [panPosition, setPanPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isSavingReposition, setIsSavingReposition] = useState(false);
+  const repositionViewportRef = useRef<HTMLDivElement>(null);
+  const repositionImgRef = useRef<HTMLImageElement>(null);
+
+  // Reset pan whenever a new image is selected
+  useEffect(() => {
+    if (repositioningImage) {
+      setPanPosition({ x: 0, y: 0 });
+      setIsDragging(false);
+    }
+  }, [repositioningImage]);
+
+  const handleDragMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX - panPosition.x,
+      y: e.clientY - panPosition.y,
+    });
+  };
+
+  const handleDragMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !repositionViewportRef.current || !repositionImgRef.current) return;
+    const vp = repositionViewportRef.current.getBoundingClientRect();
+    const img = repositionImgRef.current;
+
+    const maxPanX = 0;
+    const minPanX = Math.min(0, vp.width - img.clientWidth);
+    const maxPanY = 0;
+    const minPanY = Math.min(0, vp.height - img.clientHeight);
+
+    let nextX = e.clientX - dragStart.x;
+    let nextY = e.clientY - dragStart.y;
+
+    if (img.clientWidth > vp.width) {
+      nextX = Math.max(minPanX, Math.min(maxPanX, nextX));
+    } else {
+      nextX = (vp.width - img.clientWidth) / 2;
+    }
+
+    if (img.clientHeight > vp.height) {
+      nextY = Math.max(minPanY, Math.min(maxPanY, nextY));
+    } else {
+      nextY = (vp.height - img.clientHeight) / 2;
+    }
+
+    setPanPosition({ x: nextX, y: nextY });
+  };
+
+  const handleDragMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleSaveReposition = async () => {
+    if (!activeConv || !currentUser || !repositionViewportRef.current || !repositionImgRef.current) return;
+    setIsSavingReposition(true);
+    try {
+      const vp = repositionViewportRef.current.getBoundingClientRect();
+      const img = repositionImgRef.current;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(vp.width);
+      canvas.height = Math.round(vp.height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Không thể khởi tạo Canvas');
+
+      ctx.fillStyle = '#0e1621';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.drawImage(img, panPosition.x, panPosition.y, img.clientWidth, img.clientHeight);
+
+      const croppedBase64 = canvas.toDataURL('image/jpeg', 0.88);
+      const res = await apiService.updateConversationTheme(activeConv.id, currentUser.id, croppedBase64);
+      if (res && res.success) {
+        setActiveConv({ ...activeConv, theme: croppedBase64 });
+        await refreshConversations();
+        setRepositioningImage(null);
+      } else {
+        alert(res?.error || 'Không thể lưu ảnh nền!');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Không thể lưu ảnh nền lúc này. Vui lòng thử lại sau!');
+    } finally {
+      setIsSavingReposition(false);
+    }
+  };
+
+  const handleCancelReposition = () => {
+    setRepositioningImage(null);
+  };
 
   // Filter messages strictly for active conversation to guarantee ZERO cross-chat leakage
   const convMessages = useMemo(() => {
@@ -134,7 +232,7 @@ export const ChatArea: React.FC = () => {
           ? {
               backgroundImage: `url(${activeConv.theme})`,
               backgroundSize: 'cover',
-              backgroundPosition: 'center',
+              backgroundPosition: 'center top',
             }
           : themePreset && themePreset.id !== 'default'
           ? {
@@ -143,6 +241,96 @@ export const ChatArea: React.FC = () => {
           : undefined
       }
     >
+      {/* Facebook-style Cover Drag Reposition Overlay */}
+      {repositioningImage && (
+        <div className="absolute inset-0 z-50 flex flex-col bg-slate-950 select-none animate-in fade-in duration-150">
+          {/* Top Control Bar (Facebook Cover Header) */}
+          <div className="h-14 px-6 bg-slate-900/90 backdrop-blur-md border-b border-white/10 flex items-center justify-between z-20 shadow-lg">
+            <div className="flex items-center space-x-2 text-white">
+              <Move className="w-5 h-5 text-[#2481cc]" />
+              <span className="font-bold text-sm tracking-wide">Đặt lại vị trí ảnh nền</span>
+            </div>
+
+            {/* Facebook Center Badge */}
+            <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-full bg-black/60 border border-white/20 text-xs text-white/90 shadow-inner">
+              <Move className="w-3.5 h-3.5 text-blue-400" />
+              <span>Kéo hoặc dùng chuột để đặt lại vị trí hình ảnh</span>
+            </div>
+
+            <div className="flex items-center space-x-2.5">
+              <button
+                type="button"
+                onClick={handleCancelReposition}
+                disabled={isSavingReposition}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium text-xs transition-colors cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveReposition}
+                disabled={isSavingReposition}
+                className="px-5 py-2 rounded-xl bg-[#2481cc] hover:bg-[#1a6cb0] text-white font-bold text-xs shadow-md shadow-blue-500/30 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+              >
+                {isSavingReposition ? 'Đang lưu...' : 'Lưu thay đổi'}
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive Drag Viewport */}
+          <div
+            ref={repositionViewportRef}
+            onMouseDown={handleDragMouseDown}
+            onMouseMove={handleDragMouseMove}
+            onMouseUp={handleDragMouseUp}
+            onMouseLeave={handleDragMouseUp}
+            className={`flex-1 relative overflow-hidden bg-slate-900 ${
+              isDragging ? 'cursor-grabbing' : 'cursor-grab'
+            }`}
+          >
+            <img
+              ref={repositionImgRef}
+              src={repositioningImage}
+              alt="Reposition Preview"
+              draggable={false}
+              className="absolute max-w-none pointer-events-none select-none transition-transform duration-75"
+              style={{
+                transform: `translate(${panPosition.x}px, ${panPosition.y}px)`,
+                minWidth: '100%',
+                minHeight: '100%',
+                objectFit: 'cover',
+              }}
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                if (repositionViewportRef.current) {
+                  const vp = repositionViewportRef.current.getBoundingClientRect();
+                  setPanPosition({
+                    x: Math.min(0, (vp.width - img.clientWidth) / 2),
+                    y: 0,
+                  });
+                }
+              }}
+            />
+
+            {/* Subtle Chat Bubble Silhouette Overlay for Perfect Visual Alignment */}
+            <div className="absolute inset-0 pointer-events-none p-6 flex flex-col justify-end space-y-3 opacity-25">
+              <div className="self-start max-w-xs p-3 rounded-2xl bg-white/40 text-black text-xs">
+                Tin nhắn mẫu giúp bạn căn vị trí ảnh...
+              </div>
+              <div className="self-end max-w-xs p-3 rounded-2xl bg-[#2481cc]/60 text-white text-xs">
+                Kéo ảnh để chọn góc hiển thị đẹp nhất!
+              </div>
+            </div>
+
+            {/* Center Hint for Mobile / Small Screens */}
+            <div className="sm:hidden absolute top-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-black/70 border border-white/20 text-[11px] text-white flex items-center space-x-1.5 pointer-events-none shadow-md">
+              <Move className="w-3.5 h-3.5 text-blue-400" />
+              <span>Kéo ảnh để đặt vị trí</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 1. Header */}
       <ChatHeader />
 
