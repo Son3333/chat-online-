@@ -211,7 +211,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
   };
 
   return (
-    <aside className="w-full md:w-[320px] h-full flex flex-col bg-white dark:bg-[#17212b] border-r border-slate-200 dark:border-slate-800/80 flex-shrink-0 select-none">
+    <aside className="w-full h-full flex flex-col bg-white dark:bg-[#17212b] border-r border-slate-200 dark:border-slate-800/80 flex-shrink-0 select-none">
       {/* Top Header / Profile */}
       <div className="p-3 border-b border-slate-100 dark:border-slate-800/60 flex items-center justify-between relative">
         <div

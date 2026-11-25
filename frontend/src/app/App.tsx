@@ -55,10 +55,10 @@ export const App: React.FC = () => {
       {/* 2. Main Workspace Layout: Smart Responsive like Zalo & Telegram */}
       <div className="flex-1 flex overflow-hidden relative">
         <div
-          className={`h-full flex-shrink-0 transition-all duration-150 ${
+          className={`h-full flex-shrink-0 transition-all duration-200 ${
             isSidebarCollapsed && activeConv
-              ? 'hidden md:block md:w-[320px]'
-              : 'w-full md:w-[320px] block'
+              ? 'hidden'
+              : 'w-full lg:w-[320px] block'
           }`}
         >
           <Sidebar
@@ -67,10 +67,10 @@ export const App: React.FC = () => {
           />
         </div>
         <div
-          className={`h-full flex-1 overflow-hidden transition-all duration-150 ${
-            !isSidebarCollapsed && !activeConv
-              ? 'hidden md:flex'
-              : 'flex'
+          className={`h-full flex-1 overflow-hidden transition-all duration-200 ${
+            isSidebarCollapsed && activeConv
+              ? 'flex w-full'
+              : 'hidden lg:flex'
           }`}
         >
           <ChatArea />

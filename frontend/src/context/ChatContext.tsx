@@ -129,13 +129,13 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [typingUser, setTypingUser] = useState<string | null>(null);
   const [repositioningImage, setRepositioningImage] = useState<string | null>(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
-    return typeof window !== 'undefined' ? window.innerWidth < 850 : false;
+    return typeof window !== 'undefined' ? window.innerWidth < 1024 : false;
   });
 
   // Responsive layout: auto adapt when window is resized
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth < 850) {
+      if (window.innerWidth < 1024) {
         setIsSidebarCollapsed(true);
       } else {
         setIsSidebarCollapsed(false);
@@ -200,7 +200,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const selectConversation = async (conv: Conversation) => {
     activeConvIdRef.current = conv.id;
     setActiveConv(conv);
-    if (typeof window !== 'undefined' && window.innerWidth < 850) {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
       setIsSidebarCollapsed(true);
     }
     setLoadingMessages(true);
@@ -252,7 +252,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const openSavedMessages = async () => {
     if (!currentUser) return;
-    if (typeof window !== 'undefined' && window.innerWidth < 850) {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
       setIsSidebarCollapsed(true);
     }
     const res = await apiService.getSavedConversation(currentUser.id);
