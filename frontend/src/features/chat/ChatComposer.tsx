@@ -6,7 +6,12 @@ import { apiService } from '../../services/api';
 import { LocationModal } from './LocationModal';
 import { formatFileSize } from '../../lib/utils';
 
-export const ChatComposer: React.FC = () => {
+interface ChatComposerProps {
+  droppedFile?: File | null;
+  onClearDroppedFile?: () => void;
+}
+
+export const ChatComposer: React.FC<ChatComposerProps> = ({ droppedFile, onClearDroppedFile }) => {
   const { replyTo, setReplyTo, sendMessage, activeConv, currentUser } = useChat();
   const [text, setText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -50,6 +55,41 @@ export const ChatComposer: React.FC = () => {
       inputRef.current?.focus();
     }
   }, [activeConv, replyTo, isMuted]);
+
+  // Handle Drag & Drop File passed from ChatArea
+  useEffect(() => {
+    if (!droppedFile) return;
+    if (isMuted) {
+      alert(freezeMessage);
+      onClearDroppedFile?.();
+      return;
+    }
+    const file = droppedFile;
+    if (file.size > 40 * 1024 * 1024) {
+      alert('Tệp tin vượt quá giới hạn 40MB. Vui lòng chọn tệp nhỏ hơn.');
+      onClearDroppedFile?.();
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const b64 = result.includes(',') ? result.split(',')[1] : result;
+      const isImg = file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.name);
+      const isVid = file.type.startsWith('video/') || /\.(mp4|webm|mov|mkv|avi)$/i.test(file.name);
+      const cat: 'image' | 'video' | 'file' = isImg ? 'image' : isVid ? 'video' : 'file';
+
+      setStagingAttachment({
+        fileName: file.name,
+        fileData: b64,
+        fileSize: file.size,
+        category: cat,
+        caption: '',
+      });
+      onClearDroppedFile?.();
+    };
+    reader.readAsDataURL(file);
+  }, [droppedFile, isMuted, freezeMessage, onClearDroppedFile]);
 
   // Click outside to close attachment menu
   useEffect(() => {

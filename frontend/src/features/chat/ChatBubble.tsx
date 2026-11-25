@@ -592,10 +592,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
         {isFile && !isDeleted && (() => {
           const isZip = /\.(zip|rar|7z|tar|gz|bz2)$/i.test(message.original_name || '');
           return (
-            <div className="my-1 p-2.5 rounded-xl bg-black/5 dark:bg-black/25 flex items-center space-x-3">
+            <div className="my-1 p-2 sm:p-2.5 rounded-xl bg-black/5 dark:bg-black/25 flex items-center space-x-2 sm:space-x-3 max-w-[280px] sm:max-w-[340px] w-full min-w-0">
               <div
                 onClick={() => message.file_id && onOpenFilePreview?.(message.file_id, message.original_name || (message as any).file_name || 'Tài liệu', message.file_size || (message as any).size, message.msg_type)}
-                className={`w-9 h-9 rounded-lg flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity ${
+                className={`w-9 h-9 rounded-lg flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity flex-shrink-0 ${
                   isZip
                     ? 'bg-amber-500/15 text-amber-500'
                     : 'bg-[#2481cc]/15 text-[#2481cc]'
@@ -609,10 +609,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
                 className="flex-1 min-w-0 cursor-pointer group/file"
                 title="Bấm để xem trước tệp tin"
               >
-                <span className="font-semibold text-xs truncate block group-hover/file:underline text-slate-800 dark:text-slate-100">
+                <span className="font-semibold text-xs truncate max-w-[130px] sm:max-w-[180px] block group-hover/file:underline text-slate-800 dark:text-slate-100">
                   {message.original_name || (message as any).file_name || 'Tài liệu'}
                 </span>
-                <span className="text-[10px] opacity-70 block">
+                <span className="text-[10px] opacity-70 block truncate">
                   {formatFileSize(message.file_size || (message as any).size)} {isZip ? '• Tệp nén' : ''} • Bấm để xem
                 </span>
               </div>
@@ -621,17 +621,17 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
                   <button
                     onClick={() => onOpenFilePreview(message.file_id!, message.original_name || (message as any).file_name || 'Tài liệu', message.file_size || (message as any).size, message.msg_type)}
                     title="Xem trước tệp tin"
-                    className="p-1.5 rounded-lg bg-slate-200 dark:bg-slate-700/80 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
+                    className="p-1 sm:p-1.5 rounded-lg bg-slate-200 dark:bg-slate-700/80 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer"
                   >
-                    <Eye className="w-4 h-4" />
+                    <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   </button>
                 )}
                 <button
                   onClick={handleDownloadFile}
                   title="Tải về máy tính"
-                  className="p-1.5 rounded-lg bg-[#2481cc] hover:bg-[#1d73b8] text-white transition-colors cursor-pointer"
+                  className="p-1 sm:p-1.5 rounded-lg bg-[#2481cc] hover:bg-[#1d73b8] text-white transition-colors cursor-pointer"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
               </div>
             </div>
@@ -695,7 +695,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
       <div
         className={`absolute -top-3.5 ${
           isSelf ? 'right-2' : 'left-2'
-        } hidden group-hover:flex items-center space-x-0.5 bg-white dark:bg-[#1e2c3a] border border-slate-200 dark:border-slate-700/80 rounded-full shadow-lg px-1.5 py-0.5 z-20 animate-in fade-in zoom-in-95 duration-100`}
+        } hidden group-hover:flex items-center space-x-0.5 bg-white dark:bg-[#1e2c3a] border border-slate-200 dark:border-slate-700/80 rounded-full shadow-lg px-1.5 py-0.5 z-20 animate-in fade-in zoom-in-95 duration-100 max-w-[calc(100%-12px)]`}
       >
         {/* 1. Thả cảm xúc */}
         <button
