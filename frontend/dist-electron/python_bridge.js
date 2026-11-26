@@ -106,6 +106,7 @@ class PythonBridge {
             this.dataSocket.connect(this.port, this.host, () => {
                 this.dataConnected = true;
                 this.dataSocket?.setTimeout(0);
+                this.dataSocket?.setNoDelay(true);
                 this.dataSocket?.setKeepAlive(true, 5000);
                 this.dataBuffer = Buffer.alloc(0);
                 if (this.reconnectTimer) {
@@ -162,6 +163,7 @@ class PythonBridge {
             this.mediaSocket.connect(this.port, this.host, () => {
                 this.mediaConnected = true;
                 this.mediaSocket?.setTimeout(0);
+                this.mediaSocket?.setNoDelay(true);
                 this.mediaSocket?.setKeepAlive(true, 5000);
                 this.mediaBuffer = Buffer.alloc(0);
                 if (this.currentUserId && this.sessionToken) {

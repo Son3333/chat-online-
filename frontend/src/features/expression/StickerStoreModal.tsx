@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { X, Check, Plus, Trash2, Sparkles, Smile, Download } from 'lucide-react';
-import { StickerPack } from '../../types';
+import React from 'react';
+import { X, Check, Sparkles, Download } from 'lucide-react';
 import { STORE_STICKER_PACKS } from './expressionData';
 
 interface StickerStoreModalProps {
@@ -16,8 +15,6 @@ export const StickerStoreModal: React.FC<StickerStoreModalProps> = ({
   installedPackIds,
   onToggleInstallPack,
 }) => {
-  const [selectedPack, setSelectedPack] = useState<StickerPack | null>(null);
-
   if (!isOpen) return null;
 
   return (

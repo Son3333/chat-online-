@@ -802,20 +802,6 @@ class Database:
 
         with self.get_connection() as conn:
             cursor = conn.cursor()
-
-            # 1. Tìm theo ID cụ thể nếu là số ngắn (ví dụ: "#5", "id:5")
-            id_query = clean_keyword.replace("id:", "").strip()
-            if id_query.isdigit() and len(id_query) <= 6:
-                cursor.execute("""
-                    SELECT id, username, full_name, avatar_color, avatar_url, phone_number, is_phone_verified, is_online
-                    FROM users
-                    WHERE (id = ? OR CAST(id AS TEXT) LIKE ?) AND id != ?
-                """, (int(id_query), f"{id_query}%", curr_id))
-                res = [dict(r) for r in cursor.fetchall()]
-                if res:
-                    return res
-
-            # 2. Tìm kiếm thông minh hỗ trợ cả số điện thoại, tiếng Việt có dấu, không dấu, username và họ tên
             cursor.execute("""
                 SELECT id, username, full_name, avatar_color, avatar_url, phone_number, is_phone_verified, is_online
                 FROM users
@@ -823,7 +809,10 @@ class Database:
             """, (curr_id,))
             all_users = [dict(r) for r in cursor.fetchall()]
 
-            matched = []
+            exact_matches = []
+            partial_matches = []
+            id_query = clean_keyword.replace("id:", "").strip()
+
             for u in all_users:
                 uname = (u.get("username") or "").lower()
                 fname = (u.get("full_name") or "").lower()
@@ -833,23 +822,27 @@ class Database:
                 phone = (u.get("phone_number") or "").strip()
                 phone_digits = re.sub(r'[^0-9]', '', phone)
 
-                # Kiểm tra khớp:
-                # - Số điện thoại chứa dãy số tìm kiếm (nếu tìm kiếm có ít nhất 3 chữ số)
-                # - ID chứa từ khóa
-                # - Username khớp hoàn toàn hoặc chứa từ khóa (cả có dấu và không dấu)
-                # - Họ tên chứa từ khóa (cả có dấu và không dấu)
-                is_phone_match = bool(search_digits and len(search_digits) >= 3 and phone_digits and (search_digits in phone_digits))
-                if (is_phone_match or
+                is_exact = (
                     search_lower == uname or
+                    (id_query and id_query == uid_str) or
+                    (search_digits and phone_digits and search_digits == phone_digits)
+                )
+                is_phone_match = bool(search_digits and len(search_digits) >= 3 and phone_digits and (search_digits in phone_digits))
+                is_partial = (
+                    is_phone_match or
                     search_normalized in uname_norm or
                     search_lower in fname or
                     search_normalized in fname_norm or
-                    search_lower in uid_str):
-                    matched.append(u)
-                    if len(matched) >= 15:
-                        break
+                    (id_query and id_query in uid_str) or
+                    search_lower in uid_str
+                )
 
-            return matched
+                if is_exact:
+                    exact_matches.append(u)
+                elif is_partial:
+                    partial_matches.append(u)
+
+            return (exact_matches + partial_matches)[:20]
 
     # --- Danh bạ bạn bè & Lời mời kết bạn (Friend Request & Approval APIs) ---
     def send_friend_request(self, user_id, friend_id):

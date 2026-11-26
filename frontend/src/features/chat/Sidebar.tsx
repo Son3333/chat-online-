@@ -439,7 +439,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
       {/* Conversations Scroll List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {activeTab === 'friends' ? (
-          filteredFriends.length === 0 ? (
+          filteredFriends.length === 0 && globalUsers.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-56 text-center text-slate-400 text-xs px-4">
               <Users className="w-10 h-10 mb-2 opacity-30 text-[#2481cc]" />
               <span className="font-medium text-slate-600 dark:text-slate-300">
@@ -657,7 +657,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
                       }`}
                     >
                       {conv.last_message?.sender_name ? `${conv.last_message.sender_name}: ` : ''}
-                      {conv.last_message?.content || 'Chưa có tin nhắn'}
+                      {(() => {
+                        const lm = conv.last_message;
+                        if (!lm?.content) return 'Chưa có tin nhắn';
+                        const mt = (lm as any).message_type || (lm as any).msg_type;
+                        if (mt === 'sticker' || lm.content.startsWith('{"packId"')) return '[Sticker]';
+                        if (mt === 'gif' || (lm.content.startsWith('{"id":') && lm.content.includes('"url":'))) return '[GIF]';
+                        return lm.content;
+                      })()}
                     </p>
                     {Boolean(conv.unread_count && conv.unread_count > 0) && (
                       <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[#2481cc] text-white">

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Search,
   Clock,
@@ -9,7 +9,6 @@ import {
   Plus,
   X,
   Trash2,
-  Sparkles,
 } from 'lucide-react';
 import { StickerItem, StickerPack, GifItem } from '../../types';
 import {

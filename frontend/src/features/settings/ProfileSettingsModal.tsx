@@ -220,7 +220,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       });
       if (res && res.success && res.user) {
         setCurrentUser(res.user);
-        localStorage.setItem('vibe_user', JSON.stringify(res.user));
         setSuccessMsg('Đã cập nhật hồ sơ & ảnh đại diện thành công!');
         setIsSaving(false);
         refreshConversations().catch(() => {});
@@ -276,7 +275,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       const res = await apiService.verifyPhoneOtp(currentUser.id, cleanPhone, otpCode.trim());
       if (res && res.success && res.user) {
         setCurrentUser(res.user);
-        localStorage.setItem('vibe_user', JSON.stringify(res.user));
         setSuccessMsg('🎉 Số điện thoại đã được xác minh thành công trên hệ thống!');
         setOtpCode('');
         setSentOtp(false);
@@ -334,7 +332,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       const res = await apiService.verifyUnlinkOtp(currentUser.id, unlinkType, unlinkOtpCode.trim());
       if (res && res.success && res.user) {
         setCurrentUser(res.user);
-        localStorage.setItem('vibe_user', JSON.stringify(res.user));
         if (unlinkType === 'email') {
           setEmailInput('');
           setEmailOtpCode('');
@@ -400,7 +397,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       const res = await apiService.verifyEmailOtp(currentUser.id, cleanEmail, emailOtpCode.trim());
       if (res && res.success && res.user) {
         setCurrentUser(res.user);
-        localStorage.setItem('vibe_user', JSON.stringify(res.user));
         setSuccessMsg('🎉 Địa chỉ Gmail đã được xác thực và liên kết thành công!');
         setEmailOtpCode('');
         setSentEmailOtp(false);
@@ -428,7 +424,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       const res = await apiService.removeEmail(currentUser.id);
       if (res && res.success && res.user) {
         setCurrentUser(res.user);
-        localStorage.setItem('vibe_user', JSON.stringify(res.user));
         setEmailInput('');
         setEmailOtpCode('');
         setSentEmailOtp(false);
@@ -469,7 +464,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       const res = await apiService.linkContactInfo(currentUser.id, clean, contactType);
       if (res && res.success && res.user) {
         setCurrentUser(res.user);
-        localStorage.setItem('vibe_user', JSON.stringify(res.user));
         setSuccessMsg(`🎉 Đã liên kết ${contactType === 'email' ? 'Gmail' : 'Số điện thoại'} thành công!`);
         setContactInput('');
         setPwdTargetType(contactType);
@@ -555,7 +549,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         const res = await apiService.updateProfile(currentUser.id, { pin_code: '' });
         if (res && res.success && res.user) {
           setCurrentUser(res.user);
-          localStorage.setItem('vibe_user', JSON.stringify(res.user));
           localStorage.removeItem(`vibe_pin_${currentUser.id}`);
           setSuccessMsg('Đã tắt mã PIN khóa màn hình!');
           setPinCode('');
@@ -583,7 +576,6 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       const res = await apiService.updateProfile(currentUser.id, { pin_code: cleanPin });
       if (res && res.success && res.user) {
         setCurrentUser(res.user);
-        localStorage.setItem('vibe_user', JSON.stringify(res.user));
         localStorage.setItem(`vibe_pin_${currentUser.id}`, cleanPin);
         setSuccessMsg('Đã thiết lập mã PIN 4 số thành công!');
         setPinCode('');

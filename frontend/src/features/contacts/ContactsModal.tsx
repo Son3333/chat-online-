@@ -21,6 +21,19 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
     refreshFriends();
   }, [refreshFriends]);
 
+  useEffect(() => {
+    if (activeTab !== 'search') return;
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      handleSearch();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery, activeTab]);
+
   const handleSearch = async () => {
     if (!searchQuery.trim() || !currentUser) return;
     setIsSearching(true);
@@ -411,7 +424,11 @@ export const ContactsModal: React.FC<ContactsModalProps> = ({ onClose }) => {
             <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
               {searchResults.length === 0 ? (
                 <p className="text-xs text-slate-400 text-center py-10">
-                  Nhập số điện thoại, tên tài khoản (@username), mã số (#ID) hoặc họ tên để tìm kiếm người dùng toàn hệ thống
+                  {isSearching
+                    ? 'Đang tìm kiếm người dùng...'
+                    : searchQuery.trim()
+                    ? 'Không tìm thấy người dùng nào khớp với từ khóa này.'
+                    : 'Nhập số điện thoại, tên tài khoản (@username), mã số (#ID) hoặc họ tên để tìm kiếm người dùng toàn hệ thống'}
                 </p>
               ) : (
                 searchResults.map((user) => {

@@ -90,6 +90,10 @@ class ChatServer:
             while self.running:
                 try:
                     client_sock, client_addr = self.server_socket.accept()
+                    try:
+                        client_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                    except Exception:
+                        pass
                 except (OSError, socket.error):
                     if not self.running:
                         break
@@ -405,17 +409,36 @@ class ChatServer:
     def process_action(self, client_sock: socket.socket, packet: dict) -> dict:
         action = packet.get("action")
 
-        # Chống mạo danh (Anti-Spoofing): Xác thực nghiêm ngặt sender_id từ socket đã đăng nhập
+        public_actions = {
+            "login",
+            "register",
+            "identify",
+            "request_password_reset_otp",
+            "verify_password_reset_otp",
+            "reset_password",
+            "ping",
+        }
         auth_uid = self._get_auth_user_id(client_sock)
+        if action not in public_actions and auth_uid is None:
+            return {"action": f"{action}_response", "success": False, "message": "Bạn cần đăng nhập để thực hiện thao tác này!"}
+
         if auth_uid is not None:
-            req_sender = packet.get("sender_id")
-            if req_sender is not None and req_sender != "":
-                try:
-                    if int(req_sender) != int(auth_uid):
-                        log(f"[!] PHÁT HIỆN MẠO DANH: Socket User #{auth_uid} cố tình gửi sender_id #{req_sender}! Chặn lập tức.")
-                        return {"action": "error", "success": False, "message": "Cảnh báo bảo mật: Hành vi mạo danh người gửi bị chặn!"}
-                except Exception:
-                    pass
+            for check_field in ("sender_id", "operator_id"):
+                req_val = packet.get(check_field)
+                if req_val is not None and req_val != "":
+                    try:
+                        if int(req_val) != int(auth_uid):
+                            return {"action": "error", "success": False, "message": "Cảnh báo bảo mật: Hành vi mạo danh người gửi bị chặn!"}
+                    except Exception:
+                        pass
+            if action != "add_group_member":
+                req_uid = packet.get("user_id")
+                if req_uid is not None and req_uid != "":
+                    try:
+                        if int(req_uid) != int(auth_uid):
+                            return {"action": "error", "success": False, "message": "Cảnh báo bảo mật: Hành vi mạo danh tài khoản bị chặn!"}
+                    except Exception:
+                        pass
 
         # 1. Đăng nhập
         if action == "login":

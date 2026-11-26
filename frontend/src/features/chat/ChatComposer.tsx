@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Paperclip, Smile, Send, X, MapPin, Image as ImageIcon, Video, FileText, Loader2, VolumeX } from 'lucide-react';
 import { useChat } from '../../context/ChatContext';
-import { EmojiPicker } from '../../components/EmojiPicker';
 import { ExpressionHub } from '../expression/ExpressionHub';
 import { StickerSuggestionsBar } from '../expression/StickerSuggestionsBar';
 import { StickerItem, StickerPack, GifItem } from '../../types';

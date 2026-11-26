@@ -112,10 +112,27 @@ function triggerDesktopNotification(senderName: string, content: string) {
 }
 
 export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+  const [currentUser, setCurrentUserState] = useState<User | null>(() => {
     const saved = localStorage.getItem('vibe_user') || localStorage.getItem('telegram_user');
     return saved ? JSON.parse(saved) : null;
   });
+
+  const setCurrentUser = useCallback((updater: User | null | ((prev: User | null) => User | null)) => {
+    setCurrentUserState((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      if (next && prev && Number(prev.id) === Number(next.id) && !next.session_token && prev.session_token) {
+        const merged = { ...next, session_token: prev.session_token };
+        localStorage.setItem('vibe_user', JSON.stringify(merged));
+        return merged;
+      }
+      if (next) {
+        localStorage.setItem('vibe_user', JSON.stringify(next));
+      } else {
+        localStorage.removeItem('vibe_user');
+      }
+      return next;
+    });
+  }, []);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
@@ -583,9 +600,15 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               playMessageNotificationSound();
               // Trigger Windows desktop notification if app is in background or looking at another chat
               if (document.hidden || !isCurrentChat) {
+                const notifBody =
+                  newMsg.msg_type === 'sticker'
+                    ? 'Đã gửi một nhãn dán (Sticker)'
+                    : newMsg.msg_type === 'gif'
+                    ? 'Đã gửi một ảnh động (GIF)'
+                    : newMsg.content || 'Đã gửi một tệp đính kèm';
                 triggerDesktopNotification(
                   newMsg.sender_name || 'Tin nhắn mới',
-                  newMsg.content || 'Đã gửi một tệp đính kèm'
+                  notifBody
                 );
               }
             }

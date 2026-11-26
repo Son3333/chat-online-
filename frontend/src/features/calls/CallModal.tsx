@@ -228,7 +228,7 @@ export const CallModal: React.FC = () => {
           localAudioCtxRef.current = audioCtx;
 
           const micSource = audioCtx.createMediaStreamSource(stream);
-          const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+          const processor = audioCtx.createScriptProcessor(2048, 1, 1);
           localAudioProcessorRef.current = processor;
 
           // Connect through 0-gain node to destination so onaudioprocess fires without local echo
@@ -329,8 +329,8 @@ export const CallModal: React.FC = () => {
             }
 
             const now = remoteCtx.currentTime;
-            if (nextPlayTimeRef.current < now) {
-              nextPlayTimeRef.current = now + 0.08; // 80ms jitter buffer muot ma tren WAN
+            if (nextPlayTimeRef.current < now || nextPlayTimeRef.current - now > 0.22) {
+              nextPlayTimeRef.current = now + 0.04;
             }
             source.start(nextPlayTimeRef.current);
             nextPlayTimeRef.current += audioBuffer.duration;
@@ -363,8 +363,8 @@ export const CallModal: React.FC = () => {
     }
 
     const canvas = document.createElement('canvas');
-    canvas.width = 400;
-    canvas.height = 300;
+    canvas.width = 320;
+    canvas.height = 240;
     const ctx = canvas.getContext('2d');
 
     const frameInterval = setInterval(() => {
@@ -372,7 +372,7 @@ export const CallModal: React.FC = () => {
       try {
         if (ctx) {
           ctx.drawImage(localVideoRef.current, 0, 0, canvas.width, canvas.height);
-          const frameData = canvas.toDataURL('image/jpeg', 0.45);
+          const frameData = canvas.toDataURL('image/jpeg', 0.42);
           apiService.sendRequest('call_media', {
             channel_id: activeCall.channelId,
             sender_id: currentUser?.id,
@@ -384,7 +384,7 @@ export const CallModal: React.FC = () => {
       } catch (err) {
         // ignore frame capture error
       }
-    }, 200);
+    }, 100);
 
     return () => clearInterval(frameInterval);
   }, [activeCall?.callType, activeCall?.isConnected, activeCall?.channelId, currentUser?.id, isVideoOff]);
