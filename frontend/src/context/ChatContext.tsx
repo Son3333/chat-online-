@@ -399,7 +399,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       reply_preview: replyTo ? `${replyTo.sender_name}: ${replyTo.content.slice(0, 40)}` : null,
     });
 
-    if (res && res.success && res.message) {
+    if (res && res.success && res.message && typeof res.message === 'object') {
       const norm = normalizeMessage(res.message);
       // Chỉ thêm tin nhắn nếu người dùng vẫn đang ở hội thoại đó
       if (String(norm.conversation_id) === String(activeConvIdRef.current)) {
@@ -412,7 +412,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       refreshConversations();
       return true;
     }
-    return false;
+    throw new Error(res.error || (typeof res.message === 'string' ? res.message : 'Chưa gửi được tin nhắn. Vui lòng thử lại.'));
   };
 
   const toggleReaction = async (msgId: number, reaction: string) => {

@@ -21,6 +21,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({ droppedFile, onClear
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
 
   // Staging Attachment before sending (Preview Before Send)
@@ -129,13 +130,25 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({ droppedFile, onClear
   const handleSend = async () => {
     if (isMuted) return;
     if (!text.trim() || isSending) return;
+    const draft = text.trim();
     setIsSending(true);
-    const sent = await sendMessage(text.trim(), 'text');
-    if (sent) {
-      setText('');
-      setShowEmojiPicker(false);
+    setSendError(null);
+    try {
+      const sent = await sendMessage(draft, 'text');
+      if (sent) {
+        setText((current) => current.trim() === draft ? '' : current);
+        setShowEmojiPicker(false);
+      } else {
+        setSendError('Chưa gửi được tin nhắn. Vui lòng thử lại.');
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : '';
+      setSendError(detail && !/Error invoking|python:request|timeout|quá thời gian|phản hồi chậm|kết nối/i.test(detail)
+        ? detail
+        : 'Chưa xác nhận được tin nhắn đã gửi. Kiểm tra lại cuộc trò chuyện trước khi gửi lại.');
+    } finally {
+      setIsSending(false);
     }
-    setIsSending(false);
   };
 
   const handleShareLocation = () => {
@@ -626,6 +639,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({ droppedFile, onClear
         </button>
       </div>
 
+      {sendError && <div role="alert" className="px-4 pb-2 text-xs text-red-500">{sendError}</div>}
       {/* Location Sharing Interactive Modal */}
       <LocationModal
         isOpen={showLocationModal}

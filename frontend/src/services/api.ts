@@ -213,7 +213,7 @@ export const apiService = {
     file_size?: number;
     reply_to_id?: number | null;
     reply_preview?: string | null;
-  }): Promise<{ success: boolean; message?: Message; error?: string }> {
+  }): Promise<{ success: boolean; message?: Message | string; error?: string }> {
     return await this.sendRequest('send_message', {
       ...params,
       message_type: params.msg_type,

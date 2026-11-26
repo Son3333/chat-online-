@@ -15,7 +15,11 @@ Bản tải chứa giao diện đã biên dịch. Giữ nguyên thư mục `fron
 
 Nếu địa chỉ đường hầm thay đổi, cần tải lại cấu hình mới hoặc thay địa chỉ kết nối trong ứng dụng. Dịch vụ đường hầm có thể gián đoạn; không bảo đảm hoạt động khi máy chủ tắt.
 
-## Bản 1.0.2
+## Bản 1.0.3
+
+Sửa nút gửi bị kẹt sau một lần mất kết nối hoặc quá thời gian chờ. Giữ nội dung chưa gửi, mở lại nút gửi và hiển thị lý do khi tin bị từ chối. Nếu chưa xác nhận tin đã gửi, kiểm tra lịch sử trước khi gửi lại để tránh trùng tin.
+
+### Các bản sửa từ 1.0.2
 
 Khắc phục kết nối Internet bị gián đoạn ở cổng cũ. Địa chỉ hiện tại: `bore.pub:48888`. Bổ sung phát hiện kết nối treo, kết nối lại, tránh ghi đè yêu cầu đồng thời và thông báo rõ khi chưa tải được danh sách trò chuyện. Điều chỉnh thời gian chờ gửi OTP và thông báo lỗi dễ hiểu.
 
