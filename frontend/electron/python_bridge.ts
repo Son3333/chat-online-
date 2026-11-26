@@ -10,6 +10,8 @@ export interface PythonPacket {
 
 export class PythonBridge {
   private host: string;
+  private inFlight = new Map<string, Promise<PythonPacket>>();
+  private heartbeatTimer: NodeJS.Timeout | null = null;
   private port: number;
 
   // Dual-Socket Architecture: 2 Kênh băng thông độc lập
@@ -69,6 +71,14 @@ export class PythonBridge {
   }
 
   public connect(): Promise<boolean> {
+    if (!this.heartbeatTimer) {
+      this.heartbeatTimer = setInterval(() => {
+        if (this.dataConnected && this.pendingRequests.size === 0) {
+          this.sendRequest('ping', {}, 7000).catch(() => {});
+        }
+      }, 10000);
+      this.heartbeatTimer.unref();
+    }
     if (this.dataConnected && this.dataSocket && !this.dataSocket.destroyed) {
       // Đảm bảo kênh media cũng được kết nối nếu chưa có
       if (!this.mediaConnected || !this.mediaSocket || this.mediaSocket.destroyed) {
@@ -107,6 +117,7 @@ export class PythonBridge {
       }
 
       this.dataSocket = new net.Socket();
+      const socket = this.dataSocket;
       this.dataSocket.setTimeout(6000);
 
       this.dataSocket.connect(this.port, this.host, () => {
@@ -134,17 +145,20 @@ export class PythonBridge {
       });
 
       this.dataSocket.on('data', (data: Buffer) => {
+        if (this.dataSocket !== socket) return;
         this.dataBuffer = Buffer.concat([this.dataBuffer, data]);
         this.processDataBuffer();
       });
 
       this.dataSocket.on('error', (err) => {
+        if (this.dataSocket !== socket) return;
         console.warn('[PythonBridge] Data Socket error:', err.message);
         this.handleDataDisconnect();
         resolve(false);
       });
 
       this.dataSocket.on('close', () => {
+        if (this.dataSocket !== socket) return;
         this.handleDataDisconnect();
         resolve(false);
       });
@@ -236,6 +250,11 @@ export class PythonBridge {
   }
 
   private handleDataDisconnect() {
+    for (const req of this.pendingRequests.values()) {
+      clearTimeout(req.timeoutId);
+      req.reject(new Error('Kết nối bị gián đoạn. Ứng dụng đang thử kết nối lại.'));
+    }
+    this.pendingRequests.clear();
     this.dataConnected = false;
     this.connectingPromise = null;
     this.emitEvent({ type: 'connection_status', connected: false });
@@ -467,16 +486,23 @@ export class PythonBridge {
       ? (canUseMediaForStream && mediaSock ? mediaSock : dataSock)
       : (isCallTraffic && canUseMediaForControl && mediaSock ? mediaSock : dataSock);
 
-    return new Promise((resolve, reject) => {
-      const isFileTransfer = action === 'download_file' || action === 'upload_file';
-      const actualTimeout = isFileTransfer ? 90000 : (isCallTraffic ? 35000 : timeoutMs);
-
       let trackingKey = action;
       if (action === 'download_file' && payload.file_id !== undefined) {
         trackingKey = `download_file_${payload.file_id}`;
       } else if (action === 'get_messages' && payload.conversation_id !== undefined) {
         trackingKey = `get_messages_${payload.conversation_id}`;
       }
+
+    const existing = this.inFlight.get(trackingKey);
+    if (existing && !isCallMedia) {
+      if (['ping', 'get_conversations', 'get_friends', 'get_messages', 'identify'].includes(action)) return existing;
+      await existing.catch(() => {});
+      return this.sendRequest(action, payload, timeoutMs);
+    }
+    const requestPromise = new Promise<PythonPacket>((resolve, reject) => {
+      const isFileTransfer = action === 'download_file' || action === 'upload_file';
+      const isOtpDelivery = ['request_email_otp', 'request_password_reset_otp', 'request_unlink_otp'].includes(action);
+      const actualTimeout = isFileTransfer ? 90000 : (isCallTraffic ? 35000 : (isOtpDelivery ? 60000 : timeoutMs));
 
       if (action === 'identify' && payload.user_id && payload.session_token) {
         this.currentUserId = Number(payload.user_id);
@@ -500,7 +526,9 @@ export class PythonBridge {
 
       const timeoutId = setTimeout(() => {
         this.pendingRequests.delete(trackingKey);
-        reject(new Error(`Yêu cầu '${action}' quá thời gian chờ (${actualTimeout}ms)`));
+        reject(new Error('Kết nối phản hồi chậm. Vui lòng thử lại sau.'));
+        this.dataSocket?.destroy();
+        this.handleDataDisconnect();
       }, actualTimeout);
 
       this.pendingRequests.set(trackingKey, { resolve, reject, timeoutId });
@@ -513,7 +541,11 @@ export class PythonBridge {
         reject(err);
       }
     });
+    this.inFlight.set(trackingKey, requestPromise);
+    try { return await requestPromise; }
+    finally { if (this.inFlight.get(trackingKey) === requestPromise) this.inFlight.delete(trackingKey); }
   }
+
 
   public onEvent(callback: (event: PythonPacket) => void) {
     this.eventCallbacks.push(callback);
@@ -530,6 +562,8 @@ export class PythonBridge {
   }
 
   public disconnect() {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = null;
     if (this.reconnectTimer) {
       clearInterval(this.reconnectTimer);
       this.reconnectTimer = null;

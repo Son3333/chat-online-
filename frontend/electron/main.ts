@@ -141,7 +141,7 @@ async function resolveServerEndpoint(): Promise<{ host: string; port: number; is
   }
 
   // Mặc định kết nối tới máy chủ WAN Internet bore.pub:38888
-  return { host: 'bore.pub', port: 38888, isWan: true };
+  return { host: 'bore.pub', port: 48888, isWan: true };
 }
 
 function ensureDesktopShortcut(): void {

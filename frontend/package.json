@@ -1,6 +1,6 @@
 {
   "name": "vibe-nguoi-tot",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "Vibe Người Tốt - Ứng dụng nhắn tin và truyền thông tin bảo mật",
   "main": "dist-electron/main.js",

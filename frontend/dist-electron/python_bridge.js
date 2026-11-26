@@ -37,6 +37,8 @@ exports.PythonBridge = void 0;
 const net = __importStar(require("net"));
 class PythonBridge {
     host;
+    inFlight = new Map();
+    heartbeatTimer = null;
     port;
     // Dual-Socket Architecture: 2 Kênh băng thông độc lập
     // Kênh 1: Data & Chat Socket (Tin nhắn, Đăng nhập, Bạn bè, Lịch sử, Tải file nặng)
@@ -94,6 +96,14 @@ class PythonBridge {
         return { host: this.host, port: this.port };
     }
     connect() {
+        if (!this.heartbeatTimer) {
+            this.heartbeatTimer = setInterval(() => {
+                if (this.dataConnected && this.pendingRequests.size === 0) {
+                    this.sendRequest('ping', {}, 7000).catch(() => { });
+                }
+            }, 10000);
+            this.heartbeatTimer.unref();
+        }
         if (this.dataConnected && this.dataSocket && !this.dataSocket.destroyed) {
             // Đảm bảo kênh media cũng được kết nối nếu chưa có
             if (!this.mediaConnected || !this.mediaSocket || this.mediaSocket.destroyed) {
@@ -131,6 +141,7 @@ class PythonBridge {
                 catch { }
             }
             this.dataSocket = new net.Socket();
+            const socket = this.dataSocket;
             this.dataSocket.setTimeout(6000);
             this.dataSocket.connect(this.port, this.host, () => {
                 this.dataConnected = true;
@@ -153,15 +164,21 @@ class PythonBridge {
                 resolve(true);
             });
             this.dataSocket.on('data', (data) => {
+                if (this.dataSocket !== socket)
+                    return;
                 this.dataBuffer = Buffer.concat([this.dataBuffer, data]);
                 this.processDataBuffer();
             });
             this.dataSocket.on('error', (err) => {
+                if (this.dataSocket !== socket)
+                    return;
                 console.warn('[PythonBridge] Data Socket error:', err.message);
                 this.handleDataDisconnect();
                 resolve(false);
             });
             this.dataSocket.on('close', () => {
+                if (this.dataSocket !== socket)
+                    return;
                 this.handleDataDisconnect();
                 resolve(false);
             });
@@ -250,6 +267,11 @@ class PythonBridge {
         }, 2500);
     }
     handleDataDisconnect() {
+        for (const req of this.pendingRequests.values()) {
+            clearTimeout(req.timeoutId);
+            req.reject(new Error('Kết nối bị gián đoạn. Ứng dụng đang thử kết nối lại.'));
+        }
+        this.pendingRequests.clear();
         this.dataConnected = false;
         this.connectingPromise = null;
         this.emitEvent({ type: 'connection_status', connected: false });
@@ -464,16 +486,24 @@ class PythonBridge {
         const targetSocket = isCallMedia
             ? (canUseMediaForStream && mediaSock ? mediaSock : dataSock)
             : (isCallTraffic && canUseMediaForControl && mediaSock ? mediaSock : dataSock);
-        return new Promise((resolve, reject) => {
+        let trackingKey = action;
+        if (action === 'download_file' && payload.file_id !== undefined) {
+            trackingKey = `download_file_${payload.file_id}`;
+        }
+        else if (action === 'get_messages' && payload.conversation_id !== undefined) {
+            trackingKey = `get_messages_${payload.conversation_id}`;
+        }
+        const existing = this.inFlight.get(trackingKey);
+        if (existing && !isCallMedia) {
+            if (['ping', 'get_conversations', 'get_friends', 'get_messages', 'identify'].includes(action))
+                return existing;
+            await existing.catch(() => { });
+            return this.sendRequest(action, payload, timeoutMs);
+        }
+        const requestPromise = new Promise((resolve, reject) => {
             const isFileTransfer = action === 'download_file' || action === 'upload_file';
-            const actualTimeout = isFileTransfer ? 90000 : (isCallTraffic ? 35000 : timeoutMs);
-            let trackingKey = action;
-            if (action === 'download_file' && payload.file_id !== undefined) {
-                trackingKey = `download_file_${payload.file_id}`;
-            }
-            else if (action === 'get_messages' && payload.conversation_id !== undefined) {
-                trackingKey = `get_messages_${payload.conversation_id}`;
-            }
+            const isOtpDelivery = ['request_email_otp', 'request_password_reset_otp', 'request_unlink_otp'].includes(action);
+            const actualTimeout = isFileTransfer ? 90000 : (isCallTraffic ? 35000 : (isOtpDelivery ? 60000 : timeoutMs));
             if (action === 'identify' && payload.user_id && payload.session_token) {
                 this.currentUserId = Number(payload.user_id);
                 this.sessionToken = String(payload.session_token);
@@ -494,7 +524,9 @@ class PythonBridge {
             }
             const timeoutId = setTimeout(() => {
                 this.pendingRequests.delete(trackingKey);
-                reject(new Error(`Yêu cầu '${action}' quá thời gian chờ (${actualTimeout}ms)`));
+                reject(new Error('Kết nối phản hồi chậm. Vui lòng thử lại sau.'));
+                this.dataSocket?.destroy();
+                this.handleDataDisconnect();
             }, actualTimeout);
             this.pendingRequests.set(trackingKey, { resolve, reject, timeoutId });
             try {
@@ -506,6 +538,14 @@ class PythonBridge {
                 reject(err);
             }
         });
+        this.inFlight.set(trackingKey, requestPromise);
+        try {
+            return await requestPromise;
+        }
+        finally {
+            if (this.inFlight.get(trackingKey) === requestPromise)
+                this.inFlight.delete(trackingKey);
+        }
     }
     onEvent(callback) {
         this.eventCallbacks.push(callback);
@@ -521,6 +561,9 @@ class PythonBridge {
         }
     }
     disconnect() {
+        if (this.heartbeatTimer)
+            clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = null;
         if (this.reconnectTimer) {
             clearInterval(this.reconnectTimer);
             this.reconnectTimer = null;

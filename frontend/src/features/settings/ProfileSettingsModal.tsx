@@ -375,10 +375,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         setEmailOtpCountdown(60);
         setSuccessMsg(res.message || `Mã xác thực OTP đã được gửi đến ${cleanEmail}.`);
       } else {
-        setErrorMsg(res.error || 'Không thể tạo mã OTP xác thực Gmail!');
+        setErrorMsg(res.message || res.error || 'Chưa gửi được mã xác minh. Vui lòng thử lại.');
       }
     } catch (e: any) {
-      setErrorMsg(e.message || 'Lỗi khi yêu cầu mã OTP Gmail!');
+      setErrorMsg('Chưa nhận được phản hồi. Vui lòng kiểm tra kết nối và thử lại sau.');
     } finally {
       setIsSaving(false);
     }

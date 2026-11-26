@@ -3,6 +3,7 @@ import { User, Conversation, Message, Friend, ServerEvent, MessageType, ActiveCa
 import { apiService } from '../services/api';
 
 interface ChatContextType {
+  connectionReady: boolean;
   currentUser: User | null;
   setCurrentUser: (user: User | null) => void;
   conversations: Conversation[];
@@ -134,6 +135,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
   }, []);
 
+  const [connectionReady, setConnectionReady] = useState(false);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConv, setActiveConv] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -190,6 +192,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return;
       }
       localStorage.setItem('vibe_user', JSON.stringify(currentUser));
+      setConnectionReady(false);
       const identifyAndSync = () => {
         if (cancelled) return;
         apiService
@@ -207,6 +210,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             apiService.getConversations(currentUser.id).then((cRes) => {
               if (!cancelled && cRes?.conversations) {
                 const filtered = cRes.conversations.filter((c) => c.type !== 'saved');
+                setConnectionReady(true);
                 setConversations(filtered);
                 setActiveConv((prev) => {
                   if (!prev) return null;
@@ -252,6 +256,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       apiService.getConversations(currentUser.id).then((cRes) => {
         if (cRes?.conversations) {
           const filtered = cRes.conversations.filter((c) => c.type !== 'saved');
+          setConnectionReady(true);
           setConversations(filtered);
           setActiveConv((prev) => {
             if (!prev) return null;
@@ -283,6 +288,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (res && res.conversations) {
       // Filter out saved messages from regular list (accessed via top button)
       const filtered = res.conversations.filter((c) => c.type !== 'saved');
+      setConnectionReady(true);
       setConversations(filtered);
       setActiveConv((prev) => {
         if (!prev) return null;
@@ -923,6 +929,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         case 'connection_status':
+          if (!event.connected) setConnectionReady(false);
           if (event.connected && currentUser?.session_token) {
             apiService
               .sendRequest('identify', {
@@ -954,6 +961,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     <ChatContext.Provider
       value={{
         currentUser,
+        connectionReady,
         setCurrentUser,
         conversations,
         activeConv,

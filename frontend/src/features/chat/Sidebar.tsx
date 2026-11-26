@@ -14,6 +14,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenContacts }) => {
   const {
     currentUser,
+    connectionReady,
     conversations,
     friends,
     activeConv,
@@ -436,6 +437,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
         )}
       </div>
 
+      {!connectionReady && currentUser && (
+        <div role="status" className="mx-3 mb-2 rounded-lg bg-amber-500/10 p-3 text-xs text-amber-500">
+          Đang kết nối lại… Chưa tải được danh sách trò chuyện.
+        </div>
+      )}
       {/* Conversations Scroll List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {activeTab === 'friends' ? (
@@ -570,11 +576,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ onOpenCreateGroup, onOpenConta
             <div className="flex flex-col items-center justify-center h-48 text-center text-slate-400 text-xs px-4">
               <UserIcon className="w-8 h-8 mb-2 opacity-40 text-[#2481cc]" />
               <span className="font-medium text-slate-600 dark:text-slate-300">
-                {activeTab === 'archived'
+                {!connectionReady ? 'Đang chờ kết nối, vui lòng thử lại sau' : activeTab === 'archived'
                   ? 'Không có cuộc trò chuyện nào trong kho lưu trữ'
                   : 'Không tìm thấy cuộc trò chuyện nào'}
               </span>
-              {activeTab === 'all' && (
+              {connectionReady && activeTab === 'all' && (
                 <button
                   onClick={onOpenContacts}
                   className="mt-3 px-3 py-1.5 rounded-lg bg-[#2481cc] hover:bg-[#1d6fa5] text-white text-[11px] font-semibold shadow-sm transition-colors"
