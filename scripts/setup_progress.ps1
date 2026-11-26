@@ -5,7 +5,9 @@
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.Windows.Forms.Application]::EnableVisualStyles()
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
 Add-Type -Name WinConsole -Namespace Native -MemberDefinition @"
 [DllImport("kernel32.dll")]
@@ -91,6 +93,11 @@ $lblSub.Size = New-Object System.Drawing.Size(392, 22)
 $card.Controls.Add($lblSub)
 
 $script:currentPct = 0
+$script:cancelled = $false
+$form.Add_FormClosing({
+    if ($form.Tag -ne 0) { $script:cancelled = $true }
+})
+
 function Set-Progress([int]$pct, [string]$statusText) {
     if ($pct -lt 0) { $pct = 0 }
     if ($pct -gt 100) { $pct = 100 }
@@ -100,6 +107,68 @@ function Set-Progress([int]$pct, [string]$statusText) {
     $w = [int](392 * $pct / 100)
     $barFill.Size = New-Object System.Drawing.Size($w, 14)
     [System.Windows.Forms.Application]::DoEvents()
+}
+
+function Download-FileWithProgress([string[]]$urls, [string]$destPath, [int]$startPct, [int]$endPct) {
+    foreach ($url in $urls) {
+        if ($script:cancelled) { return $false }
+        $req = $null
+        $resp = $null
+        $inStream = $null
+        $outStream = $null
+        try {
+            $req = [System.Net.HttpWebRequest]::Create($url)
+            $req.Timeout = 15000
+            $req.ReadWriteTimeout = 15000
+            $req.AllowAutoRedirect = $true
+            $req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            $resp = $req.GetResponse()
+            $totalBytes = $resp.ContentLength
+            $inStream = $resp.GetResponseStream()
+            $outStream = [System.IO.File]::Create($destPath)
+            $buffer = New-Object byte[] 65536
+            $downloaded = [long]0
+            $lastUiUpdate = [DateTime]::MinValue
+
+            while (-not $script:cancelled) {
+                $read = $inStream.Read($buffer, 0, $buffer.Length)
+                if ($read -le 0) { break }
+                $outStream.Write($buffer, 0, $read)
+                $downloaded += $read
+
+                $now = [DateTime]::Now
+                if (($now - $lastUiUpdate).TotalMilliseconds -ge 100) {
+                    $lastUiUpdate = $now
+                    $mbDone = [math]::Round($downloaded / 1MB, 1)
+                    if ($totalBytes -gt 0) {
+                        $ratio = $downloaded / $totalBytes
+                        $pct = $startPct + [int](($endPct - $startPct) * $ratio)
+                        $mbTotal = [math]::Round($totalBytes / 1MB, 1)
+                        Set-Progress $pct "Đang tải bộ chạy ứng dụng: $mbDone / $mbTotal MB"
+                    } else {
+                        Set-Progress $startPct "Đang tải bộ chạy ứng dụng: $mbDone MB..."
+                    }
+                }
+            }
+            $outStream.Close()
+            $inStream.Close()
+            $resp.Close()
+
+            if ($script:cancelled) {
+                if (Test-Path $destPath) { Remove-Item $destPath -Force -ErrorAction SilentlyContinue }
+                return $false
+            }
+            if ((Test-Path $destPath) -and ((Get-Item $destPath).Length -gt 50000000)) {
+                return $true
+            }
+        } catch {
+            try { if ($outStream) { $outStream.Close() } } catch {}
+            try { if ($inStream) { $inStream.Close() } } catch {}
+            try { if ($resp) { $resp.Close() } } catch {}
+            if (Test-Path $destPath) { Remove-Item $destPath -Force -ErrorAction SilentlyContinue }
+        }
+    }
+    return $false
 }
 
 function Run-HiddenWait([string]$filePath, [string]$args, [string]$workDir, [int]$startPct, [int]$endPct, [string]$statusMsg) {
@@ -137,39 +206,14 @@ function Run-HiddenWait([string]$filePath, [string]$args, [string]$workDir, [int
     return $proc.ExitCode
 }
 
-function Find-PythonCmd {
-    foreach ($cmd in @("python", "py")) {
-        try {
-            $p = Start-Process -FilePath $cmd -ArgumentList "--version" -WindowStyle Hidden -PassThru -Wait -ErrorAction Stop
-            if ($p.ExitCode -eq 0) { return $cmd }
-        } catch {}
-    }
-    $candidates = @(
-        "$env:LOCALAPPDATA\Programs\Python\Python314\python.exe",
-        "$env:LOCALAPPDATA\Programs\Python\Python313\python.exe",
-        "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
-        "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe",
-        "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe",
-        "$env:ProgramFiles\Python314\python.exe",
-        "$env:ProgramFiles\Python313\python.exe",
-        "$env:ProgramFiles\Python312\python.exe",
-        "$env:ProgramFiles\Python311\python.exe",
-        "$env:ProgramFiles\Python310\python.exe"
-    )
-    foreach ($c in $candidates) {
-        if (Test-Path $c) { return $c }
-    }
-    return $null
-}
-
 $form.Add_Shown({
     $form.Activate()
     $form.TopMost = $false
     if ($PreviewOnly) {
         for ($i = 0; $i -le 68; $i += 4) {
-            $msg = if ($i -lt 20) { "Đang kiểm tra môi trường hệ thống..." }
-                   elseif ($i -lt 55) { "Đang tải và cài đặt thành phần ứng dụng..." }
-                   else { "Đang hoàn tất thiết lập giao diện..." }
+            $msg = if ($i -lt 20) { "Đang kiểm tra bộ chạy ứng dụng..." }
+                   elseif ($i -lt 55) { "Đang tải bộ chạy ứng dụng: 46.2 / 102.4 MB" }
+                   else { "Đang giải nén bộ chạy ứng dụng..." }
             Set-Progress $i $msg
             Start-Sleep -Milliseconds 35
         }
@@ -186,82 +230,56 @@ $form.Add_Shown({
     }
 
     try {
-        Set-Progress 5 "Đang kiểm tra nền tảng xử lý..."
-        $pyCmd = Find-PythonCmd
-        if (-not $pyCmd) {
-            [System.Windows.Forms.MessageBox]::Show("Thiết bị chưa cài đặt Python 3.10+. Vui lòng cài Python (tích chọn Add Python to PATH) rồi mở lại ứng dụng.", "Vibe Người Tốt", "OK", "Warning") | Out-Null
-            $form.Tag = 1
-            $form.Close()
-            return
-        }
+        Set-Progress 5 "Đang kiểm tra dữ liệu ứng dụng..."
+        $electronDist = Join-Path $frontendDir "node_modules\electron\dist"
+        $electronExe = Join-Path $electronDist "electron.exe"
 
-        Set-Progress 12 "Đang kiểm tra thành phần bảo mật..."
-        $pBcrypt = Start-Process -FilePath $pyCmd -ArgumentList "-c `"import bcrypt, requests`"" -WindowStyle Hidden -PassThru -Wait
-        if ($pBcrypt.ExitCode -ne 0) {
-            Run-HiddenWait $pyCmd "-m pip install bcrypt requests" $rootDir 12 22 "Đang cài đặt thành phần bảo mật..." | Out-Null
-        } else {
-            Set-Progress 22 "Thành phần bảo mật đã sẵn sàng..."
-        }
-
-        Set-Progress 25 "Đang kiểm tra môi trường giao diện..."
-        foreach ($np in @(
-            "C:\Users\admin\tools\node-v20.18.0-win-x64",
-            "$env:LOCALAPPDATA\Programs\nodejs",
-            "$env:ProgramFiles\nodejs",
-            "C:\Program Files (x86)\nodejs"
-        )) {
-            if (Test-Path (Join-Path $np "node.exe")) {
-                $env:PATH = "$np;$env:PATH"
-            }
-        }
-        $hasNode = $false
-        try {
-            $pn = Start-Process -FilePath "node" -ArgumentList "-v" -WindowStyle Hidden -PassThru -Wait -ErrorAction Stop
-            if ($pn.ExitCode -eq 0) { $hasNode = $true }
-        } catch {}
-
-        if (-not $hasNode) {
-            [System.Windows.Forms.MessageBox]::Show("Thiết bị chưa cài đặt Node.js LTS (v20/v22). Vui lòng cài đặt từ https://nodejs.org/ rồi mở lại ứng dụng.", "Vibe Người Tốt", "OK", "Warning") | Out-Null
-            $form.Tag = 1
-            $form.Close()
-            return
-        }
-
-        $electronExe = Join-Path $frontendDir "node_modules\electron\dist\electron.exe"
         if (-not (Test-Path $electronExe)) {
-            $rc = Run-HiddenWait "cmd.exe" "/c npm install" $frontendDir 30 75 "Đang tải và cài đặt các gói giao diện..."
-            if ($rc -ne 0) {
-                [System.Windows.Forms.MessageBox]::Show("Cài đặt gói giao diện thất bại. Vui lòng kiểm tra kết nối mạng và thử lại.", "Vibe Người Tốt", "OK", "Error") | Out-Null
+            $zipPath = Join-Path $env:TEMP "vibe_electron_33_2_0.zip"
+            if (Test-Path $zipPath) { Remove-Item $zipPath -Force -ErrorAction SilentlyContinue }
+
+            $urls = @(
+                "https://npmmirror.com/mirrors/electron/33.2.0/electron-v33.2.0-win32-x64.zip",
+                "https://github.com/electron/electron/releases/download/v33.2.0/electron-v33.2.0-win32-x64.zip"
+            )
+
+            Set-Progress 8 "Đang kết nối máy chủ tải ứng dụng..."
+            $ok = Download-FileWithProgress $urls $zipPath 10 80
+            if (-not $ok) {
+                if (-not $script:cancelled) {
+                    [System.Windows.Forms.MessageBox]::Show("Không thể tải bộ chạy ứng dụng. Vui lòng kiểm tra kết nối Internet và thử lại.", "Vibe Người Tốt", "OK", "Error") | Out-Null
+                }
                 $form.Tag = 1
                 $form.Close()
                 return
             }
+
+            Set-Progress 82 "Đang giải nén bộ chạy ứng dụng..."
+            if (Test-Path $electronDist) {
+                Remove-Item $electronDist -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            New-Item -ItemType Directory -Path $electronDist -Force | Out-Null
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $electronDist)
+            if (Test-Path $zipPath) { Remove-Item $zipPath -Force -ErrorAction SilentlyContinue }
+            Set-Progress 92 "Giải nén hoàn tất!"
         } else {
-            Set-Progress 75 "Các gói giao diện đã sẵn sàng..."
+            Set-Progress 92 "Bộ chạy ứng dụng đã sẵn sàng!"
         }
 
         $distIndex = Join-Path $frontendDir "dist\index.html"
-        if (-not (Test-Path $distIndex)) {
-            Run-HiddenWait "cmd.exe" "/c npm run build" $frontendDir 75 86 "Đang tối ưu hóa giao diện ứng dụng..." | Out-Null
-        } else {
-            Set-Progress 86 "Giao diện ứng dụng đã sẵn sàng..."
-        }
-
         $mainJs = Join-Path $frontendDir "dist-electron\main.js"
-        if (-not (Test-Path $mainJs)) {
-            Run-HiddenWait "cmd.exe" "/c npm run build:electron" $frontendDir 86 94 "Đang hoàn tất cấu hình ứng dụng..." | Out-Null
-        } else {
-            Set-Progress 94 "Cấu hình ứng dụng đã sẵn sàng..."
+        if ((-not (Test-Path $distIndex)) -or (-not (Test-Path $mainJs))) {
+            Run-HiddenWait "cmd.exe" "/c npm install --no-audit --no-fund && npm run build && npm run build:electron" $frontendDir 92 97 "Đang biên dịch mã nguồn..." | Out-Null
         }
 
-        Set-Progress 96 "Đang hoàn tất thiết lập và tạo lối tắt..."
+        Set-Progress 97 "Đang tạo lối tắt Desktop..."
         $scPs = Join-Path $scriptDir "create_desktop_shortcut.ps1"
         if (Test-Path $scPs) {
-            Run-HiddenWait "powershell.exe" "-NoProfile -ExecutionPolicy Bypass -File `"$scPs`"" $rootDir 96 100 "Hoàn tất! Đang mở Vibe Người Tốt..." | Out-Null
+            Run-HiddenWait "powershell.exe" "-NoProfile -ExecutionPolicy Bypass -File `"$scPs`"" $rootDir 97 100 "Hoàn tất! Đang mở Vibe Người Tốt..." | Out-Null
         } else {
             Set-Progress 100 "Hoàn tất! Đang mở Vibe Người Tốt..."
         }
-        Start-Sleep -Milliseconds 300
+        Start-Sleep -Milliseconds 250
         $form.Tag = 0
         $form.Close()
     } catch {
@@ -272,5 +290,5 @@ $form.Add_Shown({
 })
 
 [void]$form.ShowDialog()
-if ($form.Tag -eq 1) { exit 1 }
+if ($form.Tag -eq 1 -or $script:cancelled) { exit 1 }
 exit 0
