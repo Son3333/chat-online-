@@ -195,6 +195,7 @@ export const apiService = {
       avatar_url: m.avatar_url || membersMap.get(Number(m.sender_id)),
       msg_type: m.msg_type || m.message_type || 'text',
       original_name: m.original_name || m.file_name,
+      reply_preview: m.reply_preview || m.reply_content,
     }));
     return {
       success: res?.success !== false,

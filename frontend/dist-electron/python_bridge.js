@@ -59,6 +59,12 @@ class PythonBridge {
         this.host = host;
         this.port = port;
     }
+    async clearSession() {
+        this.currentUserId = null;
+        this.sessionToken = null;
+        this.disconnect();
+        await this.connect();
+    }
     setEndpoint(host, port) {
         const changed = this.host !== host || this.port !== port;
         this.host = host;

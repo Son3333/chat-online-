@@ -211,7 +211,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 setActiveConv((prev) => {
                   if (!prev) return null;
                   const updated = filtered.find((c) => String(c.id) === String(prev.id));
-                  return updated ? { ...prev, is_online: updated.is_online } : prev;
+                  return updated ? { ...prev, ...updated } : prev;
                 });
               }
             }).catch(() => {});
@@ -256,7 +256,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setActiveConv((prev) => {
             if (!prev) return null;
             const updated = filtered.find((c) => String(c.id) === String(prev.id));
-            return updated ? { ...prev, is_online: updated.is_online } : prev;
+            return updated ? { ...prev, ...updated } : prev;
           });
         }
       }).catch(() => {});
@@ -576,7 +576,8 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try { await apiService.sendRequest('logout'); } catch {}
     setCurrentUser(null);
     setActiveConv(null);
     setMessages([]);

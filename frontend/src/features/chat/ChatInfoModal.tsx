@@ -272,6 +272,15 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose, i
     }
   }, [isOpen, activeConv?.id, isGroup]);
 
+  useEffect(() => {
+    if (!isOpen || !isGroup) return;
+    return apiService.onServerEvent((event) => {
+      if (['member_role_updated', 'member_kicked', 'member_mute_updated', 'refresh_conversations'].includes(event.type)) {
+        fetchMembers();
+      }
+    });
+  }, [isOpen, isGroup, activeConv?.id]);
+
   if (!isOpen || !activeConv || !currentUser) return null;
 
   // Filter media, files, pinned messages

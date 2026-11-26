@@ -565,10 +565,10 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
         )}
 
         {/* Quoted / Reply Preview */}
-        {message.reply_preview && (
+        {(message.reply_preview || message.reply_content) && (
           <div className="mb-1.5 p-1.5 px-2 rounded-lg bg-black/5 dark:bg-black/20 border-l-2 border-[#2481cc] text-xs">
             <span className="font-semibold text-[#2481cc] block">Trả lời:</span>
-            <span className="truncate block opacity-80">{message.reply_preview}</span>
+            <span className="truncate block opacity-80">{message.reply_preview || message.reply_content}</span>
           </div>
         )}
 
@@ -749,7 +749,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isSelf, onOpenI
 
         {/* Metadata: Time & Tick */}
         <div className="flex items-center justify-end space-x-1 mt-1 select-none">
-          {message.is_pinned && <Pin className="w-2.5 h-2.5 text-[#2481cc] rotate-45" />}
+          {Boolean(message.is_pinned) && <Pin className="w-2.5 h-2.5 text-[#2481cc] rotate-45" />}
           <span className="text-[10px] opacity-60 font-medium">
             {formatTime(message.created_at)}
           </span>

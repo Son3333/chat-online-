@@ -21,7 +21,7 @@ export const LockScreen: React.FC = () => {
       if (nextPin.length === 4) {
         // Nếu người dùng đã cài mã PIN trong hồ sơ -> so khớp đúng mã PIN đó
         // Nếu chưa cài mã PIN nào -> bất kỳ mã 4 số (hoặc 1234/0000) đều mở được
-        const isCorrect = configuredPin ? nextPin === configuredPin : true;
+        const isCorrect = Boolean(configuredPin) && nextPin === configuredPin;
 
         if (isCorrect) {
           setTimeout(() => {
@@ -52,7 +52,7 @@ export const LockScreen: React.FC = () => {
 
         <h2 className="text-lg font-bold mb-1">Ứng dụng đã bị khóa</h2>
         <p className="text-xs text-slate-400 mb-6 text-center">
-          Chào {currentUser?.full_name || 'bạn'}, nhập mã PIN 4 số để mở khóa
+          {configuredPin ? `Chào ${currentUser?.full_name || 'bạn'}, nhập mã PIN 4 số để mở khóa` : 'Bạn chưa thiết lập mã PIN. Vui lòng đăng xuất rồi đăng nhập lại để tiếp tục.'}
         </p>
 
         {/* 4 dots */}

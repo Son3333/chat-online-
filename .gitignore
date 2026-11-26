@@ -46,3 +46,27 @@ window_state.json
 frontend/node_modules/
 frontend/dist-package/
 
+
+# Local host and QA artifacts
+.local-release/
+sandbox/
+screenshots/qa-*/
+server_config.json
+src/server/
+run_server.py
+run_server_wan.py
+CHAY_SERVER_WAN.bat
+DUNG_SERVER.bat
+bore.exe
+scripts/setup_all_in_one.py
+*.db-wal
+*.db-shm
+*.log
+
+.agents/
+screenshots/
+requirements.txt
+pyproject.toml
+scripts/create_shortcut.py
+scripts/gen_logo_ts.py
+scripts/make_logo.py

@@ -68,35 +68,9 @@ function checkPortAvailable(port: number, host: string): Promise<boolean> {
 
 // Xác thực định danh phần cứng máy Chủ độc quyền (Chỉ máy của bạn mới có thẩm quyền làm Máy Chủ)
 function isAuthorizedHostMachine(): boolean {
-  try {
-    // 1. Đối chiếu địa chỉ phần cứng card mạng (Physical MAC Address)
-    const macs = Object.values(os.networkInterfaces())
-      .flat()
-      .map((i) => i && i.mac && i.mac.toLowerCase())
-      .filter(Boolean) as string[];
-    const AUTHORIZED_MACS = ['08:8f:c3:74:c3:be'];
-    if (macs.some((m) => AUTHORIZED_MACS.includes(m))) {
-      return true;
-    }
-
-    // 2. Đối chiếu tên máy tính (Computer Hostname)
-    const hostname = os.hostname().toLowerCase();
-    if (hostname === 'gaooooo') {
-      return true;
-    }
-
-    // 3. Đối chiếu mã khóa bí mật nội bộ (.host_machine_id - file này nằm trong .gitignore không bị đẩy lên Git)
-    const hostTokenPath = path.resolve(__dirname, '../../.host_machine_id');
-    if (fs.existsSync(hostTokenPath)) {
-      const content = fs.readFileSync(hostTokenPath, 'utf-8').trim();
-      if (content === 'HOST_PRIMARY_GAOOOOO_088FC374C3BE') {
-        return true;
-      }
-    }
-  } catch (err) {
-    console.warn('[Main] Loi kiem tra ma may:', err);
-  }
-  return false;
+  const rootDir = path.resolve(__dirname, '../../');
+  return fs.existsSync(path.join(rootDir, '.host_machine_id')) &&
+    fs.existsSync(path.join(rootDir, 'run_server_wan.py'));
 }
 
 // Tự động phân giải địa chỉ máy chủ phù hợp dựa trên mã định danh phần cứng máy
@@ -153,7 +127,7 @@ async function resolveServerEndpoint(): Promise<{ host: string; port: number; is
   // =========================================================================
   console.log('[Main] [Client] Che do May Khach -> Ket noi toi May Chu WAN...');
 
-  const cfgPath = path.join(rootDir, 'server_config.json');
+  const cfgPath = path.join(rootDir, 'client_config.json');
   if (fs.existsSync(cfgPath)) {
     try {
       const data = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
@@ -326,7 +300,9 @@ ipcMain.handle('python:request', async (_event, { action, payload }) => {
   if (!pythonBridge) {
     throw new Error('Python bridge not initialized');
   }
-  return await pythonBridge.sendRequest(action, payload);
+  const result = await pythonBridge.sendRequest(action, payload);
+  if (action === 'logout') await pythonBridge.clearSession();
+  return result;
 });
 
 ipcMain.on('window:minimize', () => {
@@ -452,11 +428,11 @@ ipcMain.handle('app:set-server-config', async (_event, { host, port }: { host: s
   HOST = host.trim();
   PORT = Number(port);
   const rootDir = path.resolve(__dirname, '../../');
-  const cfgPath = path.join(rootDir, 'server_config.json');
+  const cfgPath = path.join(rootDir, 'client_config.json');
   try {
     fs.writeFileSync(cfgPath, JSON.stringify({ host: HOST, port: PORT }, null, 2), 'utf-8');
   } catch (e) {
-    console.warn('[Main] Could not write server_config.json:', e);
+    console.warn('[Main] Could not write client_config.json:', e);
   }
 
   if (pythonBridge) {

@@ -122,6 +122,7 @@ export interface Message {
   original_name?: string;
   reply_to_id?: number | null;
   reply_preview?: string | null;
+    reply_content?: string | null;
   is_deleted?: number | boolean;
   created_at: string;
   reactions?: MessageReaction[];
