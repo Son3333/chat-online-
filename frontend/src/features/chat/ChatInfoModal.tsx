@@ -381,17 +381,18 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose, i
   };
 
   // Set member mute
-  const handleConfirmMute = async (isMuted: boolean) => {
-    if (!muteModalMember) return;
+  const handleConfirmMute = async (isMuted: boolean, targetMember?: ConversationMember) => {
+    const target = targetMember || muteModalMember;
+    if (!target) return;
     setIsProcessing(true);
     try {
-      const targetId = Number(muteModalMember.user_id || muteModalMember.id);
+      const targetId = Number(target.user_id || target.id);
       const res = await apiService.setMemberMute(
         activeConv.id,
         currentUser.id,
         targetId,
         isMuted,
-        customMuteText.trim()
+        isMuted ? customMuteText.trim() : undefined
       );
       if (res && res.success) {
         setMuteModalMember(null);
@@ -399,7 +400,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose, i
         setCustomMuteText('');
         await fetchMembers();
       } else {
-        alert(res.error || 'Lỗi thao tác cấm ngôn!');
+        alert(res?.message || res?.error || 'Lỗi thao tác cấm ngôn!');
       }
     } catch (e: any) {
       alert(e.message || 'Không thể hoàn tất thao tác. Vui lòng kiểm tra lại kết nối mạng!');
@@ -872,10 +873,7 @@ export const ChatInfoModal: React.FC<ChatInfoModalProps> = ({ isOpen, onClose, i
                               <div className="py-1">
                                 {m.is_muted ? (
                                   <button
-                                    onClick={() => {
-                                      setMuteModalMember(m);
-                                      handleConfirmMute(false);
-                                    }}
+                                    onClick={() => handleConfirmMute(false, m)}
                                     className="w-full px-2.5 py-1.5 text-left text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg flex items-center space-x-1.5 cursor-pointer"
                                   >
                                     <Volume2 className="w-3.5 h-3.5" />
