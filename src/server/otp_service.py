@@ -18,7 +18,10 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 class OtpDeliveryService:
-    def __init__(self, config_path="server_config.json"):
+    def __init__(self, config_path=None):
+        if config_path is None:
+            root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            config_path = os.path.join(root_dir, "server_config.json")
         self.config_path = config_path
         self.config = self._load_config()
 

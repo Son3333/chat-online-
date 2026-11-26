@@ -10,11 +10,14 @@ import uuid
 from typing import Optional
 try:
     from src.server.database import Database
+    from src.server.otp_service import otp_service
 except ImportError:
     try:
         from database import Database
+        from otp_service import otp_service
     except ImportError:
         from .database import Database
+        from .otp_service import otp_service
 
 if sys.stdout is not None:
     try:
@@ -499,17 +502,18 @@ class ChatServer:
 
         # 2.3 Yêu cầu tạo mã OTP xác minh số điện thoại
         elif action == "request_phone_otp":
-            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
+            user_id = self._get_auth_user_id(client_sock) or packet.get("user_id")
             phone_number = packet.get("phone_number")
             res = self.db.create_phone_otp(user_id, phone_number)
             client_res = dict(res)
-            # Bảo mật: Không gửi mã OTP về client để hiển thị trên UI
-            client_res.pop("otp_code", None)
+            otp_code = client_res.pop("otp_code", None)
+            if res.get("success") and otp_code and phone_number:
+                threading.Thread(target=otp_service.send_otp, args=(phone_number, otp_code, "phone"), daemon=True).start()
             return {"action": "request_phone_otp_response", **client_res}
 
         # 2.4 Xác minh mã OTP số điện thoại
         elif action == "verify_phone_otp":
-            user_id = packet.get("user_id")
+            user_id = self._get_auth_user_id(client_sock) or packet.get("user_id")
             phone_number = packet.get("phone_number")
             otp_code = packet.get("otp_code")
             res = self.db.verify_phone_otp(user_id, phone_number, otp_code)
@@ -524,11 +528,13 @@ class ChatServer:
 
         # 2.5 Yêu cầu tạo mã OTP xác minh Gmail
         elif action == "request_email_otp":
-            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
+            user_id = self._get_auth_user_id(client_sock) or packet.get("user_id")
             email = packet.get("email")
             res = self.db.create_email_otp(user_id, email)
             client_res = dict(res)
-            client_res.pop("otp_code", None)
+            otp_code = client_res.pop("otp_code", None)
+            if res.get("success") and otp_code and email:
+                threading.Thread(target=otp_service.send_otp, args=(email, otp_code, "email"), daemon=True).start()
             return {"action": "request_email_otp_response", **client_res}
 
         # 2.6 Xác minh mã OTP Gmail
@@ -561,10 +567,15 @@ class ChatServer:
 
         # Yêu cầu OTP hủy liên kết SĐT / Gmail
         elif action == "request_unlink_otp":
-            user_id = packet.get("user_id")
+            user_id = self._get_auth_user_id(client_sock) or packet.get("user_id")
             target_type = packet.get("target_type")
             res = self.db.request_unlink_otp(user_id, target_type)
-            res.pop("otp_code", None)
+            otp_code = res.pop("otp_code", None)
+            if res.get("success") and otp_code:
+                u = self.db.get_user_by_id(user_id)
+                dest = u.get("email") if (u and target_type == "email") else (u.get("phone_number") if u else None)
+                if dest:
+                    threading.Thread(target=otp_service.send_otp, args=(dest, otp_code, target_type or "email"), daemon=True).start()
             return {"action": "request_unlink_otp_response", **res}
 
         # Xác thực OTP để chính thức hủy liên kết SĐT / Gmail
@@ -1375,12 +1386,24 @@ class ChatServer:
         # --- PHÂN HỆ ĐỔI MẬT KHẨU & LIÊN KẾT GMAIL / SĐT XÁC THỰC OTP ---
         # =========================================================================
         elif action == "request_password_otp":
-            user_id = packet.get("user_id") or self._get_auth_user_id(client_sock)
+            user_id = self._get_auth_user_id(client_sock) or packet.get("user_id")
             target_type = packet.get("target_type", "auto")
             res = self.db.create_password_reset_otp(user_id, target_type)
             client_res = dict(res)
-            # Bảo mật: Không gửi mã OTP về client để hiển thị trên UI
-            client_res.pop("otp_code", None)
+            otp_code = client_res.pop("otp_code", None)
+            if res.get("success") and otp_code:
+                u = self.db.get_user_by_id(user_id)
+                dest = None
+                resolved_type = "email"
+                if u:
+                    if target_type == "phone" or (target_type == "auto" and not u.get("email") and u.get("phone_number")):
+                        dest = u.get("phone_number")
+                        resolved_type = "phone"
+                    else:
+                        dest = u.get("email")
+                        resolved_type = "email"
+                if dest:
+                    threading.Thread(target=otp_service.send_otp, args=(dest, otp_code, resolved_type), daemon=True).start()
             return {"action": "request_password_otp_response", **client_res}
 
         elif action == "change_password_with_otp":

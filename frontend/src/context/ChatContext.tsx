@@ -224,12 +224,36 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [currentUser]);
 
-  // Request notification permission once if not determined
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => {});
     }
   }, []);
+
+  useEffect(() => {
+    if (!currentUser?.session_token) return;
+    const syncAll = () => {
+      apiService.getConversations(currentUser.id).then((cRes) => {
+        if (cRes?.conversations) {
+          setConversations(cRes.conversations.filter((c) => c.type !== 'saved'));
+        }
+      }).catch(() => {});
+      apiService.getFriends(currentUser.id).then((fRes) => {
+        if (fRes) {
+          if (fRes.friends) setFriends(fRes.friends);
+          if (fRes.pending_requests) setPendingFriends(fRes.pending_requests);
+          if (fRes.sent_request_ids) setSentFriendRequestIds(fRes.sent_request_ids);
+        }
+      }).catch(() => {});
+    };
+    const onFocus = () => syncAll();
+    window.addEventListener('focus', onFocus);
+    const interval = setInterval(syncAll, 20000);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      clearInterval(interval);
+    };
+  }, [currentUser?.id, currentUser?.session_token]);
 
   const refreshConversations = useCallback(async () => {
     if (!currentUser) return;
