@@ -273,12 +273,21 @@ $form.Add_Shown({
         }
 
         Set-Progress 97 "Đang tạo lối tắt Desktop..."
-        $scPs = Join-Path $scriptDir "create_desktop_shortcut.ps1"
-        if (Test-Path $scPs) {
-            Run-HiddenWait "powershell.exe" "-NoProfile -ExecutionPolicy Bypass -File `"$scPs`"" $rootDir 97 100 "Hoàn tất! Đang mở Vibe Người Tốt..." | Out-Null
-        } else {
-            Set-Progress 100 "Hoàn tất! Đang mở Vibe Người Tốt..."
-        }
+        try {
+            $ws = New-Object -ComObject WScript.Shell
+            $desktop = [Environment]::GetFolderPath('Desktop')
+            $scPath = Join-Path $desktop "Vibe Nguoi Tot.lnk"
+            $vbsPath = Join-Path $scriptDir "launch_silent.vbs"
+            $sc = $ws.CreateShortcut($scPath)
+            $sc.TargetPath = "$env:SystemRoot\System32\wscript.exe"
+            $sc.Arguments = "`"$vbsPath`""
+            $sc.WorkingDirectory = $rootDir
+            if (Test-Path $icoPath) { $sc.IconLocation = "$icoPath,0" }
+            $sc.Description = "Vibe Người Tốt - Ứng dụng nhắn tin và truyền thông tin"
+            $sc.WindowStyle = 1
+            $sc.Save()
+        } catch {}
+        Set-Progress 100 "Hoàn tất! Đang mở Vibe Người Tốt..."
         Start-Sleep -Milliseconds 250
         $form.Tag = 0
         $form.Close()
