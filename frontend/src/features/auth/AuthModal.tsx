@@ -15,15 +15,14 @@ export const AuthModal: React.FC = () => {
   const [serverSuccessMsg, setServerSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Cấu hình máy chủ kết nối (Mặc định là máy chủ WAN Internet bore.pub:38888)
   const [serverConfig, setServerConfig] = useState<{ host: string; port: number; isWan: boolean }>({
     host: 'bore.pub',
-    port: 38888,
+    port: 48888,
     isWan: true,
   });
   const [showServerSettings, setShowServerSettings] = useState(false);
   const [customHost, setCustomHost] = useState('bore.pub');
-  const [customPort, setCustomPort] = useState('38888');
+  const [customPort, setCustomPort] = useState('48888');
   const [serverSwitching, setServerSwitching] = useState(false);
 
   useEffect(() => {
@@ -86,14 +85,14 @@ export const AuthModal: React.FC = () => {
         if (res.success && res.user) {
           setCurrentUser(res.user);
         } else {
-          setErrorMsg(res.error || 'Đăng ký thất bại. Tên đăng nhập có thể đã tồn tại.');
+          setErrorMsg(res.message || res.error || 'Đăng ký thất bại. Vui lòng kiểm tra lại thông tin!');
         }
       } else {
         const res = await apiService.login(cleanUsername, password);
         if (res.success && res.user) {
           setCurrentUser(res.user);
         } else {
-          setErrorMsg(res.error || 'Sai tên đăng nhập hoặc mật khẩu!');
+          setErrorMsg(res.message || res.error || 'Sai tên đăng nhập hoặc mật khẩu!');
         }
       }
     } catch (err: any) {
@@ -165,9 +164,9 @@ export const AuthModal: React.FC = () => {
               <button
                 type="button"
                 disabled={serverSwitching}
-                onClick={() => handleSwitchServer('bore.pub', 38888)}
+                onClick={() => handleSwitchServer('bore.pub', 48888)}
                 className={`py-1.5 px-2 rounded-lg text-[11px] font-medium border flex items-center justify-center gap-1 transition-all ${
-                  serverConfig.host === 'bore.pub' && serverConfig.port === 38888
+                  serverConfig.host === 'bore.pub' && serverConfig.port === 48888
                     ? 'bg-[#2481cc] text-white border-[#2481cc]'
                     : 'bg-white dark:bg-[#2b3947] text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-600 hover:border-[#2481cc]'
                 }`}
@@ -268,6 +267,11 @@ export const AuthModal: React.FC = () => {
                 className="w-full h-10 pl-9 pr-3 rounded-xl bg-slate-100 dark:bg-[#242f3d] text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#2481cc]"
               />
             </div>
+            {isRegister && (
+              <p className="mt-1 text-[10px] text-slate-400">
+                Từ 3–20 ký tự chữ thường, số hoặc dấu gạch dưới (_), không dấu.
+              </p>
+            )}
           </div>
 
           <div>
@@ -291,6 +295,11 @@ export const AuthModal: React.FC = () => {
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+            {isRegister && (
+              <p className="mt-1 text-[10px] text-slate-400">
+                Tối thiểu 6 ký tự, gồm chữ hoa, chữ thường, số và ký tự đặc biệt.
+              </p>
+            )}
           </div>
 
           <button

@@ -102,12 +102,12 @@ export const apiService = {
   },
 
   // Auth
-  async login(username: string, password: string): Promise<{ success: boolean; user?: User; error?: string }> {
+  async login(username: string, password: string): Promise<{ success: boolean; user?: User; error?: string; message?: string }> {
     const cleanUsername = username.trim().toLowerCase().replace(/^@+/, '');
     return await this.sendRequest('login', { username: cleanUsername, password });
   },
 
-  async register(username: string, password: string, full_name: string): Promise<{ success: boolean; user?: User; error?: string }> {
+  async register(username: string, password: string, full_name: string): Promise<{ success: boolean; user?: User; error?: string; message?: string }> {
     const cleanUsername = username.trim().toLowerCase().replace(/^@+/, '');
     return await this.sendRequest('register', { username: cleanUsername, password, full_name: full_name.trim() });
   },
