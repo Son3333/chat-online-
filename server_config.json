@@ -1,6 +1,6 @@
 {
   "host": "bore.pub",
-  "port": 50205,
+  "port": 48888,
   "smtp_gateway": {
     "host": "smtp.gmail.com",
     "port": 587,
