@@ -46,10 +46,12 @@ class PythonBridge {
     // Kênh 2: Real-time Media Socket (Chuyên dụng cho Mic PCM, Webcam, Báo hiệu gọi)
     mediaSocket = null;
     mediaConnected = false;
+    mediaIdentified = false;
     mediaBuffer = Buffer.alloc(0);
     pendingRequests = new Map();
     eventCallbacks = [];
     reconnectTimer = null;
+    mediaReconnectTimer = null;
     connectingPromise = null;
     currentUserId = null;
     sessionToken = null;
@@ -58,8 +60,29 @@ class PythonBridge {
         this.port = port;
     }
     setEndpoint(host, port) {
+        const changed = this.host !== host || this.port !== port;
         this.host = host;
         this.port = port;
+        if (changed) {
+            this.dataConnected = false;
+            this.mediaConnected = false;
+            this.mediaIdentified = false;
+            this.connectingPromise = null;
+            if (this.dataSocket) {
+                try {
+                    this.dataSocket.destroy();
+                }
+                catch { }
+                this.dataSocket = null;
+            }
+            if (this.mediaSocket) {
+                try {
+                    this.mediaSocket.destroy();
+                }
+                catch { }
+                this.mediaSocket = null;
+            }
+        }
     }
     getEndpoint() {
         return { host: this.host, port: this.port };
@@ -152,6 +175,7 @@ class PythonBridge {
      */
     connectMediaChannel() {
         return new Promise((resolve) => {
+            this.mediaIdentified = false;
             if (this.mediaSocket) {
                 try {
                     this.mediaSocket.destroy();
@@ -166,6 +190,10 @@ class PythonBridge {
                 this.mediaSocket?.setNoDelay(true);
                 this.mediaSocket?.setKeepAlive(true, 5000);
                 this.mediaBuffer = Buffer.alloc(0);
+                if (this.mediaReconnectTimer) {
+                    clearTimeout(this.mediaReconnectTimer);
+                    this.mediaReconnectTimer = null;
+                }
                 if (this.currentUserId && this.sessionToken) {
                     this.sendSocketPacket(this.mediaSocket, {
                         action: 'identify',
@@ -183,10 +211,14 @@ class PythonBridge {
             this.mediaSocket.on('error', (err) => {
                 console.warn('[PythonBridge] Media Socket error:', err.message);
                 this.mediaConnected = false;
+                this.mediaIdentified = false;
+                this.scheduleMediaReconnect();
                 resolve(false);
             });
             this.mediaSocket.on('close', () => {
                 this.mediaConnected = false;
+                this.mediaIdentified = false;
+                this.scheduleMediaReconnect();
                 resolve(false);
             });
             this.mediaSocket.on('timeout', () => {
@@ -199,6 +231,17 @@ class PythonBridge {
                 }
             });
         });
+    }
+    scheduleMediaReconnect() {
+        if (this.mediaReconnectTimer || !this.currentUserId || !this.sessionToken || !this.dataConnected) {
+            return;
+        }
+        this.mediaReconnectTimer = setTimeout(() => {
+            this.mediaReconnectTimer = null;
+            if (!this.mediaConnected && this.currentUserId && this.sessionToken && this.dataConnected) {
+                this.connectMediaChannel().catch(() => { });
+            }
+        }, 2500);
     }
     handleDataDisconnect() {
         this.dataConnected = false;
@@ -246,6 +289,10 @@ class PythonBridge {
             try {
                 const jsonStr = packetData.toString('utf-8');
                 const packet = JSON.parse(jsonStr);
+                if (packet.action === 'identify_response') {
+                    this.mediaIdentified = Boolean(packet.success);
+                    continue;
+                }
                 this.handleIncomingPacket(packet);
             }
             catch (e) {
@@ -332,7 +379,7 @@ class PythonBridge {
                 if (packet.session_token || packet.user.session_token) {
                     this.sessionToken = String(packet.session_token || packet.user.session_token);
                 }
-                this.reIdentifyBothChannels(this.currentUserId);
+                this.ensureMediaChannelIdentified();
             }
             req.resolve(packet);
             return;
@@ -352,7 +399,7 @@ class PythonBridge {
                     if (packet.session_token || packet.user.session_token) {
                         this.sessionToken = String(packet.session_token || packet.user.session_token);
                     }
-                    this.reIdentifyBothChannels(this.currentUserId);
+                    this.ensureMediaChannelIdentified();
                 }
                 req.resolve(packet);
                 return;
@@ -361,14 +408,18 @@ class PythonBridge {
         // Sự kiện push từ server (new_message, call_media_relay, call_incoming, user_status_changed,...)
         this.emitEvent(packet);
     }
-    reIdentifyBothChannels(userId) {
-        if (!this.sessionToken)
+    ensureMediaChannelIdentified() {
+        if (!this.sessionToken || !this.currentUserId)
             return;
-        if (this.dataSocket && this.dataConnected) {
-            this.sendSocketPacket(this.dataSocket, { action: 'identify', user_id: userId, session_token: this.sessionToken, channel_type: 'data' });
-        }
-        if (this.mediaSocket && this.mediaConnected) {
-            this.sendSocketPacket(this.mediaSocket, { action: 'identify', user_id: userId, session_token: this.sessionToken, channel_type: 'media' });
+        if (this.mediaSocket && this.mediaConnected && !this.mediaSocket.destroyed) {
+            if (!this.mediaIdentified) {
+                this.sendSocketPacket(this.mediaSocket, {
+                    action: 'identify',
+                    user_id: this.currentUserId,
+                    session_token: this.sessionToken,
+                    channel_type: 'media',
+                });
+            }
         }
         else {
             this.connectMediaChannel().catch(() => { });
@@ -395,13 +446,18 @@ class PythonBridge {
         if (!this.dataConnected || !this.dataSocket) {
             throw new Error(`Chưa kết nối đến máy chủ (${this.host}:${this.port})! Vui lòng kiểm tra lại địa chỉ máy chủ.`);
         }
+        const dataSock = this.dataSocket;
         // Phân loại luồng lưu lượng:
-        // Cuộc gọi (call_media, call_invite, call_accept, call_end, check_call_status) -> Đi Kênh 2 (Media Socket)
-        // Toàn bộ tác vụ khác (tin nhắn, tải file, kết bạn, lịch sử) -> Đi Kênh 1 (Data Socket)
-        const isCallTraffic = action === 'call_media' || action.startsWith('call_') || action === 'check_call_status';
-        const targetSocket = (isCallTraffic && this.mediaSocket && this.mediaConnected && !this.mediaSocket.destroyed)
-            ? this.mediaSocket
-            : this.dataSocket;
+        // Stream call_media -> Kênh 2 (Media Socket)
+        // Tín hiệu cuộc gọi (call_invite, call_accept, call_end, check_call_status) -> Kênh 2 nếu đã xác thực xong, ngược lại đi Kênh 1 (Data Socket) đã xác thực
+        const isCallMedia = action === 'call_media';
+        const isCallTraffic = isCallMedia || action.startsWith('call_') || action === 'check_call_status';
+        const mediaSock = this.mediaSocket;
+        const canUseMediaForControl = Boolean(mediaSock && this.mediaConnected && this.mediaIdentified && !mediaSock.destroyed);
+        const canUseMediaForStream = Boolean(mediaSock && this.mediaConnected && !mediaSock.destroyed);
+        const targetSocket = isCallMedia
+            ? (canUseMediaForStream && mediaSock ? mediaSock : dataSock)
+            : (isCallTraffic && canUseMediaForControl && mediaSock ? mediaSock : dataSock);
         return new Promise((resolve, reject) => {
             const isFileTransfer = action === 'download_file' || action === 'upload_file';
             const actualTimeout = isFileTransfer ? 90000 : (isCallTraffic ? 35000 : timeoutMs);
@@ -463,8 +519,13 @@ class PythonBridge {
             clearInterval(this.reconnectTimer);
             this.reconnectTimer = null;
         }
+        if (this.mediaReconnectTimer) {
+            clearTimeout(this.mediaReconnectTimer);
+            this.mediaReconnectTimer = null;
+        }
         this.dataConnected = false;
         this.mediaConnected = false;
+        this.mediaIdentified = false;
         this.currentUserId = null;
         this.sessionToken = null;
         if (this.dataSocket) {

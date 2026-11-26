@@ -182,6 +182,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     if (currentUser) {
       if (!currentUser.session_token) {
         localStorage.removeItem('vibe_user');
@@ -189,40 +190,55 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return;
       }
       localStorage.setItem('vibe_user', JSON.stringify(currentUser));
-      apiService
-        .sendRequest('identify', {
-          user_id: currentUser.id,
-          session_token: currentUser.session_token,
-        })
-        .then((res) => {
-          if (cancelled) return;
-          if (!res || !res.success) {
-            localStorage.removeItem('vibe_user');
-            setCurrentUser(null);
-            return;
-          }
-          apiService.getConversations(currentUser.id).then((cRes) => {
-            if (!cancelled && cRes?.conversations) {
-              setConversations(cRes.conversations.filter((c) => c.type !== 'saved'));
+      const identifyAndSync = () => {
+        if (cancelled) return;
+        apiService
+          .sendRequest('identify', {
+            user_id: currentUser.id,
+            session_token: currentUser.session_token,
+          })
+          .then((res) => {
+            if (cancelled) return;
+            if (!res || !res.success) {
+              localStorage.removeItem('vibe_user');
+              setCurrentUser(null);
+              return;
             }
-          }).catch(() => {});
-          apiService.getFriends(currentUser.id).then((fRes) => {
-            if (!cancelled && fRes) {
-              if (fRes.friends) setFriends(fRes.friends);
-              if (fRes.pending_requests) setPendingFriends(fRes.pending_requests);
-              if (fRes.sent_request_ids) setSentFriendRequestIds(fRes.sent_request_ids);
+            apiService.getConversations(currentUser.id).then((cRes) => {
+              if (!cancelled && cRes?.conversations) {
+                const filtered = cRes.conversations.filter((c) => c.type !== 'saved');
+                setConversations(filtered);
+                setActiveConv((prev) => {
+                  if (!prev) return null;
+                  const updated = filtered.find((c) => String(c.id) === String(prev.id));
+                  return updated ? { ...prev, is_online: updated.is_online } : prev;
+                });
+              }
+            }).catch(() => {});
+            apiService.getFriends(currentUser.id).then((fRes) => {
+              if (!cancelled && fRes) {
+                if (fRes.friends) setFriends(fRes.friends);
+                if (fRes.pending_requests) setPendingFriends(fRes.pending_requests);
+                if (fRes.sent_request_ids) setSentFriendRequestIds(fRes.sent_request_ids);
+              }
+            }).catch(() => {});
+          })
+          .catch(() => {
+            if (!cancelled) {
+              retryTimer = setTimeout(identifyAndSync, 2500);
             }
-          }).catch(() => {});
-        })
-        .catch(() => {});
+          });
+      };
+      identifyAndSync();
     } else {
       localStorage.removeItem('vibe_user');
       localStorage.removeItem('telegram_user');
     }
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [currentUser]);
+  }, [currentUser?.id, currentUser?.session_token]);
 
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
@@ -235,7 +251,13 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const syncAll = () => {
       apiService.getConversations(currentUser.id).then((cRes) => {
         if (cRes?.conversations) {
-          setConversations(cRes.conversations.filter((c) => c.type !== 'saved'));
+          const filtered = cRes.conversations.filter((c) => c.type !== 'saved');
+          setConversations(filtered);
+          setActiveConv((prev) => {
+            if (!prev) return null;
+            const updated = filtered.find((c) => String(c.id) === String(prev.id));
+            return updated ? { ...prev, is_online: updated.is_online } : prev;
+          });
         }
       }).catch(() => {});
       apiService.getFriends(currentUser.id).then((fRes) => {
@@ -262,6 +284,11 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Filter out saved messages from regular list (accessed via top button)
       const filtered = res.conversations.filter((c) => c.type !== 'saved');
       setConversations(filtered);
+      setActiveConv((prev) => {
+        if (!prev) return null;
+        const updated = filtered.find((c) => String(c.id) === String(prev.id));
+        return updated ? { ...prev, is_online: updated.is_online } : prev;
+      });
     }
   }, [currentUser]);
 
@@ -740,7 +767,7 @@ export const ChatProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           break;
 
         case 'user_status_changed':
-          if (event.user_id && activeConv && activeConv.type === 'direct' && activeConv.partner_id === event.user_id) {
+          if (event.user_id && activeConv && activeConv.type === 'direct' && Number(activeConv.partner_id) === Number(event.user_id)) {
             setActiveConv((prev) => prev ? { ...prev, is_online: Boolean(event.is_online) } : null);
           }
           refreshConversations();
