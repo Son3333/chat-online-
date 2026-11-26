@@ -111,15 +111,24 @@ function Run-HiddenWait([string]$filePath, [string]$args, [string]$workDir, [int
     $psi.CreateNoWindow = $true
     $psi.UseShellExecute = $false
     $proc = [System.Diagnostics.Process]::Start($psi)
+    $startTime = [DateTime]::Now
+    $baseMsg = $statusMsg.TrimEnd('.')
     $tick = 0
     while (-not $proc.HasExited) {
         $tick++
+        $elapsed = [int]([DateTime]::Now - $startTime).TotalSeconds
+        $dots = "." * (($tick % 3) + 1)
+        $liveMsg = "$baseMsg$dots ($($elapsed)s)"
         $span = $endPct - $startPct
-        if ($span -gt 0 -and ($tick % 5 -eq 0)) {
+        if ($span -gt 0 -and ($tick % 12 -eq 0)) {
             $nextPct = $script:currentPct + 1
             if ($nextPct -lt $endPct) {
-                Set-Progress $nextPct $statusMsg
+                Set-Progress $nextPct $liveMsg
+            } else {
+                Set-Progress $script:currentPct $liveMsg
             }
+        } elseif ($tick % 4 -eq 0) {
+            Set-Progress $script:currentPct $liveMsg
         }
         [System.Windows.Forms.Application]::DoEvents()
         Start-Sleep -Milliseconds 120
