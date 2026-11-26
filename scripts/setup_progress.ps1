@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$PreviewOnly,
     [string]$ScreenshotOut = ""
 )
@@ -6,6 +6,17 @@ param(
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
+
+Add-Type -Name WinConsole -Namespace Native -MemberDefinition @"
+[DllImport("kernel32.dll")]
+public static extern IntPtr GetConsoleWindow();
+[DllImport("user32.dll")]
+public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+"@
+$consoleHwnd = [Native.WinConsole]::GetConsoleWindow()
+if ($consoleHwnd -ne [IntPtr]::Zero) {
+    [Native.WinConsole]::ShowWindow($consoleHwnd, 0) | Out-Null
+}
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $rootDir = Split-Path -Parent $scriptDir
@@ -17,6 +28,9 @@ $form.Text = "Vibe Người Tốt - Thiết lập lần đầu"
 $form.Size = New-Object System.Drawing.Size(480, 230)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedDialog"
+$form.WindowState = [System.Windows.Forms.FormWindowState]::Normal
+$form.ShowInTaskbar = $true
+$form.TopMost = $true
 $form.MaximizeBox = $false
 $form.MinimizeBox = $true
 $form.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#0e1621")
@@ -140,6 +154,8 @@ function Find-PythonCmd {
 }
 
 $form.Add_Shown({
+    $form.Activate()
+    $form.TopMost = $false
     if ($PreviewOnly) {
         for ($i = 0; $i -le 68; $i += 4) {
             $msg = if ($i -lt 20) { "Đang kiểm tra môi trường hệ thống..." }

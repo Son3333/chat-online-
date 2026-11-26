@@ -18,7 +18,7 @@ if not exist "%~dp0frontend\dist\index.html" set "NEED_SETUP=1"
 if not exist "%~dp0frontend\dist-electron\main.js" set "NEED_SETUP=1"
 
 if "%NEED_SETUP%"=="1" (
-    powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0scripts\setup_progress.ps1"
+    powershell -STA -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\setup_progress.ps1"
     if %errorlevel% neq 0 exit /b 1
 )
 
